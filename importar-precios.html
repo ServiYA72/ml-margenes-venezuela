@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nicom System — Importar lista de precios</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --ink: #0F1B17; --surface: #16241F; --surface-2: #1D2E27; --line: #2C3F37;
+    --paper: #EDE8DE; --muted: #8FA69B; --gold: #C9A227; --teal: #3FA796; --rust: #C1553B;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; background: var(--ink); font-family: 'IBM Plex Sans', sans-serif; color: var(--paper); }
+  header {
+    border-bottom: 1px solid var(--line); padding: 20px 32px;
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;
+  }
+  .brand-mark { font-family: 'Fraunces', serif; font-size: 20px; font-weight: 500; }
+  .brand-mark span { color: var(--gold); }
+  .who { font-size: 13px; color: var(--muted); }
+  a.nav-link { color: var(--muted); font-size: 13px; text-decoration: none; border-bottom: 1px solid var(--line); }
+  a.nav-link:hover { color: var(--paper); }
+
+  main { max-width: 1300px; margin: 0 auto; padding: 32px; }
+  h1 { font-family: 'Fraunces', serif; font-weight: 400; font-size: 26px; margin: 0 0 6px 0; }
+  .sub { color: var(--muted); font-size: 14px; margin: 0 0 28px 0; }
+
+  .panel { background: var(--surface); border: 1px solid var(--line); padding: 22px; margin-bottom: 24px; }
+  .panel h2 { font-family: 'Fraunces', serif; font-weight: 400; font-size: 18px; margin: 0 0 16px 0; }
+
+  .grid-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; align-items: end; }
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  input, select {
+    width: 100%; background: var(--surface-2); border: 1px solid var(--line); color: var(--paper);
+    padding: 10px 12px; font-size: 14px; font-family: 'IBM Plex Sans', sans-serif;
+  }
+  input:focus, select:focus { outline: none; border-color: var(--gold); }
+
+  .dropzone {
+    border: 1px dashed var(--line); padding: 32px; text-align: center; cursor: pointer;
+    color: var(--muted); font-size: 14px; margin-top: 8px;
+  }
+  .dropzone:hover { border-color: var(--gold); color: var(--paper); }
+  .dropzone.filled { border-style: solid; border-color: var(--teal); color: var(--paper); }
+
+  .hint { font-size: 12px; color: var(--muted); margin-top: 8px; line-height: 1.5; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; font-size: 11px; color: var(--muted); font-weight: 500; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  td { padding: 9px 10px; border-bottom: 1px solid var(--line); }
+  td.num, th.num { font-family: 'IBM Plex Mono', monospace; text-align: right; }
+  tr.row-error td { color: var(--rust); }
+
+  button.primary {
+    background: var(--gold); color: var(--ink); border: none; padding: 12px 22px;
+    font-weight: 600; font-size: 14px; cursor: pointer; margin-top: 18px;
+  }
+  button.primary:hover { background: #DAB13A; }
+  button.primary:disabled { background: var(--line); color: var(--muted); cursor: not-allowed; }
+
+  .msg { font-size: 13px; margin-top: 14px; }
+  .msg.err { color: var(--rust); }
+  .msg.ok { color: var(--teal); }
+  .empty { color: var(--muted); font-size: 14px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand-mark">nicom<span>·</span>system</div>
+  <a class="nav-link" href="dashboard.html">← Volver a productos</a>
+  <div class="who" id="who">Cargando sesión…</div>
+</header>
+
+<main>
+  <h1>Importar lista de precios</h1>
+  <p class="sub">Sube el Excel o CSV de un proveedor nacional y carga todos los productos de una vez, con el margen ya calculado para cada uno.</p>
+
+  <div class="panel">
+    <h2>1. Elige el proveedor y el margen a aplicar</h2>
+    <div class="grid-form">
+      <div>
+        <label for="proveedor">Proveedor</label>
+        <select id="proveedor"></select>
+      </div>
+      <div>
+        <label for="margen">Margen objetivo (%)</label>
+        <input type="number" id="margen" value="30">
+      </div>
+      <div>
+        <label for="comision">Comisión ML (%)</label>
+        <input type="number" step="0.5" id="comision" value="9">
+      </div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>2. Sube el archivo (.xlsx o .csv)</h2>
+    <div class="dropzone" id="dropzone" onclick="document.getElementById('file-input').click()">
+      Haz clic para elegir el archivo, o arrástralo aquí
+    </div>
+    <input type="file" id="file-input" accept=".xlsx,.xls,.csv" style="display:none;">
+    <div class="hint">
+      El archivo debe tener una columna con el <b>nombre del producto</b> y otra con el <b>costo en USD</b>.
+      Opcionalmente también reconoce columnas de <b>código/SKU</b>, <b>marca</b> y <b>categoría</b> — en el siguiente paso confirmas cuál es cuál, sin importar cómo las haya nombrado el proveedor.
+    </div>
+  </div>
+
+  <div class="panel" id="panel-mapeo" style="display:none;">
+    <h2>3. Confirma qué columna es cuál</h2>
+    <div class="hint" style="margin-top:0; margin-bottom:14px;">Detectamos estas columnas en tu archivo. Indica cuál corresponde a cada dato — así funciona sin importar cómo las haya nombrado el proveedor.</div>
+    <div class="grid-form">
+      <div>
+        <label for="map-nombre">Columna con el nombre del producto</label>
+        <select id="map-nombre"></select>
+      </div>
+      <div>
+        <label for="map-costo">Columna con el costo en USD</label>
+        <select id="map-costo"></select>
+      </div>
+      <div>
+        <label for="map-categoria">Columna de categoría (opcional)</label>
+        <select id="map-categoria"></select>
+      </div>
+      <div>
+        <label for="map-codigo">Columna de código / SKU (opcional)</label>
+        <select id="map-codigo"></select>
+      </div>
+      <div>
+        <label for="map-marca">Columna de marca (opcional)</label>
+        <select id="map-marca"></select>
+      </div>
+      <button class="primary" style="margin-top:0;" onclick="generarVistaPrevia()">Generar vista previa</button>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-preview" style="display:none;">
+    <h2>3. Revisa antes de cargar</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Producto</th><th>Categoría</th>
+          <th class="num">Costo</th>
+          <th class="num">Precio efectivo</th>
+          <th class="num">Precio Bs (BCV)</th>
+        </tr>
+      </thead>
+      <tbody id="preview-body"></tbody>
+    </table>
+    <button class="primary" id="btn-confirmar" onclick="confirmarImportacion()">Cargar productos al sistema</button>
+    <div class="msg" id="msg-import"></div>
+  </div>
+</main>
+
+<script type="module">
+  import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+  const SUPABASE_URL = 'https://tkhzuopapvclmcgxyood.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_KQB6B6uLIPr-xKdNDc8iEw_7tcWM5gS';
+  const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  let tasaBCV = null, tasaBinance = null;
+  let filasValidas = [];
+
+  async function init() {
+    const { data: { session } } = await supabase.auth.getSession();
+    const who = document.getElementById('who');
+    if (!session) {
+      who.textContent = 'No hay sesión — inicia sesión en login.html';
+      who.style.color = '#C1553B';
+    } else {
+      who.textContent = session.user.email;
+    }
+
+    const { data: tasas } = await supabase.from('tasas_cambio').select('*').order('fecha', { ascending: false }).limit(1).single();
+    if (tasas) { tasaBCV = parseFloat(tasas.tasa_bcv); tasaBinance = parseFloat(tasas.tasa_binance); }
+
+    const { data: proveedores } = await supabase.from('proveedores').select('id, nombre').order('nombre');
+    const select = document.getElementById('proveedor');
+    select.innerHTML = '';
+    (proveedores || []).forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.id; opt.textContent = p.nombre;
+      select.appendChild(opt);
+    });
+    if (!proveedores || proveedores.length === 0) {
+      select.innerHTML = '<option value="">Crea un proveedor primero en dashboard.html</option>';
+    }
+  }
+
+  let filasCrudas = [];
+  let encabezados = [];
+
+  function normalizeKey(k) {
+    return k.toString().trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  }
+
+  const PISTAS_NOMBRE = ['nombre', 'producto', 'descripcion', 'articulo', 'item', 'detalle'];
+  const PISTAS_COSTO = ['costo', 'preciounitariousd', 'preciounitario', 'preciousd', 'valorusd', 'mayorista', 'precio', 'valor', 'usd'];
+  const PISTAS_CATEGORIA = ['categoria', 'rubro', 'tipo', 'familia'];
+  const PISTAS_CODIGO = ['codigo', 'sku', 'referencia', 'cod'];
+  const PISTAS_MARCA = ['marca', 'brand'];
+
+  // Convierte el texto FORMATEADO de la celda (tal como se ve en Excel) a un número,
+  // sin importar si el archivo usa coma o punto como separador decimal.
+  function parseNumeroLocal(raw) {
+    if (typeof raw === 'number') return raw;
+    let s = String(raw).trim();
+    if (!s) return NaN;
+    s = s.replace(/[^0-9.,-]/g, '');
+    const lastComma = s.lastIndexOf(',');
+    const lastDot = s.lastIndexOf('.');
+    if (lastComma === -1 && lastDot === -1) return parseFloat(s);
+    const decimalEsComa = lastComma > lastDot;
+    const sepDecimal = decimalEsComa ? ',' : '.';
+    const sepMiles = decimalEsComa ? '.' : ',';
+    s = s.split(sepMiles).join('');
+    s = s.replace(sepDecimal, '.');
+    return parseFloat(s);
+  }
+
+  function mejorCoincidencia(headers, pistas) {
+    for (const pista of pistas) {
+      const match = headers.find(h => normalizeKey(h).includes(pista));
+      if (match) return match;
+    }
+    return null;
+  }
+
+  function claveMapeo(proveedorId) {
+    return 'mapeo-columnas-' + proveedorId;
+  }
+
+  function guardarMapeoRecordado(proveedorId, mapeo) {
+    try { localStorage.setItem(claveMapeo(proveedorId), JSON.stringify(mapeo)); } catch (e) {}
+  }
+
+  function leerMapeoRecordado(proveedorId) {
+    try {
+      const raw = localStorage.getItem(claveMapeo(proveedorId));
+      return raw ? JSON.parse(raw) : null;
+    } catch (e) { return null; }
+  }
+
+  async function detectarColumnas(file) {
+    const buffer = await file.arrayBuffer();
+    // raw:false = usar el texto formateado tal como Excel lo muestra, evita errores de decimales
+    const wb = XLSX.read(buffer, { type: 'array' });
+    const sheet = wb.Sheets[wb.SheetNames[0]];
+    filasCrudas = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
+
+    if (filasCrudas.length === 0) {
+      alert('El archivo no tiene filas de datos.');
+      return;
+    }
+
+    encabezados = Object.keys(filasCrudas[0]);
+
+    const selNombre = document.getElementById('map-nombre');
+    const selCosto = document.getElementById('map-costo');
+    const selCategoria = document.getElementById('map-categoria');
+    const selCodigo = document.getElementById('map-codigo');
+    const selMarca = document.getElementById('map-marca');
+
+    const opciones = (incluirNinguna) => {
+      let html = incluirNinguna ? '<option value="">(ninguna)</option>' : '';
+      encabezados.forEach(h => { html += `<option value="${escapeHtml(h)}">${escapeHtml(h)}</option>`; });
+      return html;
+    };
+
+    selNombre.innerHTML = opciones(false);
+    selCosto.innerHTML = opciones(false);
+    selCategoria.innerHTML = opciones(true);
+    selCodigo.innerHTML = opciones(true);
+    selMarca.innerHTML = opciones(true);
+
+    const guessNombre = mejorCoincidencia(encabezados, PISTAS_NOMBRE) || encabezados[0];
+    const guessCosto = mejorCoincidencia(encabezados, PISTAS_COSTO) || encabezados[1] || encabezados[0];
+    const guessCategoria = mejorCoincidencia(encabezados, PISTAS_CATEGORIA);
+    const guessCodigo = mejorCoincidencia(encabezados, PISTAS_CODIGO);
+    const guessMarca = mejorCoincidencia(encabezados, PISTAS_MARCA);
+
+    selNombre.value = guessNombre;
+    selCosto.value = guessCosto;
+    if (guessCategoria) selCategoria.value = guessCategoria;
+    if (guessCodigo) selCodigo.value = guessCodigo;
+    if (guessMarca) selMarca.value = guessMarca;
+
+    // Si ya se importó una lista de este mismo proveedor antes, usar ese mapeo recordado
+    // (solo si las mismas columnas siguen existiendo en el archivo nuevo)
+    const proveedorId = document.getElementById('proveedor').value;
+    const recordado = proveedorId ? leerMapeoRecordado(proveedorId) : null;
+    if (recordado) {
+      if (recordado.nombre && encabezados.includes(recordado.nombre)) selNombre.value = recordado.nombre;
+      if (recordado.costo && encabezados.includes(recordado.costo)) selCosto.value = recordado.costo;
+      if (recordado.categoria && encabezados.includes(recordado.categoria)) selCategoria.value = recordado.categoria;
+      if (recordado.codigo && encabezados.includes(recordado.codigo)) selCodigo.value = recordado.codigo;
+      if (recordado.marca && encabezados.includes(recordado.marca)) selMarca.value = recordado.marca;
+    }
+
+    document.getElementById('panel-mapeo').style.display = 'block';
+    document.getElementById('panel-preview').style.display = 'none';
+  }
+
+  window.generarVistaPrevia = function() {
+    const colNombre = document.getElementById('map-nombre').value;
+    const colCosto = document.getElementById('map-costo').value;
+    const colCategoria = document.getElementById('map-categoria').value;
+    const colCodigo = document.getElementById('map-codigo').value;
+    const colMarca = document.getElementById('map-marca').value;
+
+    const proveedorId = document.getElementById('proveedor').value;
+    if (proveedorId) {
+      guardarMapeoRecordado(proveedorId, {
+        nombre: colNombre, costo: colCosto, categoria: colCategoria, codigo: colCodigo, marca: colMarca
+      });
+    }
+
+    filasValidas = [];
+    const panel = document.getElementById('panel-preview');
+    panel.style.display = 'block';
+    panel.innerHTML = `
+      <h2>4. Revisa antes de cargar</h2>
+      <div style="overflow-x:auto;">
+      <table style="min-width: 1000px;">
+        <thead>
+          <tr>
+            <th>Código</th><th>Marca</th><th style="min-width:220px;">Producto</th><th>Categoría</th>
+            <th class="num">Costo</th>
+            <th class="num">Precio efectivo</th>
+            <th class="num">Ganancia $</th>
+            <th class="num">Precio Bs (BCV)</th>
+          </tr>
+        </thead>
+        <tbody id="preview-body"></tbody>
+      </table>
+      </div>
+      <button class="primary" id="btn-confirmar" onclick="confirmarImportacion()">Cargar productos al sistema</button>
+      <div class="msg" id="msg-import"></div>
+    `;
+
+    const tbody = document.getElementById('preview-body');
+    const margen = parseFloat(document.getElementById('margen').value);
+    const comision = parseFloat(document.getElementById('comision').value);
+
+    for (const row of filasCrudas) {
+      const nombre = row[colNombre];
+      const categoria = colCategoria ? row[colCategoria] : '';
+      const codigo = colCodigo ? row[colCodigo] : '';
+      const marca = colMarca ? row[colMarca] : '';
+      const costo = parseNumeroLocal(row[colCosto]);
+
+      const tr = document.createElement('tr');
+
+      if (!nombre || isNaN(costo) || costo <= 0) {
+        tr.className = 'row-error';
+        tr.innerHTML = `<td colspan="2">${escapeHtml(String(codigo || ''))}</td><td>${escapeHtml(String(nombre || '(sin nombre)'))}</td><td colspan="4">Fila omitida: falta nombre o costo válido</td>`;
+        tbody.appendChild(tr);
+        continue;
+      }
+
+      const precioEfectivo = costo / (1 - margen / 100 - comision / 100);
+      const gananciaUsd = precioEfectivo * (margen / 100);
+      const precioBcvUsdEquiv = precioEfectivo * (tasaBinance / tasaBCV);
+      const precioBcvBs = precioBcvUsdEquiv * tasaBCV;
+
+      const nombreFinal = marca ? `${marca} ${nombre}` : nombre;
+      filasValidas.push({ nombre: nombreFinal, categoria, costo, precioEfectivo, gananciaUsd, precioBcvUsdEquiv, precioBcvBs, codigo, marca });
+
+      tr.innerHTML = `
+        <td>${escapeHtml(String(codigo || ''))}</td>
+        <td>${escapeHtml(String(marca || ''))}</td>
+        <td>${escapeHtml(String(nombre))}</td>
+        <td>${escapeHtml(String(categoria || ''))}</td>
+        <td class="num">$${costo.toFixed(2)}</td>
+        <td class="num" style="color:var(--gold)">$${precioEfectivo.toFixed(2)}</td>
+        <td class="num" style="color:var(--teal)">$${gananciaUsd.toFixed(2)}</td>
+        <td class="num">Bs ${precioBcvBs.toLocaleString('es-VE', {maximumFractionDigits: 0})}</td>
+      `;
+      tbody.appendChild(tr);
+    }
+  };
+
+  function escapeHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  }
+
+  window.confirmarImportacion = async function() {
+    const btn = document.getElementById('btn-confirmar');
+    const msg = document.getElementById('msg-import');
+    const proveedor_id = document.getElementById('proveedor').value;
+    const margen = parseFloat(document.getElementById('margen').value);
+    const comision = parseFloat(document.getElementById('comision').value);
+
+    if (!proveedor_id) { msg.className = 'msg err'; msg.textContent = 'Selecciona un proveedor.'; return; }
+    if (filasValidas.length === 0) { msg.className = 'msg err'; msg.textContent = 'No hay filas válidas para cargar.'; return; }
+
+    btn.disabled = true;
+    btn.textContent = `Cargando 0 / ${filasValidas.length}...`;
+
+    const { data: { session } } = await supabase.auth.getSession();
+    let cargados = 0;
+
+    for (const fila of filasValidas) {
+      const { data: producto, error: errProd } = await supabase
+        .from('productos')
+        .insert({
+          proveedor_id, nombre: fila.nombre, categoria: fila.categoria,
+          sku: fila.codigo || null,
+          especificaciones: fila.marca ? { marca: fila.marca } : {},
+          costo_usd: fila.costo, creado_por: session?.user?.id
+        })
+        .select()
+        .single();
+
+      if (!errProd) {
+        await supabase.from('publicaciones').insert({
+          producto_id: producto.id,
+          margen_objetivo_pct: margen,
+          comision_ml_pct: comision,
+          precio_efectivo_usd: fila.precioEfectivo.toFixed(2),
+          precio_bcv_usd_equiv: fila.precioBcvUsdEquiv.toFixed(2),
+          precio_bcv_bs: fila.precioBcvBs.toFixed(2),
+          ganancia_real_usd: fila.gananciaUsd.toFixed(2),
+          creado_por: session?.user?.id
+        });
+        cargados++;
+      }
+      btn.textContent = `Cargando ${cargados} / ${filasValidas.length}...`;
+    }
+
+    btn.disabled = false;
+    btn.textContent = 'Cargar productos al sistema';
+    msg.className = 'msg ok';
+    msg.textContent = `Listo: ${cargados} de ${filasValidas.length} productos cargados. Puedes verlos en dashboard.html.`;
+    filasValidas = [];
+    document.getElementById('preview-body').innerHTML = '';
+  };
+
+  const dropzone = document.getElementById('dropzone');
+  const fileInput = document.getElementById('file-input');
+
+  fileInput.addEventListener('change', () => {
+    if (fileInput.files[0]) {
+      dropzone.textContent = 'Archivo: ' + fileInput.files[0].name;
+      dropzone.classList.add('filled');
+      detectarColumnas(fileInput.files[0]);
+    }
+  });
+  dropzone.addEventListener('dragover', (e) => { e.preventDefault(); });
+  dropzone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    if (e.dataTransfer.files[0]) {
+      fileInput.files = e.dataTransfer.files;
+      dropzone.textContent = 'Archivo: ' + e.dataTransfer.files[0].name;
+      dropzone.classList.add('filled');
+      detectarColumnas(e.dataTransfer.files[0]);
+    }
+  });
+
+  init();
+</script>
+
+</body>
+</html>
