@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nicom System — Productos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #0F1B17;
+    --surface: #16241F;
+    --surface-2: #1D2E27;
+    --line: #2C3F37;
+    --paper: #EDE8DE;
+    --muted: #8FA69B;
+    --gold: #C9A227;
+    --teal: #3FA796;
+    --rust: #C1553B;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    min-height: 100%;
+    background: var(--ink);
+    font-family: 'IBM Plex Sans', sans-serif;
+    color: var(--paper);
+  }
+  header {
+    border-bottom: 1px solid var(--line);
+    padding: 20px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+  }
+  .brand-mark {
+    font-family: 'Fraunces', serif;
+    font-size: 20px;
+    font-weight: 500;
+  }
+  .brand-mark span { color: var(--gold); }
+  .who {
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .rate-strip {
+    display: flex;
+    gap: 24px;
+    align-items: center;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .rate-strip b.gold { color: var(--gold); font-weight: 500; }
+  .rate-strip b.teal { color: var(--teal); font-weight: 500; }
+
+  main {
+    max-width: 1100px;
+    margin: 0 auto;
+    padding: 32px;
+  }
+  .tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 28px;
+    border-bottom: 1px solid var(--line);
+  }
+  .tab {
+    padding: 10px 18px;
+    font-size: 14px;
+    color: var(--muted);
+    background: none;
+    border: none;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    font-family: 'IBM Plex Sans', sans-serif;
+  }
+  .tab.active { color: var(--paper); border-bottom-color: var(--gold); }
+
+  section.view { display: none; }
+  section.view.active { display: block; }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    padding: 22px;
+    margin-bottom: 24px;
+  }
+  .panel h2 {
+    font-family: 'Fraunces', serif;
+    font-weight: 400;
+    font-size: 20px;
+    margin: 0 0 18px 0;
+  }
+  .grid-form {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 14px;
+    align-items: end;
+  }
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  input, select {
+    width: 100%;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    color: var(--paper);
+    padding: 10px 12px;
+    font-size: 14px;
+    font-family: 'IBM Plex Sans', sans-serif;
+  }
+  input:focus, select:focus { outline: none; border-color: var(--gold); }
+  button.add {
+    background: var(--gold);
+    color: var(--ink);
+    border: none;
+    padding: 10px 18px;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    height: 41px;
+  }
+  button.add:hover { background: #DAB13A; }
+  button.add:disabled { background: var(--line); color: var(--muted); cursor: not-allowed; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th {
+    text-align: left;
+    font-size: 12px;
+    color: var(--muted);
+    font-weight: 500;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  td {
+    padding: 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  td.num, th.num { font-family: 'IBM Plex Mono', monospace; text-align: right; }
+  tr:last-child td { border-bottom: none; }
+  .empty { color: var(--muted); font-size: 14px; padding: 20px 0; }
+  .pill {
+    display: inline-block;
+    padding: 3px 9px;
+    font-size: 11px;
+    border: 1px solid var(--line);
+    color: var(--muted);
+  }
+  .gold-text { color: var(--gold); }
+  .teal-text { color: var(--teal); }
+  .msg { font-size: 13px; margin-top: 12px; color: var(--rust); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand-mark">nicom<span>·</span>system</div>
+  <div class="rate-strip">
+    <span>BCV <b class="gold" id="rate-bcv">—</b></span>
+    <span>Binance <b class="teal" id="rate-binance">—</b></span>
+  </div>
+  <div class="who" id="who">Cargando sesión…</div>
+</header>
+
+<main>
+  <div class="tabs">
+    <button class="tab active" onclick="switchView('proveedores')">Proveedores</button>
+    <button class="tab" onclick="switchView('productos')">Productos</button>
+  </div>
+
+  <!-- PROVEEDORES -->
+  <section class="view active" id="view-proveedores">
+    <div class="panel">
+      <h2>Nuevo proveedor</h2>
+      <div class="grid-form">
+        <div>
+          <label for="prov-nombre">Nombre</label>
+          <input type="text" id="prov-nombre" placeholder="Ej: Braincorp">
+        </div>
+        <div>
+          <label for="prov-contacto">Contacto</label>
+          <input type="text" id="prov-contacto" placeholder="Teléfono / correo">
+        </div>
+        <div>
+          <label for="prov-notas">Notas</label>
+          <input type="text" id="prov-notas" placeholder="Opcional">
+        </div>
+        <button class="add" onclick="crearProveedor()">Agregar</button>
+      </div>
+      <div class="msg" id="msg-proveedor"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Proveedores registrados</h2>
+      <table id="tabla-proveedores">
+        <thead>
+          <tr><th>Nombre</th><th>Contacto</th><th>Notas</th><th>Agregado por</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <div class="empty" id="empty-proveedores" style="display:none;">Todavía no hay proveedores cargados.</div>
+    </div>
+  </section>
+
+  <!-- PRODUCTOS -->
+  <section class="view" id="view-productos">
+    <div class="panel">
+      <h2>Nuevo producto</h2>
+      <div class="grid-form">
+        <div>
+          <label for="prod-proveedor">Proveedor</label>
+          <select id="prod-proveedor"></select>
+        </div>
+        <div>
+          <label for="prod-nombre">Nombre del producto</label>
+          <input type="text" id="prod-nombre" placeholder="Ej: SSD Hiksemi 1TB">
+        </div>
+        <div>
+          <label for="prod-categoria">Categoría</label>
+          <input type="text" id="prod-categoria" placeholder="Ej: Almacenamiento">
+        </div>
+        <div>
+          <label for="prod-costo">Costo proveedor (USD)</label>
+          <input type="number" step="0.01" id="prod-costo" placeholder="157.00">
+        </div>
+        <div>
+          <label for="prod-margen">Margen objetivo (%)</label>
+          <input type="number" step="1" id="prod-margen" value="30">
+        </div>
+        <div>
+          <label for="prod-comision">Comisión ML (%)</label>
+          <input type="number" step="0.5" id="prod-comision" value="9">
+        </div>
+        <button class="add" onclick="crearProducto()">Agregar y calcular</button>
+      </div>
+      <div class="msg" id="msg-producto"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Productos con margen calculado</h2>
+      <table id="tabla-productos">
+        <thead>
+          <tr>
+            <th>Producto</th><th>Proveedor</th>
+            <th class="num">Costo</th>
+            <th class="num">Precio efectivo</th>
+            <th class="num">Precio Bs (BCV)</th>
+            <th class="num">Ganancia real</th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <div class="empty" id="empty-productos" style="display:none;">Todavía no hay productos cargados.</div>
+    </div>
+  </section>
+</main>
+
+<script type="module">
+  import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+  const SUPABASE_URL = 'https://tkhzuopapvclmcgxyood.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_KQB6B6uLIPr-xKdNDc8iEw_7tcWM5gS';
+  const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  let tasaBCV = null, tasaBinance = null;
+
+  window.switchView = function(view) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    event.target.classList.add('active');
+    document.getElementById('view-' + view).classList.add('active');
+  };
+
+  async function checkSession() {
+    const { data: { session } } = await supabase.auth.getSession();
+    const who = document.getElementById('who');
+    if (!session) {
+      who.textContent = 'No hay sesión — inicia sesión en login.html';
+      who.style.color = '#C1553B';
+      return null;
+    }
+    who.textContent = session.user.email;
+    return session.user;
+  }
+
+  async function cargarTasas() {
+    const { data, error } = await supabase
+      .from('tasas_cambio')
+      .select('*')
+      .order('fecha', { ascending: false })
+      .limit(1)
+      .single();
+    if (data) {
+      tasaBCV = parseFloat(data.tasa_bcv);
+      tasaBinance = parseFloat(data.tasa_binance);
+      document.getElementById('rate-bcv').textContent = tasaBCV.toFixed(2);
+      document.getElementById('rate-binance').textContent = tasaBinance.toFixed(2);
+    }
+  }
+
+  async function cargarProveedores() {
+    const { data, error } = await supabase
+      .from('proveedores')
+      .select('id, nombre, contacto, notas, profiles(nombre)')
+      .order('created_at', { ascending: false });
+
+    const tbody = document.querySelector('#tabla-proveedores tbody');
+    const empty = document.getElementById('empty-proveedores');
+    tbody.innerHTML = '';
+
+    if (!data || data.length === 0) {
+      empty.style.display = 'block';
+    } else {
+      empty.style.display = 'none';
+      data.forEach(p => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${escapeHtml(p.nombre)}</td><td>${escapeHtml(p.contacto || '—')}</td><td>${escapeHtml(p.notas || '—')}</td><td>${escapeHtml(p.profiles?.nombre || '—')}</td>`;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // refrescar el selector del formulario de productos
+    const select = document.getElementById('prod-proveedor');
+    select.innerHTML = '<option value="">Selecciona un proveedor</option>';
+    (data || []).forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = p.nombre;
+      select.appendChild(opt);
+    });
+  }
+
+  async function cargarProductos() {
+    const { data, error } = await supabase
+      .from('productos')
+      .select('id, nombre, costo_usd, proveedores(nombre), publicaciones(precio_efectivo_usd, precio_bcv_bs, ganancia_real_usd)')
+      .order('created_at', { ascending: false });
+
+    const tbody = document.querySelector('#tabla-productos tbody');
+    const empty = document.getElementById('empty-productos');
+    tbody.innerHTML = '';
+
+    if (!data || data.length === 0) {
+      empty.style.display = 'block';
+      return;
+    }
+    empty.style.display = 'none';
+
+    data.forEach(p => {
+      const pub = (p.publicaciones && p.publicaciones[0]) || {};
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td>${escapeHtml(p.nombre)}</td>
+        <td>${escapeHtml(p.proveedores?.nombre || '—')}</td>
+        <td class="num">$${parseFloat(p.costo_usd).toFixed(2)}</td>
+        <td class="num gold-text">${pub.precio_efectivo_usd ? '$' + parseFloat(pub.precio_efectivo_usd).toFixed(2) : '—'}</td>
+        <td class="num teal-text">${pub.precio_bcv_bs ? 'Bs ' + parseFloat(pub.precio_bcv_bs).toLocaleString('es-VE', {maximumFractionDigits: 2}) : '—'}</td>
+        <td class="num">${pub.ganancia_real_usd ? '$' + parseFloat(pub.ganancia_real_usd).toFixed(2) : '—'}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function escapeHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  }
+
+  window.crearProveedor = async function() {
+    const nombre = document.getElementById('prov-nombre').value.trim();
+    const contacto = document.getElementById('prov-contacto').value.trim();
+    const notas = document.getElementById('prov-notas').value.trim();
+    const msg = document.getElementById('msg-proveedor');
+
+    if (!nombre) { msg.textContent = 'El nombre es obligatorio.'; return; }
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const { error } = await supabase.from('proveedores').insert({
+      nombre, contacto, notas, creado_por: session?.user?.id
+    });
+
+    if (error) {
+      msg.textContent = 'Error: ' + error.message;
+    } else {
+      msg.textContent = '';
+      document.getElementById('prov-nombre').value = '';
+      document.getElementById('prov-contacto').value = '';
+      document.getElementById('prov-notas').value = '';
+      cargarProveedores();
+    }
+  };
+
+  window.crearProducto = async function() {
+    const proveedor_id = document.getElementById('prod-proveedor').value;
+    const nombre = document.getElementById('prod-nombre').value.trim();
+    const categoria = document.getElementById('prod-categoria').value.trim();
+    const costo_usd = parseFloat(document.getElementById('prod-costo').value);
+    const margen = parseFloat(document.getElementById('prod-margen').value);
+    const comision = parseFloat(document.getElementById('prod-comision').value);
+    const msg = document.getElementById('msg-producto');
+
+    if (!proveedor_id) { msg.textContent = 'Selecciona un proveedor.'; return; }
+    if (!nombre || isNaN(costo_usd)) { msg.textContent = 'Nombre y costo son obligatorios.'; return; }
+    if (!tasaBCV || !tasaBinance) { msg.textContent = 'No hay tasas de cambio cargadas todavía.'; return; }
+
+    const { data: { session } } = await supabase.auth.getSession();
+
+    const { data: producto, error: errProd } = await supabase
+      .from('productos')
+      .insert({ proveedor_id, nombre, categoria, costo_usd, creado_por: session?.user?.id })
+      .select()
+      .single();
+
+    if (errProd) { msg.textContent = 'Error: ' + errProd.message; return; }
+
+    // Llamar la función de cálculo de márgenes ya guardada en la base de datos
+    const { data: calculo, error: errCalc } = await supabase.rpc('calcular_precios', {
+      p_costo_usd: costo_usd,
+      p_margen_objetivo_pct: margen,
+      p_comision_ml_pct: comision,
+      p_tasa_bcv: tasaBCV,
+      p_tasa_binance: tasaBinance
+    });
+
+    if (errCalc) { msg.textContent = 'Producto guardado, pero falló el cálculo: ' + errCalc.message; }
+    else {
+      const c = calculo[0];
+      await supabase.from('publicaciones').insert({
+        producto_id: producto.id,
+        margen_objetivo_pct: margen,
+        comision_ml_pct: comision,
+        precio_efectivo_usd: c.precio_efectivo_usd,
+        precio_bcv_usd_equiv: c.precio_bcv_usd_equiv,
+        precio_bcv_bs: c.precio_bcv_bs,
+        ganancia_real_usd: c.ganancia_real_usd,
+        creado_por: session?.user?.id
+      });
+      msg.textContent = '';
+      document.getElementById('prod-nombre').value = '';
+      document.getElementById('prod-categoria').value = '';
+      document.getElementById('prod-costo').value = '';
+      cargarProductos();
+    }
+  };
+
+  (async function init() {
+    await checkSession();
+    await cargarTasas();
+    await cargarProveedores();
+    await cargarProductos();
+  })();
+</script>
+
+</body>
+</html>
