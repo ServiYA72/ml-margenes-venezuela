@@ -87,15 +87,21 @@
         <select id="proveedor"></select>
       </div>
       <div>
-        <label for="modo-ganancia">Modo de ganancia</label>
-        <select id="modo-ganancia" onchange="actualizarEtiquetaGanancia()">
-          <option value="fijo">Ganancia bruta fija ($) por producto</option>
-          <option value="neta">Ganancia neta deseada ($, cubre comisión)</option>
-          <option value="porcentaje">Porcentaje (%)</option>
+        <label for="modo-ganancia">Tipo de ganancia</label>
+        <select id="modo-ganancia">
+          <option value="fijo">Bruta (antes de comisión)</option>
+          <option value="neta">Neta (después de comisión)</option>
         </select>
       </div>
       <div>
-        <label for="valor-ganancia" id="label-ganancia">Ganancia deseada ($)</label>
+        <label for="unidad-ganancia">Unidad</label>
+        <select id="unidad-ganancia" onchange="actualizarEtiquetaGanancia()">
+          <option value="usd">Monto fijo ($ por producto)</option>
+          <option value="pct">Porcentaje (%)</option>
+        </select>
+      </div>
+      <div>
+        <label for="valor-ganancia" id="label-ganancia">Ganancia en $ (por producto)</label>
         <input type="number" step="0.01" id="valor-ganancia" value="30">
       </div>
       <div>
@@ -314,9 +320,8 @@
   }
 
   window.actualizarEtiquetaGanancia = function() {
-    const modo = document.getElementById('modo-ganancia').value;
-    const textos = { fijo: 'Ganancia bruta deseada ($)', neta: 'Ganancia neta deseada ($)', porcentaje: 'Margen deseado (%)' };
-    document.getElementById('label-ganancia').textContent = textos[modo];
+    const unidad = document.getElementById('unidad-ganancia').value;
+    document.getElementById('label-ganancia').textContent = unidad === 'usd' ? 'Ganancia en $ (por producto)' : 'Ganancia en %';
   };
 
   window.generarVistaPrevia = function() {
@@ -359,7 +364,8 @@
     `;
 
     const tbody = document.getElementById('preview-body');
-    const modo = document.getElementById('modo-ganancia').value;
+    const tipoGanancia = document.getElementById('modo-ganancia').value; // 'fijo' | 'neta'
+    const unidad = document.getElementById('unidad-ganancia').value;     // 'usd' | 'pct'
     const valorGanancia = parseFloat(document.getElementById('valor-ganancia').value);
     const comision = parseFloat(document.getElementById('comision').value);
 
@@ -379,18 +385,20 @@
         continue;
       }
 
-      // Precio según el modo elegido
+      // Precio según el tipo (bruta/neta) y la unidad ($/%) elegidos
       let precioEfectivo, gananciaDeseada;
-      if (modo === 'fijo') {
+      if (tipoGanancia === 'fijo' && unidad === 'usd') {
         gananciaDeseada = valorGanancia;
         precioEfectivo = costo + gananciaDeseada;
-      } else if (modo === 'neta') {
-        // Precio tal que, después de restar la comisión de ML, quede exactamente valorGanancia
+      } else if (tipoGanancia === 'fijo' && unidad === 'pct') {
+        precioEfectivo = costo / (1 - valorGanancia / 100);
+        gananciaDeseada = precioEfectivo - costo;
+      } else if (tipoGanancia === 'neta' && unidad === 'usd') {
         precioEfectivo = (costo + valorGanancia) / (1 - comision / 100);
         gananciaDeseada = precioEfectivo - costo;
-      } else {
-        precioEfectivo = costo / (1 - valorGanancia / 100);
-        gananciaDeseada = precioEfectivo * (valorGanancia / 100);
+      } else { // neta + pct
+        precioEfectivo = costo / (1 - comision / 100 - valorGanancia / 100);
+        gananciaDeseada = precioEfectivo - costo;
       }
       const comisionMlUsd = precioEfectivo * (comision / 100);
       const gananciaNetaUsd = gananciaDeseada - comisionMlUsd;

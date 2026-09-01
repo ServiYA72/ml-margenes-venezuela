@@ -223,23 +223,26 @@
         </div>
         <div>
           <label for="prod-costo">Costo proveedor (USD)</label>
-          <input type="number" step="0.01" id="prod-costo" placeholder="157.00">
+          <input type="number" step="0.01" id="prod-costo" placeholder="157.00" oninput="sincronizarGanancia('prod','usd')">
         </div>
         <div>
-          <label for="prod-modo-ganancia">Modo de ganancia</label>
-          <select id="prod-modo-ganancia" onchange="actualizarEtiquetaGanancia('prod')">
-            <option value="fijo">Ganancia bruta fija ($)</option>
-            <option value="neta">Ganancia neta deseada ($, cubre comisión)</option>
-            <option value="porcentaje">Porcentaje (%)</option>
+          <label for="prod-modo-ganancia">Tipo de ganancia</label>
+          <select id="prod-modo-ganancia" onchange="sincronizarGanancia('prod','tipo')">
+            <option value="fijo">Bruta (antes de comisión)</option>
+            <option value="neta">Neta (después de comisión)</option>
           </select>
         </div>
         <div>
-          <label for="prod-valor-ganancia" id="prod-label-ganancia">Ganancia bruta deseada ($)</label>
-          <input type="number" step="0.01" id="prod-valor-ganancia" value="30" oninput="actualizarComparacionComisiones()">
+          <label for="prod-valor-ganancia">Ganancia en $</label>
+          <input type="number" step="0.01" id="prod-valor-ganancia" value="30" oninput="sincronizarGanancia('prod','usd')">
+        </div>
+        <div>
+          <label for="prod-valor-ganancia-pct">Ganancia en %</label>
+          <input type="number" step="0.01" id="prod-valor-ganancia-pct" oninput="sincronizarGanancia('prod','pct')">
         </div>
         <div>
           <label for="prod-comision">Comisión ML (%)</label>
-          <input type="number" step="0.5" id="prod-comision" value="9">
+          <input type="number" step="0.5" id="prod-comision" value="9" oninput="sincronizarGanancia('prod','tipo')">
         </div>
       </div>
       <div id="comparacion-comisiones" style="display:none; margin-top:14px; padding:12px 14px; background:var(--surface-2); border:1px solid var(--line);"></div>
@@ -462,11 +465,10 @@
     document.getElementById('prod-nombre').value = p.nombre || '';
     document.getElementById('prod-categoria').value = p.categoria || '';
     document.getElementById('prod-costo').value = p.costo_usd || '';
-    document.getElementById('prod-modo-ganancia').value = pub.modo_ganancia || 'fijo';
-    actualizarEtiquetaGanancia('prod');
-    document.getElementById('prod-valor-ganancia').value =
-      pub.modo_ganancia === 'porcentaje' ? (pub.margen_objetivo_pct || 30) : (pub.ganancia_real_usd || 30);
+    document.getElementById('prod-modo-ganancia').value = (pub.modo_ganancia === 'porcentaje' ? 'fijo' : pub.modo_ganancia) || 'fijo';
+    document.getElementById('prod-valor-ganancia').value = pub.ganancia_real_usd || 30;
     document.getElementById('prod-comision').value = pub.comision_ml_pct || 9;
+    sincronizarGanancia('prod', 'usd');
     document.getElementById('prod-descripcion').value = pub.descripcion || '';
     document.getElementById('prod-condicion').value = pub.condicion || 'nuevo';
     document.getElementById('prod-stock').value = pub.stock || 1;
@@ -489,42 +491,72 @@
       .forEach(id => document.getElementById(id).value = '');
     document.getElementById('prod-valor-ganancia').value = 30;
     document.getElementById('prod-comision').value = 9;
+    sincronizarGanancia('prod', 'usd');
   };
 
-  window.actualizarEtiquetaGanancia = function(prefix) {
-    const modo = document.getElementById(prefix + '-modo-ganancia').value;
-    const label = document.getElementById(prefix + '-label-ganancia');
-    if (modo === 'fijo') label.textContent = 'Ganancia bruta deseada ($)';
-    else if (modo === 'neta') label.textContent = 'Ganancia neta deseada ($)';
-    else label.textContent = 'Margen deseado (%)';
-    actualizarComparacionComisiones();
-  };
-
-  window.actualizarComparacionComisiones = async function() {
+  // Mantiene sincronizados los campos de ganancia en $ y en %, en ambas direcciones,
+  // según el tipo elegido (bruta = antes de comisión, neta = después de comisión).
+  window.actualizarComparacionComisiones = async function(prefix) {
     const cont = document.getElementById('comparacion-comisiones');
     if (!cont) return;
-    const modo = document.getElementById('prod-modo-ganancia').value;
-    const costo = parseFloat(document.getElementById('prod-costo').value);
-    const valor = parseFloat(document.getElementById('prod-valor-ganancia').value);
+    const modo = document.getElementById(prefix + '-modo-ganancia').value;
+    const costo = parseFloat(document.getElementById(prefix + '-costo').value);
+    const valor = parseFloat(document.getElementById(prefix + '-valor-ganancia').value);
 
-    if (modo !== 'neta' || isNaN(costo) || isNaN(valor) || !tasaBCV || !tasaBinance) {
+    if (isNaN(costo) || isNaN(valor) || !tasaBCV || !tasaBinance) {
       cont.style.display = 'none';
       return;
     }
 
-    const { data: clasica } = await supabase.rpc('calcular_precios', { p_costo_usd: costo, p_modo: 'neta', p_valor: valor, p_comision_ml_pct: 9, p_tasa_bcv: tasaBCV, p_tasa_binance: tasaBinance });
-    const { data: premium } = await supabase.rpc('calcular_precios', { p_costo_usd: costo, p_modo: 'neta', p_valor: valor, p_comision_ml_pct: 11, p_tasa_bcv: tasaBCV, p_tasa_binance: tasaBinance });
+    const { data: clasica } = await supabase.rpc('calcular_precios', { p_costo_usd: costo, p_modo: modo, p_valor: valor, p_comision_ml_pct: 9, p_tasa_bcv: tasaBCV, p_tasa_binance: tasaBinance });
+    const { data: premium } = await supabase.rpc('calcular_precios', { p_costo_usd: costo, p_modo: modo, p_valor: valor, p_comision_ml_pct: 11, p_tasa_bcv: tasaBCV, p_tasa_binance: tasaBinance });
 
     if (!clasica || !premium) { cont.style.display = 'none'; return; }
     const c = clasica[0], p = premium[0];
+    const etiquetaGanancia = modo === 'neta' ? `quedarte con $${valor.toFixed(2)} netos` : `ganar $${valor.toFixed(2)} brutos`;
     cont.style.display = 'block';
     cont.innerHTML = `
-      <div style="font-size:12px; color:var(--muted); margin-bottom:8px;">Para quedarte con $${valor.toFixed(2)} netos, según el tipo de publicación:</div>
-      <div style="display:flex; gap:24px; font-size:13px;">
-        <div><b style="color:var(--gold)">Clásica (9%):</b> publica en <b>$${parseFloat(c.precio_efectivo_usd).toFixed(2)}</b> (Bs ${parseFloat(c.precio_bcv_bs).toLocaleString('es-VE',{maximumFractionDigits:0})})</div>
-        <div><b style="color:var(--teal)">Premium (11%):</b> publica en <b>$${parseFloat(p.precio_efectivo_usd).toFixed(2)}</b> (Bs ${parseFloat(p.precio_bcv_bs).toLocaleString('es-VE',{maximumFractionDigits:0})})</div>
+      <div style="font-size:12px; color:var(--muted); margin-bottom:8px;">Para ${etiquetaGanancia}, según el tipo de publicación:</div>
+      <div style="display:flex; gap:24px; font-size:13px; flex-wrap:wrap;">
+        <div><b style="color:var(--gold)">Clásica (9%):</b> publica en <b>$${parseFloat(c.precio_efectivo_usd).toFixed(2)}</b> (Bs ${parseFloat(c.precio_bcv_bs).toLocaleString('es-VE',{maximumFractionDigits:0})}) — neta $${parseFloat(c.ganancia_neta_usd).toFixed(2)}</div>
+        <div><b style="color:var(--teal)">Premium (11%):</b> publica en <b>$${parseFloat(p.precio_efectivo_usd).toFixed(2)}</b> (Bs ${parseFloat(p.precio_bcv_bs).toLocaleString('es-VE',{maximumFractionDigits:0})}) — neta $${parseFloat(p.ganancia_neta_usd).toFixed(2)}</div>
       </div>
     `;
+  };
+    const tipo = document.getElementById(prefix + '-modo-ganancia').value; // 'fijo' | 'neta'
+    const costo = parseFloat(document.getElementById(prefix + '-costo').value);
+    const comision = parseFloat(document.getElementById(prefix + '-comision').value) / 100;
+    const campoUsd = document.getElementById(prefix + '-valor-ganancia');
+    const campoPct = document.getElementById(prefix + '-valor-ganancia-pct');
+
+    if (isNaN(costo) || costo <= 0) { actualizarComparacionComisiones(prefix); return; }
+
+    if (origen === 'pct') {
+      const pct = parseFloat(campoPct.value);
+      if (isNaN(pct)) return;
+      let precio, monto;
+      if (tipo === 'fijo') {
+        precio = costo / (1 - pct / 100);
+        monto = precio - costo;
+      } else {
+        precio = costo / (1 - comision - pct / 100);
+        monto = precio * (1 - comision) - costo;
+      }
+      campoUsd.value = monto.toFixed(2);
+    } else {
+      // origen === 'usd' o cambió el tipo/costo/comisión: recalcular % a partir del $
+      const monto = parseFloat(campoUsd.value);
+      if (isNaN(monto)) return;
+      let precio;
+      if (tipo === 'fijo') {
+        precio = costo + monto;
+      } else {
+        precio = (costo + monto) / (1 - comision);
+      }
+      const pct = precio > 0 ? (monto / precio) * 100 : 0;
+      campoPct.value = pct.toFixed(2);
+    }
+    actualizarComparacionComisiones(prefix);
   };
 
   window.crearProducto = async function() {
