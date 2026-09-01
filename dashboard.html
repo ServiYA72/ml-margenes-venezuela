@@ -206,6 +206,31 @@
 
   <!-- PRODUCTOS -->
   <section class="view" id="view-productos">
+
+    <div class="panel">
+      <h2>Márgenes automáticos por categoría</h2>
+      <div class="grid-form">
+        <div>
+          <label for="cat-nombre">Categoría</label>
+          <input type="text" id="cat-nombre" placeholder="Ej: Almacenamiento">
+        </div>
+        <div>
+          <label for="cat-tipo">Tipo de ganancia</label>
+          <select id="cat-tipo">
+            <option value="neta">Neta (después de comisión)</option>
+            <option value="fijo">Bruta (antes de comisión)</option>
+          </select>
+        </div>
+        <div>
+          <label for="cat-pct">Porcentaje (%)</label>
+          <input type="number" step="0.5" id="cat-pct" placeholder="25">
+        </div>
+        <button class="add" onclick="guardarMargenCategoria()">Guardar</button>
+      </div>
+      <div class="msg" id="msg-categoria"></div>
+      <div id="lista-margenes-categoria" style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap;"></div>
+    </div>
+
     <div class="panel">
       <h2 id="titulo-form-producto">Nuevo producto</h2>
       <div class="grid-form">
@@ -219,7 +244,8 @@
         </div>
         <div>
           <label for="prod-categoria">Categoría</label>
-          <input type="text" id="prod-categoria" placeholder="Ej: Almacenamiento">
+          <input type="text" id="prod-categoria" placeholder="Ej: Almacenamiento" list="lista-categorias" onchange="aplicarMargenPorCategoria('prod')">
+          <datalist id="lista-categorias"></datalist>
         </div>
         <div>
           <label for="prod-costo">Costo proveedor (USD)</label>
@@ -317,8 +343,9 @@
             <th><input type="checkbox" id="chk-todos" onchange="toggleTodos(this)"></th>
             <th style="min-width:220px;">Producto</th><th>Proveedor</th>
             <th class="num">Costo</th>
-            <th class="num">Precio efectivo</th>
+            <th class="num" style="color:var(--teal)">Precio final al cliente ($ Ref. BCV)</th>
             <th class="num">Precio Bs (BCV)</th>
+            <th class="num">Precio efectivo (cash)</th>
             <th class="num">Ganancia deseada</th>
             <th class="num">Comisión ML $</th>
             <th class="num">Ganancia neta $</th>
@@ -419,11 +446,76 @@
   }
 
   let productosCache = {};
+  let margenesCategoriaCache = {};
+
+  async function cargarMargenesCategoria() {
+    const { data } = await supabase.from('categorias_margen').select('*').order('categoria');
+    margenesCategoriaCache = {};
+    const datalist = document.getElementById('lista-categorias');
+    const lista = document.getElementById('lista-margenes-categoria');
+    datalist.innerHTML = '';
+    lista.innerHTML = '';
+
+    (data || []).forEach(c => {
+      margenesCategoriaCache[normalizarCategoria(c.categoria)] = c;
+      const opt = document.createElement('option');
+      opt.value = c.categoria;
+      datalist.appendChild(opt);
+
+      const pill = document.createElement('span');
+      pill.className = 'pill';
+      pill.style.cursor = 'pointer';
+      pill.title = 'Clic para eliminar';
+      pill.textContent = `${c.categoria}: ${c.margen_pct}% (${c.tipo_ganancia === 'neta' ? 'neta' : 'bruta'})`;
+      pill.onclick = () => eliminarMargenCategoria(c.id);
+      lista.appendChild(pill);
+    });
+  }
+
+  function normalizarCategoria(str) {
+    return str.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  }
+
+  window.guardarMargenCategoria = async function() {
+    const msg = document.getElementById('msg-categoria');
+    const categoria = document.getElementById('cat-nombre').value.trim();
+    const tipo = document.getElementById('cat-tipo').value;
+    const pct = parseFloat(document.getElementById('cat-pct').value);
+
+    if (!categoria || isNaN(pct)) { msg.textContent = 'Escribe la categoría y el porcentaje.'; return; }
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const { error } = await supabase.from('categorias_margen')
+      .upsert({ categoria, tipo_ganancia: tipo, margen_pct: pct, creado_por: session?.user?.id }, { onConflict: 'categoria' });
+
+    if (error) { msg.style.color = 'var(--rust)'; msg.textContent = 'Error: ' + error.message; return; }
+    msg.style.color = 'var(--teal)';
+    msg.textContent = `Guardado: ${categoria} → ${pct}%`;
+    document.getElementById('cat-nombre').value = '';
+    document.getElementById('cat-pct').value = '';
+    cargarMargenesCategoria();
+  };
+
+  window.eliminarMargenCategoria = async function(id) {
+    if (!confirm('¿Eliminar este margen automático?')) return;
+    await supabase.from('categorias_margen').delete().eq('id', id);
+    cargarMargenesCategoria();
+  };
+
+  window.aplicarMargenPorCategoria = function(prefix) {
+    const categoria = document.getElementById(prefix + '-categoria').value;
+    const match = margenesCategoriaCache[normalizarCategoria(categoria)];
+    if (!match) return;
+
+    document.getElementById(prefix + '-modo-ganancia').value = match.tipo_ganancia;
+    document.getElementById(prefix + '-valor-ganancia-pct').value = match.margen_pct;
+    sincronizarGanancia(prefix, 'pct');
+  };
 
   async function cargarProductos() {
     const { data, error } = await supabase
       .from('productos')
-      .select('id, nombre, categoria, costo_usd, sku, especificaciones, proveedores(id, nombre), publicaciones(id, precio_efectivo_usd, precio_bcv_bs, ganancia_real_usd, comision_ml_usd, ganancia_neta_usd, modo_ganancia, margen_objetivo_pct, comision_ml_pct, descripcion, condicion, stock, forma_envio, condiciones_pago, horario_atencion, imagenes)')
+      .select('id, nombre, categoria, costo_usd, sku, especificaciones, proveedores(id, nombre), publicaciones(id, precio_efectivo_usd, precio_bcv_usd_equiv, precio_bcv_bs, ganancia_real_usd, comision_ml_usd, ganancia_neta_usd, modo_ganancia, margen_objetivo_pct, comision_ml_pct, descripcion, condicion, stock, forma_envio, condiciones_pago, horario_atencion, imagenes)')
       .order('created_at', { ascending: false });
 
     const tbody = document.querySelector('#tabla-productos tbody');
@@ -446,8 +538,9 @@
         <td style="min-width:220px;">${escapeHtml(p.nombre)}</td>
         <td>${escapeHtml(p.proveedores?.nombre || '—')}</td>
         <td class="num">$${parseFloat(p.costo_usd).toFixed(2)}</td>
-        <td class="num gold-text">${pub.precio_efectivo_usd ? '$' + parseFloat(pub.precio_efectivo_usd).toFixed(2) : '—'}</td>
+        <td class="num" style="color:var(--teal); font-weight:700; font-size:14px;">${pub.precio_bcv_usd_equiv ? '$' + parseFloat(pub.precio_bcv_usd_equiv).toFixed(2) : '—'}</td>
         <td class="num teal-text">${pub.precio_bcv_bs ? 'Bs ' + parseFloat(pub.precio_bcv_bs).toLocaleString('es-VE', {maximumFractionDigits: 2}) : '—'}</td>
+        <td class="num gold-text">${pub.precio_efectivo_usd ? '$' + parseFloat(pub.precio_efectivo_usd).toFixed(2) : '—'}</td>
         <td class="num">${pub.ganancia_real_usd ? '$' + parseFloat(pub.ganancia_real_usd).toFixed(2) : '—'}</td>
         <td class="num" style="color:var(--rust)">${pub.comision_ml_usd ? '$' + parseFloat(pub.comision_ml_usd).toFixed(2) : '—'}</td>
         <td class="num" style="color:var(--teal); font-weight:600;">${pub.ganancia_neta_usd ? '$' + parseFloat(pub.ganancia_neta_usd).toFixed(2) : '—'}</td>
@@ -688,12 +781,25 @@ RESULTADOS DEL CÁLCULO DE PRECIO
     if (!clasica || !premium) { cont.style.display = 'none'; return; }
     const c = clasica[0], p = premium[0];
     const etiquetaGanancia = modo === 'neta' ? `quedarte con $${valor.toFixed(2)} netos` : `ganar $${valor.toFixed(2)} brutos`;
+
+    const fila = (nombre, d, comisionPct) => `
+      <div style="flex:1; min-width:260px; border:1px solid var(--line); padding:12px 14px;">
+        <div style="font-weight:600; margin-bottom:8px;">${nombre}</div>
+        <div style="font-size:13px; line-height:1.9;">
+          <div>Precio en efectivo (cash): <b style="color:var(--gold)">$${parseFloat(d.precio_efectivo_usd).toFixed(2)}</b></div>
+          <div>Precio a publicar en Bs (BCV): <b style="color:var(--teal)">Bs ${parseFloat(d.precio_bcv_bs).toLocaleString('es-VE',{maximumFractionDigits:2})}</b></div>
+          <div>Ref. en $ a tasa BCV: <b style="color:var(--teal)">$${parseFloat(d.precio_bcv_usd_equiv).toFixed(2)}</b></div>
+          <div style="color:var(--muted); margin-top:6px; padding-top:6px; border-top:1px solid var(--line);">Comisión ML (${comisionPct}%): <b style="color:var(--rust)">$${parseFloat(d.comision_ml_usd).toFixed(2)}</b></div>
+          <div>Ganancia neta real: <b>$${parseFloat(d.ganancia_neta_usd).toFixed(2)}</b></div>
+        </div>
+      </div>`;
+
     cont.style.display = 'block';
     cont.innerHTML = `
-      <div style="font-size:12px; color:var(--muted); margin-bottom:8px;">Para ${etiquetaGanancia}, según el tipo de publicación:</div>
-      <div style="display:flex; gap:24px; font-size:13px; flex-wrap:wrap;">
-        <div><b style="color:var(--gold)">Clásica (11%):</b> publica en <b>$${parseFloat(c.precio_efectivo_usd).toFixed(2)}</b> (Bs ${parseFloat(c.precio_bcv_bs).toLocaleString('es-VE',{maximumFractionDigits:0})}) — neta $${parseFloat(c.ganancia_neta_usd).toFixed(2)}</div>
-        <div><b style="color:var(--teal)">Premium (15%):</b> publica en <b>$${parseFloat(p.precio_efectivo_usd).toFixed(2)}</b> (Bs ${parseFloat(p.precio_bcv_bs).toLocaleString('es-VE',{maximumFractionDigits:0})}) — neta $${parseFloat(p.ganancia_neta_usd).toFixed(2)}</div>
+      <div style="font-size:12px; color:var(--muted); margin-bottom:12px;">Para ${etiquetaGanancia}, según el tipo de publicación:</div>
+      <div style="display:flex; gap:16px; flex-wrap:wrap;">
+        ${fila('Clásica (11%)', c, 11)}
+        ${fila('Premium (15%)', p, 15)}
       </div>
     `;
   };
@@ -837,6 +943,7 @@ RESULTADOS DEL CÁLCULO DE PRECIO
     await checkSession();
     await cargarTasas();
     await cargarProveedores();
+    await cargarMargenesCategoria();
     await cargarProductos();
   })();
 </script>

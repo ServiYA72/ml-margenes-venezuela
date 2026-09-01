@@ -105,6 +105,14 @@
         <input type="number" step="0.01" id="valor-ganancia" value="30">
       </div>
       <div>
+        <label for="tipo-publicacion">Tipo de publicación</label>
+        <select id="tipo-publicacion" onchange="aplicarTipoPublicacionImport()">
+          <option value="11">Clásica (11%)</option>
+          <option value="15">Premium (15%)</option>
+          <option value="custom">Personalizada</option>
+        </select>
+      </div>
+      <div>
         <label for="comision">Comisión ML (%)</label>
         <input type="number" step="0.5" id="comision" value="11">
       </div>
@@ -319,6 +327,19 @@
     document.getElementById('panel-preview').style.display = 'none';
   }
 
+  window.aplicarTipoPublicacionImport = function() {
+    const tipo = document.getElementById('tipo-publicacion').value;
+    const comisionInput = document.getElementById('comision');
+    if (tipo !== 'custom') {
+      comisionInput.value = tipo;
+      comisionInput.readOnly = true;
+      comisionInput.style.opacity = '0.7';
+    } else {
+      comisionInput.readOnly = false;
+      comisionInput.style.opacity = '1';
+    }
+  };
+
   window.actualizarEtiquetaGanancia = function() {
     const unidad = document.getElementById('unidad-ganancia').value;
     document.getElementById('label-ganancia').textContent = unidad === 'usd' ? 'Ganancia en $ (por producto)' : 'Ganancia en %';
@@ -506,6 +527,7 @@
   });
 
   init();
+  aplicarTipoPublicacionImport();
 </script>
 
 </body>
