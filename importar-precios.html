@@ -80,15 +80,22 @@
   <p class="sub">Sube el Excel o CSV de un proveedor nacional y carga todos los productos de una vez, con el margen ya calculado para cada uno.</p>
 
   <div class="panel">
-    <h2>1. Elige el proveedor y el margen a aplicar</h2>
+    <h2>1. Elige el proveedor y la ganancia a aplicar</h2>
     <div class="grid-form">
       <div>
         <label for="proveedor">Proveedor</label>
         <select id="proveedor"></select>
       </div>
       <div>
-        <label for="margen">Margen objetivo (%)</label>
-        <input type="number" id="margen" value="30">
+        <label for="modo-ganancia">Modo de ganancia</label>
+        <select id="modo-ganancia" onchange="actualizarEtiquetaGanancia()">
+          <option value="fijo">Monto fijo ($) por producto</option>
+          <option value="porcentaje">Porcentaje (%)</option>
+        </select>
+      </div>
+      <div>
+        <label for="valor-ganancia" id="label-ganancia">Ganancia deseada ($)</label>
+        <input type="number" step="0.01" id="valor-ganancia" value="30">
       </div>
       <div>
         <label for="comision">Comisión ML (%)</label>
@@ -305,6 +312,11 @@
     document.getElementById('panel-preview').style.display = 'none';
   }
 
+  window.actualizarEtiquetaGanancia = function() {
+    const modo = document.getElementById('modo-ganancia').value;
+    document.getElementById('label-ganancia').textContent = modo === 'fijo' ? 'Ganancia deseada ($)' : 'Margen deseado (%)';
+  };
+
   window.generarVistaPrevia = function() {
     const colNombre = document.getElementById('map-nombre').value;
     const colCosto = document.getElementById('map-costo').value;
@@ -325,13 +337,15 @@
     panel.innerHTML = `
       <h2>4. Revisa antes de cargar</h2>
       <div style="overflow-x:auto;">
-      <table style="min-width: 1000px;">
+      <table style="min-width: 1200px;">
         <thead>
           <tr>
             <th>Código</th><th>Marca</th><th style="min-width:220px;">Producto</th><th>Categoría</th>
             <th class="num">Costo</th>
             <th class="num">Precio efectivo</th>
-            <th class="num">Ganancia $</th>
+            <th class="num">Ganancia deseada</th>
+            <th class="num">Comisión ML $</th>
+            <th class="num">Ganancia neta $</th>
             <th class="num">Precio Bs (BCV)</th>
           </tr>
         </thead>
@@ -343,7 +357,8 @@
     `;
 
     const tbody = document.getElementById('preview-body');
-    const margen = parseFloat(document.getElementById('margen').value);
+    const modo = document.getElementById('modo-ganancia').value;
+    const valorGanancia = parseFloat(document.getElementById('valor-ganancia').value);
     const comision = parseFloat(document.getElementById('comision').value);
 
     for (const row of filasCrudas) {
@@ -357,18 +372,27 @@
 
       if (!nombre || isNaN(costo) || costo <= 0) {
         tr.className = 'row-error';
-        tr.innerHTML = `<td colspan="2">${escapeHtml(String(codigo || ''))}</td><td>${escapeHtml(String(nombre || '(sin nombre)'))}</td><td colspan="4">Fila omitida: falta nombre o costo válido</td>`;
+        tr.innerHTML = `<td colspan="2">${escapeHtml(String(codigo || ''))}</td><td>${escapeHtml(String(nombre || '(sin nombre)'))}</td><td colspan="6">Fila omitida: falta nombre o costo válido</td>`;
         tbody.appendChild(tr);
         continue;
       }
 
-      const precioEfectivo = costo / (1 - margen / 100 - comision / 100);
-      const gananciaUsd = precioEfectivo * (margen / 100);
+      // Precio = costo + ganancia deseada, SIN sumar la comisión de ML al precio
+      let precioEfectivo, gananciaDeseada;
+      if (modo === 'fijo') {
+        gananciaDeseada = valorGanancia;
+        precioEfectivo = costo + gananciaDeseada;
+      } else {
+        precioEfectivo = costo / (1 - valorGanancia / 100);
+        gananciaDeseada = precioEfectivo * (valorGanancia / 100);
+      }
+      const comisionMlUsd = precioEfectivo * (comision / 100);
+      const gananciaNetaUsd = gananciaDeseada - comisionMlUsd;
+      const precioBcvBs = precioEfectivo * tasaBinance;
       const precioBcvUsdEquiv = precioEfectivo * (tasaBinance / tasaBCV);
-      const precioBcvBs = precioBcvUsdEquiv * tasaBCV;
 
       const nombreFinal = marca ? `${marca} ${nombre}` : nombre;
-      filasValidas.push({ nombre: nombreFinal, categoria, costo, precioEfectivo, gananciaUsd, precioBcvUsdEquiv, precioBcvBs, codigo, marca });
+      filasValidas.push({ nombre: nombreFinal, categoria, costo, precioEfectivo, gananciaDeseada, comisionMlUsd, gananciaNetaUsd, precioBcvUsdEquiv, precioBcvBs, codigo, marca });
 
       tr.innerHTML = `
         <td>${escapeHtml(String(codigo || ''))}</td>
@@ -377,7 +401,9 @@
         <td>${escapeHtml(String(categoria || ''))}</td>
         <td class="num">$${costo.toFixed(2)}</td>
         <td class="num" style="color:var(--gold)">$${precioEfectivo.toFixed(2)}</td>
-        <td class="num" style="color:var(--teal)">$${gananciaUsd.toFixed(2)}</td>
+        <td class="num">$${gananciaDeseada.toFixed(2)}</td>
+        <td class="num" style="color:var(--rust)">$${comisionMlUsd.toFixed(2)}</td>
+        <td class="num" style="color:var(--teal); font-weight:600;">$${gananciaNetaUsd.toFixed(2)}</td>
         <td class="num">Bs ${precioBcvBs.toLocaleString('es-VE', {maximumFractionDigits: 0})}</td>
       `;
       tbody.appendChild(tr);
@@ -394,7 +420,7 @@
     const btn = document.getElementById('btn-confirmar');
     const msg = document.getElementById('msg-import');
     const proveedor_id = document.getElementById('proveedor').value;
-    const margen = parseFloat(document.getElementById('margen').value);
+    const modo = document.getElementById('modo-ganancia').value;
     const comision = parseFloat(document.getElementById('comision').value);
 
     if (!proveedor_id) { msg.className = 'msg err'; msg.textContent = 'Selecciona un proveedor.'; return; }
@@ -421,12 +447,14 @@
       if (!errProd) {
         await supabase.from('publicaciones').insert({
           producto_id: producto.id,
-          margen_objetivo_pct: margen,
+          modo_ganancia: modo,
           comision_ml_pct: comision,
           precio_efectivo_usd: fila.precioEfectivo.toFixed(2),
           precio_bcv_usd_equiv: fila.precioBcvUsdEquiv.toFixed(2),
           precio_bcv_bs: fila.precioBcvBs.toFixed(2),
-          ganancia_real_usd: fila.gananciaUsd.toFixed(2),
+          ganancia_real_usd: fila.gananciaDeseada.toFixed(2),
+          comision_ml_usd: fila.comisionMlUsd.toFixed(2),
+          ganancia_neta_usd: fila.gananciaNetaUsd.toFixed(2),
           creado_por: session?.user?.id
         });
         cargados++;
