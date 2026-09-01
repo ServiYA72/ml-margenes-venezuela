@@ -564,12 +564,14 @@
       };
 
       if (editandoProductoId) {
-        await supabase.from('publicaciones').update(datosPublicacion).eq('producto_id', productoId);
+        const { error: errPubUpd } = await supabase.from('publicaciones').update(datosPublicacion).eq('producto_id', productoId);
+        if (errPubUpd) { msg.style.color = 'var(--rust)'; msg.textContent = 'Error al guardar los cambios: ' + errPubUpd.message; return; }
       } else {
-        await supabase.from('publicaciones').insert({ ...datosPublicacion, producto_id: productoId, creado_por: session?.user?.id });
+        const { error: errPubIns } = await supabase.from('publicaciones').insert({ ...datosPublicacion, producto_id: productoId, creado_por: session?.user?.id });
+        if (errPubIns) { msg.style.color = 'var(--rust)'; msg.textContent = 'Error al guardar la publicación: ' + errPubIns.message; return; }
       }
 
-      msg.textContent = '';
+      msg.style.color = '';
       cancelarEdicion();
       cargarProductos();
     }
