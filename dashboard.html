@@ -598,7 +598,16 @@
     document.getElementById('prod-costo').value = p.costo_usd || '';
     document.getElementById('prod-modo-ganancia').value = (pub.modo_ganancia === 'porcentaje' ? 'fijo' : pub.modo_ganancia) || 'fijo';
     document.getElementById('prod-valor-ganancia').value = pub.ganancia_real_usd || 30;
-    document.getElementById('prod-comision').value = pub.comision_ml_pct || 9;
+
+    const comisionGuardada = pub.comision_ml_pct ? parseFloat(pub.comision_ml_pct) : 11;
+    const tipoPubSelect = document.getElementById('prod-tipo-publicacion');
+    if (comisionGuardada === 11 || comisionGuardada === 15) {
+      tipoPubSelect.value = String(comisionGuardada);
+    } else {
+      tipoPubSelect.value = 'custom';
+    }
+    document.getElementById('prod-comision').value = comisionGuardada;
+    aplicarTipoPublicacion('prod');
     sincronizarGanancia('prod', 'usd');
     document.getElementById('prod-descripcion').value = pub.descripcion || '';
     document.getElementById('prod-condicion').value = pub.condicion || 'nuevo';
