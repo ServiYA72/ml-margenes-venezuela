@@ -89,7 +89,8 @@
       <div>
         <label for="modo-ganancia">Modo de ganancia</label>
         <select id="modo-ganancia" onchange="actualizarEtiquetaGanancia()">
-          <option value="fijo">Monto fijo ($) por producto</option>
+          <option value="fijo">Ganancia bruta fija ($) por producto</option>
+          <option value="neta">Ganancia neta deseada ($, cubre comisión)</option>
           <option value="porcentaje">Porcentaje (%)</option>
         </select>
       </div>
@@ -314,7 +315,8 @@
 
   window.actualizarEtiquetaGanancia = function() {
     const modo = document.getElementById('modo-ganancia').value;
-    document.getElementById('label-ganancia').textContent = modo === 'fijo' ? 'Ganancia deseada ($)' : 'Margen deseado (%)';
+    const textos = { fijo: 'Ganancia bruta deseada ($)', neta: 'Ganancia neta deseada ($)', porcentaje: 'Margen deseado (%)' };
+    document.getElementById('label-ganancia').textContent = textos[modo];
   };
 
   window.generarVistaPrevia = function() {
@@ -377,11 +379,15 @@
         continue;
       }
 
-      // Precio = costo + ganancia deseada, SIN sumar la comisión de ML al precio
+      // Precio según el modo elegido
       let precioEfectivo, gananciaDeseada;
       if (modo === 'fijo') {
         gananciaDeseada = valorGanancia;
         precioEfectivo = costo + gananciaDeseada;
+      } else if (modo === 'neta') {
+        // Precio tal que, después de restar la comisión de ML, quede exactamente valorGanancia
+        precioEfectivo = (costo + valorGanancia) / (1 - comision / 100);
+        gananciaDeseada = precioEfectivo - costo;
       } else {
         precioEfectivo = costo / (1 - valorGanancia / 100);
         gananciaDeseada = precioEfectivo * (valorGanancia / 100);
