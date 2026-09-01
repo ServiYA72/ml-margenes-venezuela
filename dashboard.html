@@ -358,6 +358,18 @@
             <option value="1001-999999">Más de $1000</option>
           </select>
         </div>
+        <div>
+          <label for="filtro-costo" style="display:block; font-size:12px; color:var(--muted); margin-bottom:6px;">Rango de costo proveedor</label>
+          <select id="filtro-costo" onchange="renderizarTablaProductos()" style="background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:9px 10px; font-size:14px;">
+            <option value="">Todos los costos</option>
+            <option value="0-100">$0 – $100</option>
+            <option value="101-200">$101 – $200</option>
+            <option value="201-300">$201 – $300</option>
+            <option value="301-500">$301 – $500</option>
+            <option value="501-1000">$501 – $1000</option>
+            <option value="1001-999999">Más de $1000</option>
+          </select>
+        </div>
         <div id="contador-resultados" style="font-size:12px; color:var(--muted); padding-bottom:10px;"></div>
       </div>
 
@@ -565,6 +577,12 @@
       const [min, max] = rangoSel.split('-').map(Number);
       rangoMin = min; rangoMax = max;
     }
+    const rangoCostoSel = document.getElementById('filtro-costo').value;
+    let costoMin = null, costoMax = null;
+    if (rangoCostoSel) {
+      const [min, max] = rangoCostoSel.split('-').map(Number);
+      costoMin = min; costoMax = max;
+    }
 
     const todos = Object.values(productosCache);
     const filtrados = todos.filter(p => {
@@ -576,6 +594,10 @@
       if (rangoMin !== null) {
         const precio = parseFloat(p.pub?.precio_bcv_usd_equiv);
         if (isNaN(precio) || precio < rangoMin || precio > rangoMax) return false;
+      }
+      if (costoMin !== null) {
+        const costo = parseFloat(p.costo_usd);
+        if (isNaN(costo) || costo < costoMin || costo > costoMax) return false;
       }
       return true;
     });
