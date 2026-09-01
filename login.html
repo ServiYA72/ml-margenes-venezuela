@@ -40,12 +40,14 @@
     border-right: 1px solid var(--line);
   }
   .brand-mark {
-    font-family: 'Fraunces', serif;
-    font-size: 26px;
-    font-weight: 500;
-    letter-spacing: -0.01em;
+    display: flex;
+    align-items: center;
   }
-  .brand-mark span { color: var(--gold); }
+  .brand-logo {
+    height: 46px;
+    width: auto;
+    filter: drop-shadow(0 4px 14px rgba(0,0,0,0.55)) drop-shadow(0 1px 0 rgba(255,255,255,0.04));
+  }
   .brand-copy {
     max-width: 380px;
   }
@@ -228,7 +230,7 @@
 
 <div class="layout">
   <div class="panel-brand">
-    <div class="brand-mark">nicom<span>·</span>system</div>
+    <div class="brand-mark"><img src="logo-nicom.png" alt="Nicom Tech Solutions" class="brand-logo"></div>
 
     <div class="brand-copy">
       <h1>Precios que no se quedan atrás del bolívar.</h1>
