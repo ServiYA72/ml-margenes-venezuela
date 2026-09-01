@@ -931,6 +931,8 @@ RESULTADOS DEL CÁLCULO DE PRECIO
     cargarProductos();
   };
 
+  let secuenciaComparacion = 0;
+
   window.actualizarComparacionComisiones = async function(prefix) {
     const cont = document.getElementById('comparacion-comisiones');
     if (!cont) return;
@@ -943,8 +945,14 @@ RESULTADOS DEL CÁLCULO DE PRECIO
       return;
     }
 
+    const miSecuencia = ++secuenciaComparacion;
+
     const { data: clasica } = await supabase.rpc('calcular_precios', { p_costo_usd: costo, p_modo: modo, p_valor: valor, p_comision_ml_pct: 11, p_tasa_bcv: tasaBCV, p_tasa_binance: tasaBinance });
     const { data: premium } = await supabase.rpc('calcular_precios', { p_costo_usd: costo, p_modo: modo, p_valor: valor, p_comision_ml_pct: 15, p_tasa_bcv: tasaBCV, p_tasa_binance: tasaBinance });
+
+    // Si mientras esperábamos la respuesta el usuario siguió escribiendo,
+    // ya hay una petición más nueva en camino: descartamos esta respuesta vieja.
+    if (miSecuencia !== secuenciaComparacion) return;
 
     if (!clasica || !premium) { cont.style.display = 'none'; return; }
     const c = clasica[0], p = premium[0];
