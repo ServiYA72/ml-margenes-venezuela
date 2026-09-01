@@ -157,10 +157,31 @@
     font-size: 15px;
     font-family: 'IBM Plex Sans', sans-serif;
   }
-  input:focus {
+  input:focus, .password-wrap input:focus {
     outline: none;
     border-color: var(--gold);
   }
+  .password-wrap {
+    position: relative;
+    display: flex;
+  }
+  .password-wrap input {
+    padding-right: 56px;
+  }
+  .toggle-pass {
+    position: absolute;
+    right: 0;
+    top: 0;
+    height: 100%;
+    padding: 0 14px;
+    background: transparent;
+    border: none;
+    color: var(--muted);
+    font-size: 12px;
+    cursor: pointer;
+    font-family: 'IBM Plex Sans', sans-serif;
+  }
+  .toggle-pass:hover { color: var(--paper); }
   input:focus-visible {
     outline: 2px solid var(--gold);
     outline-offset: 1px;
@@ -218,14 +239,14 @@
       <div class="rate-board">
         <div class="rate">
           <span class="rate-label">BCV</span>
-          <span class="rate-value gold">794,99</span>
+          <span class="rate-value gold" id="rate-bcv">—</span>
         </div>
         <div class="rate">
           <span class="rate-label">Binance USDT</span>
-          <span class="rate-value teal">947,00</span>
+          <span class="rate-value teal" id="rate-binance">—</span>
         </div>
       </div>
-      <div class="rate-note">Bs/USD · referencia, 31 ago 2026</div>
+      <div class="rate-note" id="rate-note">Bs/USD · cargando…</div>
     </div>
   </div>
 
@@ -247,7 +268,10 @@
         </div>
         <div class="field">
           <label for="login-password">Contraseña</label>
-          <input type="password" id="login-password" required autocomplete="current-password">
+          <div class="password-wrap">
+            <input type="password" id="login-password" required autocomplete="current-password">
+            <button type="button" class="toggle-pass" onclick="togglePassword('login-password', this)">Ver</button>
+          </div>
         </div>
         <button type="submit" class="submit" id="btn-login">Entrar</button>
         <div class="message" id="msg-login"></div>
@@ -268,7 +292,10 @@
         </div>
         <div class="field">
           <label for="signup-password">Contraseña</label>
-          <input type="password" id="signup-password" required minlength="6" autocomplete="new-password">
+          <div class="password-wrap">
+            <input type="password" id="signup-password" required minlength="6" autocomplete="new-password">
+            <button type="button" class="toggle-pass" onclick="togglePassword('signup-password', this)">Ver</button>
+          </div>
         </div>
         <button type="submit" class="submit" id="btn-signup">Crear cuenta</button>
         <div class="message" id="msg-signup"></div>
@@ -283,6 +310,34 @@
   const SUPABASE_URL = 'https://tkhzuopapvclmcgxyood.supabase.co';
   const SUPABASE_KEY = 'sb_publishable_KQB6B6uLIPr-xKdNDc8iEw_7tcWM5gS';
   const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  window.togglePassword = function(inputId, btn) {
+    const input = document.getElementById(inputId);
+    const showing = input.type === 'text';
+    input.type = showing ? 'password' : 'text';
+    btn.textContent = showing ? 'Ver' : 'Ocultar';
+  };
+
+  async function cargarTasasReferencia() {
+    const { data, error } = await supabase
+      .from('tasas_cambio')
+      .select('tasa_bcv, tasa_binance, fecha')
+      .order('fecha', { ascending: false })
+      .limit(1)
+      .single();
+
+    const nota = document.getElementById('rate-note');
+    if (error || !data) {
+      nota.textContent = 'Bs/USD · no disponible';
+      return;
+    }
+    document.getElementById('rate-bcv').textContent = parseFloat(data.tasa_bcv).toLocaleString('es-VE', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    document.getElementById('rate-binance').textContent = parseFloat(data.tasa_binance).toLocaleString('es-VE', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    const fecha = new Date(data.fecha + 'T00:00:00');
+    nota.textContent = 'Bs/USD · referencia, ' + fecha.toLocaleDateString('es-VE', { day: 'numeric', month: 'short', year: 'numeric' });
+  }
+
+  cargarTasasReferencia();
 
   window.switchTab = function(tab) {
     document.getElementById('tab-login').classList.toggle('active', tab === 'login');

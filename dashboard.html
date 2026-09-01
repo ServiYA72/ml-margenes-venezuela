@@ -287,10 +287,26 @@
 
     <div class="panel">
       <h2>Productos con margen calculado</h2>
+
+      <div style="display:flex; gap:12px; align-items:end; flex-wrap:wrap; margin-bottom:16px; padding-bottom:16px; border-bottom:1px solid var(--line);">
+        <div>
+          <label for="bulk-porcentaje" style="display:block; font-size:12px; color:var(--muted); margin-bottom:6px;">Aplicar % de ganancia a los seleccionados</label>
+          <div style="display:flex; gap:8px;">
+            <input type="number" step="0.5" id="bulk-porcentaje" placeholder="Ej: 25" style="width:100px; background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:9px 10px; font-size:14px;">
+            <button class="add" style="padding:9px 16px; font-size:13px;" onclick="aplicarPorcentajeMasivo()">Aplicar</button>
+          </div>
+        </div>
+        <div style="flex:1;"></div>
+        <button class="add" style="padding:9px 16px; font-size:13px; background:var(--rust); color:var(--paper);" onclick="eliminarSeleccionados()">Eliminar seleccionados</button>
+        <button class="add" style="padding:9px 16px; font-size:13px; background:var(--surface-2); color:var(--rust); border:1px solid var(--rust);" onclick="eliminarTodos()">Eliminar todos</button>
+      </div>
+      <div class="msg" id="msg-bulk"></div>
+
       <div style="overflow-x:auto;">
-      <table id="tabla-productos" style="min-width: 950px;">
+      <table id="tabla-productos" style="min-width: 1000px;">
         <thead>
           <tr>
+            <th><input type="checkbox" id="chk-todos" onchange="toggleTodos(this)"></th>
             <th style="min-width:220px;">Producto</th><th>Proveedor</th>
             <th class="num">Costo</th>
             <th class="num">Precio efectivo</th>
@@ -408,6 +424,7 @@
       productosCache[p.id] = { ...p, pub };
       const tr = document.createElement('tr');
       tr.innerHTML = `
+        <td><input type="checkbox" class="chk-producto" value="${p.id}"></td>
         <td style="min-width:220px;">${escapeHtml(p.nombre)}</td>
         <td>${escapeHtml(p.proveedores?.nombre || '—')}</td>
         <td class="num">$${parseFloat(p.costo_usd).toFixed(2)}</td>
@@ -496,6 +513,92 @@
 
   // Mantiene sincronizados los campos de ganancia en $ y en %, en ambas direcciones,
   // según el tipo elegido (bruta = antes de comisión, neta = después de comisión).
+  window.toggleTodos = function(chkTodos) {
+    document.querySelectorAll('.chk-producto').forEach(chk => chk.checked = chkTodos.checked);
+  };
+
+  function obtenerSeleccionados() {
+    return Array.from(document.querySelectorAll('.chk-producto:checked')).map(chk => chk.value);
+  }
+
+  window.aplicarPorcentajeMasivo = async function() {
+    const msg = document.getElementById('msg-bulk');
+    const pct = parseFloat(document.getElementById('bulk-porcentaje').value);
+    const seleccionados = obtenerSeleccionados();
+
+    if (isNaN(pct)) { msg.style.color = 'var(--rust)'; msg.textContent = 'Escribe un porcentaje válido.'; return; }
+    if (seleccionados.length === 0) { msg.style.color = 'var(--rust)'; msg.textContent = 'Selecciona al menos un producto.'; return; }
+    if (!tasaBCV || !tasaBinance) { msg.style.color = 'var(--rust)'; msg.textContent = 'No hay tasas de cambio cargadas.'; return; }
+
+    msg.style.color = 'var(--muted)';
+    msg.textContent = `Aplicando a 0 / ${seleccionados.length}...`;
+    let hechos = 0;
+
+    for (const id of seleccionados) {
+      const p = productosCache[id];
+      if (!p) continue;
+      const comision = p.pub?.comision_ml_pct || 9;
+      const { data: calculo, error: errCalc } = await supabase.rpc('calcular_precios', {
+        p_costo_usd: parseFloat(p.costo_usd),
+        p_modo: 'porcentaje',
+        p_valor: pct,
+        p_comision_ml_pct: comision,
+        p_tasa_bcv: tasaBCV,
+        p_tasa_binance: tasaBinance
+      });
+      if (!errCalc && calculo) {
+        const c = calculo[0];
+        await supabase.from('publicaciones').update({
+          modo_ganancia: 'porcentaje',
+          precio_efectivo_usd: c.precio_efectivo_usd,
+          precio_bcv_usd_equiv: c.precio_bcv_usd_equiv,
+          precio_bcv_bs: c.precio_bcv_bs,
+          ganancia_real_usd: c.ganancia_deseada_usd,
+          comision_ml_usd: c.comision_ml_usd,
+          ganancia_neta_usd: c.ganancia_neta_usd
+        }).eq('producto_id', id);
+        hechos++;
+      }
+      msg.textContent = `Aplicando ${hechos} / ${seleccionados.length}...`;
+    }
+
+    msg.style.color = 'var(--teal)';
+    msg.textContent = `Listo: ${hechos} de ${seleccionados.length} productos actualizados con ${pct}% de ganancia.`;
+    cargarProductos();
+  };
+
+  window.eliminarSeleccionados = async function() {
+    const msg = document.getElementById('msg-bulk');
+    const seleccionados = obtenerSeleccionados();
+    if (seleccionados.length === 0) { msg.style.color = 'var(--rust)'; msg.textContent = 'Selecciona al menos un producto.'; return; }
+    if (!confirm(`¿Eliminar ${seleccionados.length} producto(s) seleccionado(s)? Esta acción no se puede deshacer.`)) return;
+
+    await supabase.from('publicaciones').delete().in('producto_id', seleccionados);
+    const { error } = await supabase.from('productos').delete().in('id', seleccionados);
+
+    if (error) { msg.style.color = 'var(--rust)'; msg.textContent = 'Error al eliminar: ' + error.message; return; }
+    msg.style.color = 'var(--teal)';
+    msg.textContent = `${seleccionados.length} producto(s) eliminado(s).`;
+    cargarProductos();
+  };
+
+  window.eliminarTodos = async function() {
+    const msg = document.getElementById('msg-bulk');
+    const total = Object.keys(productosCache).length;
+    if (total === 0) return;
+    if (!confirm(`¿Eliminar TODOS los ${total} productos de la base de datos? Esta acción no se puede deshacer.`)) return;
+    if (!confirm('Confirma de nuevo: esto borrará todos los productos y sus publicaciones para todos los usuarios. ¿Continuar?')) return;
+
+    const todosLosIds = Object.keys(productosCache);
+    await supabase.from('publicaciones').delete().in('producto_id', todosLosIds);
+    const { error } = await supabase.from('productos').delete().in('id', todosLosIds);
+
+    if (error) { msg.style.color = 'var(--rust)'; msg.textContent = 'Error al eliminar: ' + error.message; return; }
+    msg.style.color = 'var(--teal)';
+    msg.textContent = 'Todos los productos fueron eliminados.';
+    cargarProductos();
+  };
+
   window.actualizarComparacionComisiones = async function(prefix) {
     const cont = document.getElementById('comparacion-comisiones');
     if (!cont) return;
