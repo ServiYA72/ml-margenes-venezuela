@@ -166,8 +166,8 @@
 
 <main>
   <div class="tabs">
-    <button class="tab active" onclick="switchView('proveedores')">Proveedores</button>
-    <button class="tab" onclick="switchView('productos')">Productos</button>
+    <button class="tab active" onclick="switchView('proveedores', this)">Proveedores</button>
+    <button class="tab" onclick="switchView('productos', this)">Productos</button>
   </div>
 
   <!-- PROVEEDORES -->
@@ -318,10 +318,10 @@
 
   let tasaBCV = null, tasaBinance = null;
 
-  window.switchView = function(view) {
+  window.switchView = function(view, btn) {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-    event.target.classList.add('active');
+    if (btn) btn.classList.add('active');
     document.getElementById('view-' + view).classList.add('active');
   };
 
@@ -523,6 +523,10 @@
       </div>
     `;
   };
+
+  // Mantiene sincronizados los campos de ganancia en $ y en %, en ambas direcciones,
+  // según el tipo elegido (bruta = antes de comisión, neta = después de comisión).
+  window.sincronizarGanancia = function(prefix, origen) {
     const tipo = document.getElementById(prefix + '-modo-ganancia').value; // 'fijo' | 'neta'
     const costo = parseFloat(document.getElementById(prefix + '-costo').value);
     const comision = parseFloat(document.getElementById(prefix + '-comision').value) / 100;
