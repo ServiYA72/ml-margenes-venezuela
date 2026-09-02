@@ -344,11 +344,11 @@
       <div style="display:flex; gap:12px; align-items:end; flex-wrap:wrap; margin-bottom:16px;">
         <div style="flex:1; min-width:220px;">
           <label for="filtro-busqueda" style="display:block; font-size:12px; color:var(--muted); margin-bottom:6px;">Buscar por nombre, código, marca o característica</label>
-          <input type="text" id="filtro-busqueda" placeholder="Ej: SSD, RGB, HIKSEMI, RG-AP180..." oninput="renderizarTablaProductos()" style="width:100%; background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:9px 10px; font-size:14px;">
+          <input type="text" id="filtro-busqueda" placeholder="Ej: SSD, RGB, HIKSEMI, RG-AP180..." oninput="aplicarFiltrosProductos()" style="width:100%; background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:9px 10px; font-size:14px;">
         </div>
         <div>
           <label for="filtro-precio" style="display:block; font-size:12px; color:var(--muted); margin-bottom:6px;">Rango de precio (Ref. BCV)</label>
-          <select id="filtro-precio" onchange="renderizarTablaProductos()" style="background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:9px 10px; font-size:14px;">
+          <select id="filtro-precio" onchange="aplicarFiltrosProductos()" style="background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:9px 10px; font-size:14px;">
             <option value="">Todos los precios</option>
             <option value="0-100">$0 – $100</option>
             <option value="101-200">$101 – $200</option>
@@ -360,7 +360,7 @@
         </div>
         <div>
           <label for="filtro-costo" style="display:block; font-size:12px; color:var(--muted); margin-bottom:6px;">Rango de costo proveedor</label>
-          <select id="filtro-costo" onchange="renderizarTablaProductos()" style="background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:9px 10px; font-size:14px;">
+          <select id="filtro-costo" onchange="aplicarFiltrosProductos()" style="background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:9px 10px; font-size:14px;">
             <option value="">Todos los costos</option>
             <option value="0-100">$0 – $100</option>
             <option value="101-200">$101 – $200</option>
@@ -372,7 +372,7 @@
         </div>
         <div>
           <label for="filtro-proveedor" style="display:block; font-size:12px; color:var(--muted); margin-bottom:6px;">Proveedor</label>
-          <select id="filtro-proveedor" onchange="renderizarTablaProductos()" style="background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:9px 10px; font-size:14px;">
+          <select id="filtro-proveedor" onchange="aplicarFiltrosProductos()" style="background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:9px 10px; font-size:14px;">
             <option value="">Todos los proveedores</option>
           </select>
         </div>
@@ -399,6 +399,7 @@
       </table>
       </div>
       <div class="empty" id="empty-productos" style="display:none;">Todavía no hay productos cargados.</div>
+      <div id="paginacion-productos"></div>
     </div>
   </section>
 </main>
@@ -582,6 +583,11 @@
     renderizarTablaProductos();
   }
 
+  window.aplicarFiltrosProductos = function() {
+    paginaActualProductos = 1;
+    renderizarTablaProductos();
+  };
+
   window.renderizarTablaProductos = function() {
     const tbody = document.querySelector('#tabla-productos tbody');
     const empty = document.getElementById('empty-productos');
@@ -627,11 +633,20 @@
     if (filtrados.length === 0) {
       empty.style.display = 'block';
       empty.textContent = todos.length === 0 ? 'Todavía no hay productos cargados.' : 'Ningún producto coincide con el filtro.';
+      document.getElementById('paginacion-productos').innerHTML = '';
       return;
     }
     empty.style.display = 'none';
 
-    filtrados.forEach(p => {
+    const porPagina = 50;
+    const totalPaginas = Math.max(1, Math.ceil(filtrados.length / porPagina));
+    if (paginaActualProductos > totalPaginas) paginaActualProductos = totalPaginas;
+    if (paginaActualProductos < 1) paginaActualProductos = 1;
+
+    const inicio = (paginaActualProductos - 1) * porPagina;
+    const paginaDeItems = filtrados.slice(inicio, inicio + porPagina);
+
+    paginaDeItems.forEach(p => {
       const pub = p.pub || {};
       const tr = document.createElement('tr');
       tr.innerHTML = `
@@ -652,7 +667,43 @@
       `;
       tbody.appendChild(tr);
     });
+
+    renderizarPaginacion(totalPaginas, filtrados.length, inicio, paginaDeItems.length);
   };
+
+  let paginaActualProductos = 1;
+
+  function renderizarPaginacion(totalPaginas, totalItems, inicio, cantidadEnPagina) {
+    const cont = document.getElementById('paginacion-productos');
+    if (totalPaginas <= 1) { cont.innerHTML = ''; return; }
+
+    const botones = [];
+    botones.push(`<button class="add" style="padding:6px 12px; font-size:12px;" ${paginaActualProductos===1?'disabled':''} onclick="irAPaginaProductos(1)">« Inicio</button>`);
+    botones.push(`<button class="add" style="padding:6px 12px; font-size:12px;" ${paginaActualProductos===1?'disabled':''} onclick="irAPaginaProductos(${paginaActualProductos-1})">‹ Anterior</button>`);
+
+    // Selector directo de página
+    let opciones = '';
+    for (let i = 1; i <= totalPaginas; i++) {
+      opciones += `<option value="${i}" ${i===paginaActualProductos?'selected':''}>Página ${i}</option>`;
+    }
+    botones.push(`<select onchange="irAPaginaProductos(this.value)" style="background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:6px 10px; font-size:12px;">${opciones}</select>`);
+
+    botones.push(`<button class="add" style="padding:6px 12px; font-size:12px;" ${paginaActualProductos===totalPaginas?'disabled':''} onclick="irAPaginaProductos(${paginaActualProductos+1})">Siguiente ›</button>`);
+    botones.push(`<button class="add" style="padding:6px 12px; font-size:12px;" ${paginaActualProductos===totalPaginas?'disabled':''} onclick="irAPaginaProductos(${totalPaginas})">Fin »</button>`);
+
+    cont.innerHTML = `
+      <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:16px;">
+        ${botones.join('')}
+        <span style="font-size:12px; color:var(--muted); margin-left:8px;">Mostrando ${inicio+1}–${inicio+cantidadEnPagina} de ${totalItems}</span>
+      </div>
+    `;
+  }
+
+  window.irAPaginaProductos = function(n) {
+    paginaActualProductos = parseInt(n);
+    renderizarTablaProductos();
+  };
+
 
   function escapeHtml(str) {
     const d = document.createElement('div');
@@ -946,9 +997,16 @@ RESULTADOS DEL CÁLCULO DE PRECIO
     }
 
     const miSecuencia = ++secuenciaComparacion;
+    const comisionActual = parseFloat(document.getElementById(prefix + '-comision').value);
+    const tipoPub = document.getElementById(prefix + '-tipo-publicacion')?.value;
 
     const { data: clasica } = await supabase.rpc('calcular_precios', { p_costo_usd: costo, p_modo: modo, p_valor: valor, p_comision_ml_pct: 11, p_tasa_bcv: tasaBCV, p_tasa_binance: tasaBinance });
     const { data: premium } = await supabase.rpc('calcular_precios', { p_costo_usd: costo, p_modo: modo, p_valor: valor, p_comision_ml_pct: 15, p_tasa_bcv: tasaBCV, p_tasa_binance: tasaBinance });
+    let personalizada = null;
+    if (!isNaN(comisionActual) && comisionActual !== 11 && comisionActual !== 15) {
+      const { data } = await supabase.rpc('calcular_precios', { p_costo_usd: costo, p_modo: modo, p_valor: valor, p_comision_ml_pct: comisionActual, p_tasa_bcv: tasaBCV, p_tasa_binance: tasaBinance });
+      personalizada = data;
+    }
 
     // Si mientras esperábamos la respuesta el usuario siguió escribiendo,
     // ya hay una petición más nueva en camino: descartamos esta respuesta vieja.
@@ -958,14 +1016,14 @@ RESULTADOS DEL CÁLCULO DE PRECIO
     const c = clasica[0], p = premium[0];
     const etiquetaGanancia = modo === 'neta' ? `quedarte con $${valor.toFixed(2)} netos` : `ganar $${valor.toFixed(2)} brutos`;
 
-    const fila = (nombre, d, comisionPct) => `
-      <div style="flex:1; min-width:260px; border:1px solid var(--line); padding:12px 14px;">
-        <div style="font-weight:600; margin-bottom:8px;">${nombre}</div>
+    const fila = (nombre, d, comisionPct, activa) => `
+      <div style="flex:1; min-width:260px; border:1px solid ${activa ? 'var(--gold)' : 'var(--line)'}; padding:12px 14px;">
+        <div style="font-weight:600; margin-bottom:8px;">${nombre}${activa ? ' ✓' : ''}</div>
         <div style="font-size:13px; line-height:1.9;">
           <div>Precio en efectivo (cash): <b style="color:var(--gold)">$${parseFloat(d.precio_efectivo_usd).toFixed(2)}</b></div>
           <div>Precio a publicar en Bs (BCV): <b style="color:var(--teal)">Bs ${parseFloat(d.precio_bcv_bs).toLocaleString('es-VE',{maximumFractionDigits:2})}</b></div>
           <div>Ref. en $ a tasa BCV: <b style="color:var(--teal)">$${parseFloat(d.precio_bcv_usd_equiv).toFixed(2)}</b></div>
-          <div style="color:var(--muted); margin-top:6px; padding-top:6px; border-top:1px solid var(--line);">Comisión ML (${comisionPct}%): <b style="color:var(--rust)">$${parseFloat(d.comision_ml_usd).toFixed(2)}</b></div>
+          <div style="color:var(--muted); margin-top:6px; padding-top:6px; border-top:1px solid var(--line);">Comisión ML (${comisionPct}%, a tasa BCV): <b style="color:var(--rust)">$${parseFloat(d.comision_ml_usd).toFixed(2)}</b></div>
           <div>Ganancia neta real: <b>$${parseFloat(d.ganancia_neta_usd).toFixed(2)}</b></div>
         </div>
       </div>`;
@@ -974,8 +1032,9 @@ RESULTADOS DEL CÁLCULO DE PRECIO
     cont.innerHTML = `
       <div style="font-size:12px; color:var(--muted); margin-bottom:12px;">Para ${etiquetaGanancia}, según el tipo de publicación:</div>
       <div style="display:flex; gap:16px; flex-wrap:wrap;">
-        ${fila('Clásica (11%)', c, 11)}
-        ${fila('Premium (15%)', p, 15)}
+        ${fila('Clásica (11%)', c, 11, tipoPub === '11')}
+        ${fila('Premium (15%)', p, 15, tipoPub === '15')}
+        ${personalizada ? fila(`Personalizada (${comisionActual}%)`, personalizada[0], comisionActual, tipoPub === 'custom') : ''}
       </div>
     `;
   };
@@ -1000,6 +1059,8 @@ RESULTADOS DEL CÁLCULO DE PRECIO
     const tipo = document.getElementById(prefix + '-modo-ganancia').value; // 'fijo' | 'neta'
     const costo = parseFloat(document.getElementById(prefix + '-costo').value);
     const comision = parseFloat(document.getElementById(prefix + '-comision').value) / 100;
+    // k = comisión efectiva sobre precio_efectivo, ya convertida a $ a tasa BCV (no Binance)
+    const k = (tasaBCV && tasaBinance) ? comision * (tasaBinance / tasaBCV) : comision;
     const campoUsd = document.getElementById(prefix + '-valor-ganancia');
     const campoPct = document.getElementById(prefix + '-valor-ganancia-pct');
 
@@ -1013,8 +1074,8 @@ RESULTADOS DEL CÁLCULO DE PRECIO
         precio = costo / (1 - pct / 100);
         monto = precio - costo;
       } else {
-        precio = costo / (1 - comision - pct / 100);
-        monto = precio * (1 - comision) - costo;
+        precio = costo / (1 - k - pct / 100);
+        monto = precio * (1 - k) - costo;
       }
       campoUsd.value = monto.toFixed(2);
     } else {
@@ -1025,7 +1086,7 @@ RESULTADOS DEL CÁLCULO DE PRECIO
       if (tipo === 'fijo') {
         precio = costo + monto;
       } else {
-        precio = (costo + monto) / (1 - comision);
+        precio = (costo + monto) / (1 - k);
       }
       const pct = precio > 0 ? (monto / precio) * 100 : 0;
       campoPct.value = pct.toFixed(2);
