@@ -602,6 +602,7 @@
 
   function obtenerProductosFiltrados() {
     const busqueda = normalizarCategoria(document.getElementById('filtro-busqueda').value || '');
+    const palabrasBusqueda = busqueda.split(/\s+/).filter(p => p.length >= 2);
     const rangoSel = document.getElementById('filtro-precio').value;
     let rangoMin = null, rangoMax = null;
     if (rangoSel) {
@@ -618,10 +619,10 @@
 
     const todos = Object.values(productosCache);
     return todos.filter(p => {
-      if (busqueda) {
+      if (busqueda && palabrasBusqueda.length > 0) {
         const marca = p.especificaciones?.marca || '';
         const haystack = normalizarCategoria([p.nombre, p.sku, p.categoria, marca].filter(Boolean).join(' '));
-        if (!haystack.includes(busqueda)) return false;
+        if (!palabrasBusqueda.every(palabra => haystack.includes(palabra))) return false;
       }
       if (rangoMin !== null) {
         const precio = parseFloat(p.pub?.precio_bcv_usd_equiv);

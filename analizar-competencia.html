@@ -262,13 +262,18 @@
   }
 
   window.filtrarListaProductos = function() {
-    const q = normalizarTexto(document.getElementById('buscador-productos').value);
+    const qCompleto = normalizarTexto(document.getElementById('buscador-productos').value);
     const todos = Object.values(productosCache);
-    if (!q) { renderizarListaProductos(todos); return; }
+    if (!qCompleto) { renderizarListaProductos(todos); return; }
+
+    // Búsqueda por palabras sueltas: deben aparecer todas, sin importar el orden
+    const palabras = qCompleto.split(/\s+/).filter(p => p.length >= 2);
+    if (palabras.length === 0) { renderizarListaProductos(todos); return; }
+
     const filtrados = todos.filter(p => {
       const marca = p.especificaciones?.marca || '';
       const haystack = normalizarTexto([p.nombre, p.sku, p.categoria, marca].filter(Boolean).join(' '));
-      return haystack.includes(q);
+      return palabras.every(palabra => haystack.includes(palabra));
     });
     renderizarListaProductos(filtrados);
   };
