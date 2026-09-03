@@ -121,15 +121,27 @@
   <div class="panel">
     <h2>2. Analizar una publicación de la competencia</h2>
     <label for="in-texto">Título + descripción completa de la publicación (incluye el precio tal como aparece)</label>
-    <textarea id="in-texto" placeholder="Pega aquí el texto tal cual aparece en Mercado Libre, incluyendo el precio..."></textarea>
-    <div class="hint">El sistema detecta automáticamente el precio, la moneda, la forma de pago (BCV / Binance / efectivo internacional) y la región — entre más texto pegues, más precisa es la detección.</div>
-    <button class="primary" onclick="analizarPublicacion()">Analizar y guardar</button>
-    <button class="secondary" onclick="limpiarFormulario()">Limpiar</button>
+    <textarea id="in-texto" placeholder="Pega aquí el texto tal cual aparece en Mercado Libre, incluyendo el precio..." oninput="actualizarVistaPrevia()"></textarea>
+    <div class="hint">Al pegar, el texto se ordena solo (sin espacios ni saltos de línea de más) — entre más texto pegues, más precisa es la detección.</div>
+
+    <div id="vista-previa-deteccion" style="display:none; margin-top:14px; padding:12px 14px; background:var(--surface-2); border:1px solid var(--line);">
+      <div style="font-size:12px; color:var(--muted); margin-bottom:8px;">Vista previa de lo detectado:</div>
+      <div class="badges" id="vp-badges" style="margin-bottom:6px;"></div>
+      <div id="vp-precio" style="font-size:13px;"></div>
+    </div>
+
+    <div style="margin-top:16px;">
+      <button class="primary" onclick="analizarPublicacion()">Analizar y guardar</button>
+      <button class="secondary" onclick="limpiarFormulario()">Limpiar</button>
+    </div>
     <div class="msg" id="msg-analisis" style="margin-top:10px; font-size:13px;"></div>
   </div>
 
   <div class="panel">
-    <h2>Historial de análisis</h2>
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px;">
+      <h2 style="margin:0;">Historial de análisis</h2>
+      <button class="secondary" style="margin:0; padding:8px 14px; font-size:12px; color:var(--rust); border-color:var(--rust);" onclick="borrarHistorial()">Borrar historial</button>
+    </div>
     <div id="resultados"></div>
     <div class="empty" id="empty-resultados">Todavía no has analizado ninguna publicación.</div>
   </div>
@@ -363,9 +375,39 @@
     return valor;
   }
 
+  // Ordena el texto pegado: colapsa espacios y saltos de línea repetidos, sin perder los párrafos
+  function limpiarTextoPegado(texto) {
+    return texto
+      .replace(/[ \t]+/g, ' ')
+      .replace(/\n{3,}/g, '\n\n')
+      .split('\n').map(l => l.trim()).join('\n')
+      .trim();
+  }
+
+  window.actualizarVistaPrevia = function() {
+    const campo = document.getElementById('in-texto');
+    const texto = campo.value;
+    const previa = document.getElementById('vista-previa-deteccion');
+
+    if (!texto.trim()) { previa.style.display = 'none'; return; }
+
+    const resultado = clasificarPublicacion(texto);
+    const { valor, moneda } = detectarPrecio(texto);
+    const etiqueta = ETIQUETAS[resultado.clasificacion] || ETIQUETAS.ambiguo;
+
+    previa.style.display = 'block';
+    document.getElementById('vp-badges').innerHTML = `
+      <span class="badge ${etiqueta.clase}">${etiqueta.texto}</span>
+      ${resultado.region ? `<span class="badge region">📍 ${escapeHtml(capitalizar(resultado.region))}</span>` : ''}
+    `;
+    document.getElementById('vp-precio').textContent = valor
+      ? `Precio detectado: ${moneda === 'VES' ? 'Bs ' + valor.toLocaleString('es-VE') : '$' + valor.toFixed(2)}`
+      : 'Todavía no se detecta un precio en el texto.';
+  };
+
   window.analizarPublicacion = async function() {
     const productoId = productoActivoId;
-    const texto = document.getElementById('in-texto').value.trim();
+    const texto = limpiarTextoPegado(document.getElementById('in-texto').value);
     const msg = document.getElementById('msg-analisis');
 
     if (!texto) { msg.style.color = 'var(--rust)'; msg.textContent = 'Pega el texto de la publicación primero.'; return; }
@@ -394,13 +436,24 @@
     msg.style.color = 'var(--teal)';
     msg.textContent = 'Análisis guardado.';
     document.getElementById('in-texto').value = '';
+    document.getElementById('vista-previa-deteccion').style.display = 'none';
     await cargarHistorial();
     avanzarCola();
   };
 
   window.limpiarFormulario = function() {
     document.getElementById('in-texto').value = '';
+    document.getElementById('vista-previa-deteccion').style.display = 'none';
     document.getElementById('msg-analisis').textContent = '';
+  };
+
+  window.borrarHistorial = async function() {
+    if (!confirm('¿Borrar TODO el historial de análisis de competencia? Esta acción no se puede deshacer.')) return;
+    const { data: { session } } = await supabase.auth.getSession();
+    const { error } = await supabase.from('analisis_competencia').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    const msg = document.getElementById('msg-analisis');
+    if (error) { msg.style.color = 'var(--rust)'; msg.textContent = 'Error al borrar: ' + error.message; return; }
+    await cargarHistorial();
   };
 
   // --- Cola de comparación (llegada desde "Comparar en Mercado Libre" del dashboard) ---
