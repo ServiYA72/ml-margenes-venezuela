@@ -73,6 +73,16 @@
   .coincidencias { font-size: 12px; color: var(--muted); margin-top: 8px; font-style: italic; }
 
   .empty { color: var(--muted); font-size: 14px; text-align: center; padding: 30px 0; }
+
+  .fila-producto {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 10px 14px; border-bottom: 1px solid var(--line); cursor: pointer; font-size: 13px;
+  }
+  .fila-producto:last-child { border-bottom: none; }
+  .fila-producto:hover { background: var(--surface-2); }
+  .fila-producto.activa { background: rgba(201,162,39,0.15); box-shadow: inset 3px 0 0 var(--gold); }
+  .fila-producto .fp-nombre { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fila-producto .fp-precios { display: flex; gap: 12px; white-space: nowrap; font-family: 'IBM Plex Mono', monospace; font-size: 12px; }
 </style>
 </head>
 <body>
@@ -93,16 +103,19 @@
   </div>
 
   <div class="panel">
-    <h2>1. ¿A cuál de tus productos corresponde?</h2>
-    <div class="grid-form">
-      <div style="grid-column: 1 / -1;">
-        <label for="in-producto-select">Producto de tu lista (opcional, permite comparar tu precio contra la competencia)</label>
-        <select id="in-producto-select" onchange="mostrarPrecioPropio()">
-          <option value="">— No vincular a un producto (análisis suelto) —</option>
-        </select>
-      </div>
+    <h2>1. Busca y elige el producto que vas a comparar</h2>
+    <input type="text" id="buscador-productos" placeholder="Busca por nombre, código, categoría o marca..." oninput="filtrarListaProductos()"
+      style="width:100%; background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:10px 12px; font-size:14px; margin-bottom:14px;">
+
+    <div id="lista-productos-buscador" style="max-height: 320px; overflow-y: auto; border: 1px solid var(--line);"></div>
+    <div class="hint" id="contador-lista-productos"></div>
+
+    <div id="producto-activo-panel" style="display:none; margin-top:16px; padding:14px 16px; background:var(--surface-2); border:1px solid var(--gold);">
+      <div style="font-size:13px; color:var(--muted); margin-bottom:4px;">Comparando ahora:</div>
+      <div id="producto-activo-nombre" style="font-weight:600; font-size:15px; margin-bottom:8px;"></div>
+      <div id="producto-activo-precios" style="font-size:13px; color:var(--muted); margin-bottom:10px;"></div>
+      <a id="link-buscar-ml" href="#" target="_blank" style="display:inline-block; font-size:13px; color:var(--teal); border-bottom:1px solid var(--teal); text-decoration:none;">Buscar este producto en Mercado Libre Venezuela ↗</a>
     </div>
-    <div id="precio-propio-info" style="display:none; font-size:13px; color:var(--muted); margin-top:6px;"></div>
   </div>
 
   <div class="panel">
@@ -231,30 +244,85 @@
     if (data) { tasaBCV = parseFloat(data.tasa_bcv); tasaBinance = parseFloat(data.tasa_binance); }
   }
 
+  let productoActivoId = null;
+
   async function cargarProductos() {
     const { data } = await supabase
       .from('productos')
-      .select('id, nombre, costo_usd, publicaciones(precio_efectivo_usd, precio_bcv_usd_equiv, precio_bcv_bs)')
+      .select('id, nombre, sku, categoria, especificaciones, costo_usd, publicaciones(precio_efectivo_usd, precio_bcv_usd_equiv, precio_bcv_bs)')
       .order('nombre');
-    const select = document.getElementById('in-producto-select');
     (data || []).forEach(p => {
       productosCache[p.id] = { ...p, pub: (p.publicaciones && p.publicaciones[0]) || {} };
-      const opt = document.createElement('option');
-      opt.value = p.id;
-      opt.textContent = p.nombre;
-      select.appendChild(opt);
+    });
+    renderizarListaProductos(Object.values(productosCache));
+  }
+
+  function normalizarTexto(str) {
+    return String(str || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  }
+
+  window.filtrarListaProductos = function() {
+    const q = normalizarTexto(document.getElementById('buscador-productos').value);
+    const todos = Object.values(productosCache);
+    if (!q) { renderizarListaProductos(todos); return; }
+    const filtrados = todos.filter(p => {
+      const marca = p.especificaciones?.marca || '';
+      const haystack = normalizarTexto([p.nombre, p.sku, p.categoria, marca].filter(Boolean).join(' '));
+      return haystack.includes(q);
+    });
+    renderizarListaProductos(filtrados);
+  };
+
+  function renderizarListaProductos(lista) {
+    const cont = document.getElementById('lista-productos-buscador');
+    const contador = document.getElementById('contador-lista-productos');
+    cont.innerHTML = '';
+
+    const limitados = lista.slice(0, 100);
+    contador.textContent = lista.length > 100
+      ? `Mostrando 100 de ${lista.length} — sigue escribiendo para acotar la búsqueda.`
+      : `${lista.length} producto(s)`;
+
+    if (limitados.length === 0) {
+      cont.innerHTML = '<div class="empty">Ningún producto coincide con la búsqueda.</div>';
+      return;
+    }
+
+    limitados.forEach(p => {
+      const pub = p.pub || {};
+      const fila = document.createElement('div');
+      fila.className = 'fila-producto' + (p.id === productoActivoId ? ' activa' : '');
+      fila.innerHTML = `
+        <span class="fp-nombre">${escapeHtml(p.nombre)}</span>
+        <span class="fp-precios">
+          <span style="color:var(--teal)">$${pub.precio_bcv_usd_equiv ? parseFloat(pub.precio_bcv_usd_equiv).toFixed(2) : '—'} BCV</span>
+          <span style="color:var(--gold)">$${pub.precio_efectivo_usd ? parseFloat(pub.precio_efectivo_usd).toFixed(2) : '—'} cash</span>
+        </span>
+      `;
+      fila.onclick = () => seleccionarProductoActivo(p.id);
+      cont.appendChild(fila);
     });
   }
 
-  window.mostrarPrecioPropio = function() {
-    const id = document.getElementById('in-producto-select').value;
-    const info = document.getElementById('precio-propio-info');
-    if (!id || !productosCache[id]) { info.style.display = 'none'; return; }
-    const pub = productosCache[id].pub;
-    info.style.display = 'block';
-    info.innerHTML = `Tu precio actual: <b style="color:var(--teal)">$${pub.precio_bcv_usd_equiv ? parseFloat(pub.precio_bcv_usd_equiv).toFixed(2) : '—'} Ref. BCV</b>
-      &nbsp;·&nbsp; efectivo <b style="color:var(--gold)">$${pub.precio_efectivo_usd ? parseFloat(pub.precio_efectivo_usd).toFixed(2) : '—'}</b>
-      &nbsp;·&nbsp; Bs ${pub.precio_bcv_bs ? parseFloat(pub.precio_bcv_bs).toLocaleString('es-VE', {maximumFractionDigits:0}) : '—'}`;
+  window.seleccionarProductoActivo = function(id) {
+    productoActivoId = id;
+    const p = productosCache[id];
+    if (!p) return;
+    const pub = p.pub || {};
+
+    document.querySelectorAll('.fila-producto').forEach(f => f.classList.remove('activa'));
+    filtrarListaProductos(); // re-renderiza con la fila activa marcada
+
+    const panel = document.getElementById('producto-activo-panel');
+    panel.style.display = 'block';
+    document.getElementById('producto-activo-nombre').textContent = p.nombre;
+    document.getElementById('producto-activo-precios').innerHTML =
+      `Tu precio actual: <b style="color:var(--teal)">$${pub.precio_bcv_usd_equiv ? parseFloat(pub.precio_bcv_usd_equiv).toFixed(2) : '—'} Ref. BCV</b>
+       &nbsp;·&nbsp; efectivo <b style="color:var(--gold)">$${pub.precio_efectivo_usd ? parseFloat(pub.precio_efectivo_usd).toFixed(2) : '—'}</b>
+       &nbsp;·&nbsp; Bs ${pub.precio_bcv_bs ? parseFloat(pub.precio_bcv_bs).toLocaleString('es-VE', {maximumFractionDigits:0}) : '—'}`;
+
+    const enlace = document.getElementById('link-buscar-ml');
+    enlace.href = 'https://listado.mercadolibre.com.ve/' + encodeURIComponent(p.nombre.trim().replace(/\s+/g, '-'));
   };
 
   function clasificarPublicacion(texto) {
@@ -294,7 +362,7 @@
   }
 
   window.analizarPublicacion = async function() {
-    const productoId = document.getElementById('in-producto-select').value;
+    const productoId = productoActivoId;
     const texto = document.getElementById('in-texto').value.trim();
     const msg = document.getElementById('msg-analisis');
 
@@ -365,11 +433,9 @@
       &nbsp;·&nbsp; <button class="secondary" style="margin:0; padding:6px 12px; font-size:12px;" onclick="cancelarCola()">Cancelar comparación</button>
     `;
 
-    // Preseleccionar el producto actual en el formulario
-    const select = document.getElementById('in-producto-select');
+    // Preseleccionar el producto actual como activo
     if (actual) {
-      select.value = actualId;
-      mostrarPrecioPropio();
+      seleccionarProductoActivo(actualId);
     }
   }
 
