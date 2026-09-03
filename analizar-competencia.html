@@ -429,25 +429,31 @@
 
     panel.style.display = 'block';
     restantes.textContent = colaComparar.length;
+    lista.innerHTML = 'Cargando producto...';
 
     const actualId = colaComparar[0];
-    let actual = productosCache[actualId];
 
-    if (!actual) {
-      // No estaba en la caché ya cargada: lo buscamos directo por su ID
-      const { data: prodDirecto } = await supabase
-        .from('productos')
-        .select('id, nombre, sku, categoria, especificaciones, costo_usd, publicaciones(precio_efectivo_usd, precio_bcv_usd_equiv, precio_bcv_bs)')
-        .eq('id', actualId)
-        .single();
-      if (prodDirecto) {
-        productosCache[prodDirecto.id] = { ...prodDirecto, pub: (prodDirecto.publicaciones && prodDirecto.publicaciones[0]) || {} };
-        actual = productosCache[prodDirecto.id];
-      }
+    // Siempre se busca directo por ID, sin depender de si ya estaba en la caché
+    const { data: prodDirecto, error: errorProd } = await supabase
+      .from('productos')
+      .select('id, nombre, sku, categoria, especificaciones, costo_usd, publicaciones(precio_efectivo_usd, precio_bcv_usd_equiv, precio_bcv_bs)')
+      .eq('id', actualId)
+      .maybeSingle();
+
+    let actual = null;
+    if (prodDirecto) {
+      actual = { ...prodDirecto, pub: (prodDirecto.publicaciones && prodDirecto.publicaciones[0]) || {} };
+      productosCache[prodDirecto.id] = actual;
+    }
+
+    if (errorProd) {
+      lista.innerHTML = `<span style="color:var(--rust)">Error al buscar el producto: ${escapeHtml(errorProd.message)}</span>
+        &nbsp;·&nbsp; <button class="secondary" style="margin:0; padding:6px 12px; font-size:12px;" onclick="saltarProductoCola()">Saltar este producto</button>`;
+      return;
     }
 
     lista.innerHTML = `
-      Analizando ahora: <b style="color:var(--paper)">${escapeHtml(actual ? actual.nombre : 'Producto no encontrado')}</b>
+      Analizando ahora: <b style="color:var(--paper)">${escapeHtml(actual ? actual.nombre : 'Producto no encontrado (puede haber sido eliminado)')}</b>
       &nbsp;·&nbsp; <button class="secondary" style="margin:0; padding:6px 12px; font-size:12px;" onclick="saltarProductoCola()">Saltar este producto</button>
       &nbsp;·&nbsp; <button class="secondary" style="margin:0; padding:6px 12px; font-size:12px;" onclick="cancelarCola()">Cancelar comparación</button>
     `;
