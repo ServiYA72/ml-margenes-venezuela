@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nicom System — Análisis de competencia</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #0F1B17; --surface: #16241F; --surface-2: #1D2E27; --line: #2C3F37;
+    --paper: #EDE8DE; --muted: #8FA69B; --gold: #C9A227; --teal: #3FA796; --rust: #C1553B;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; background: var(--ink); font-family: 'IBM Plex Sans', sans-serif; color: var(--paper); }
+  header {
+    border-bottom: 1px solid var(--line); padding: 20px 32px;
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;
+  }
+  .brand-mark { display: flex; align-items: center; }
+  .brand-logo { height: 42px; width: auto; filter: drop-shadow(0 3px 10px rgba(0,0,0,0.5)); }
+  a.nav-link { color: var(--muted); font-size: 13px; text-decoration: none; border-bottom: 1px solid var(--line); }
+  a.nav-link:hover { color: var(--paper); }
+  .who { font-size: 13px; color: var(--muted); }
+
+  main { max-width: 1100px; margin: 0 auto; padding: 32px; }
+  h1 { font-family: 'Fraunces', serif; font-weight: 400; font-size: 26px; margin: 0 0 6px 0; }
+  .sub { color: var(--muted); font-size: 14px; margin: 0 0 28px 0; line-height: 1.6; }
+
+  .panel { background: var(--surface); border: 1px solid var(--line); padding: 22px; margin-bottom: 24px; }
+  .panel h2 { font-family: 'Fraunces', serif; font-weight: 400; font-size: 18px; margin: 0 0 14px 0; }
+
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  textarea {
+    width: 100%; min-height: 140px; background: var(--surface-2); border: 1px solid var(--line); color: var(--paper);
+    padding: 12px 14px; font-size: 14px; font-family: 'IBM Plex Sans', sans-serif; resize: vertical; line-height: 1.5;
+  }
+  textarea:focus { outline: none; border-color: var(--gold); }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 8px; line-height: 1.6; }
+
+  .grid-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 14px; }
+  input {
+    width: 100%; background: var(--surface-2); border: 1px solid var(--line); color: var(--paper);
+    padding: 10px 12px; font-size: 14px; font-family: 'IBM Plex Sans', sans-serif;
+  }
+  input:focus { outline: none; border-color: var(--gold); }
+
+  button.primary {
+    background: var(--gold); color: var(--ink); border: none; padding: 12px 22px;
+    font-weight: 600; font-size: 14px; cursor: pointer; margin-top: 14px;
+  }
+  button.primary:hover { background: #DAB13A; }
+  button.secondary {
+    background: var(--surface-2); color: var(--paper); border: 1px solid var(--line); padding: 12px 22px;
+    font-weight: 500; font-size: 14px; cursor: pointer; margin-top: 14px; margin-left: 10px;
+  }
+
+  .resultado-card {
+    border: 1px solid var(--line); padding: 16px 18px; margin-bottom: 14px; background: var(--surface-2);
+  }
+  .resultado-card .titulo { font-weight: 600; font-size: 15px; margin-bottom: 10px; }
+  .badges { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+  .badge {
+    font-size: 12px; padding: 4px 10px; border: 1px solid var(--line); white-space: nowrap;
+  }
+  .badge.bcv { color: var(--gold); border-color: var(--gold); }
+  .badge.binance { color: var(--teal); border-color: var(--teal); }
+  .badge.efectivo { color: var(--rust); border-color: var(--rust); }
+  .badge.ambiguo { color: var(--muted); }
+  .badge.region { color: var(--paper); background: var(--surface); }
+  .detalle { font-size: 13px; color: var(--muted); line-height: 1.7; }
+  .detalle b { color: var(--paper); font-weight: 500; }
+  .coincidencias { font-size: 12px; color: var(--muted); margin-top: 8px; font-style: italic; }
+
+  .empty { color: var(--muted); font-size: 14px; text-align: center; padding: 30px 0; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand-mark"><img src="logo-nicom.png" alt="Nicom Tech Solutions" class="brand-logo"></div>
+  <a class="nav-link" href="dashboard.html">← Volver a productos</a>
+  <div class="who" id="who">Cargando sesión…</div>
+</header>
+
+<main>
+  <h1>Análisis de competencia</h1>
+  <p class="sub">Vincula el análisis a uno de tus productos para comparar automáticamente tu precio contra la competencia. Pega el texto de la publicación (incluyendo el precio) y el sistema detecta el precio, la moneda, la forma de pago (BCV / Binance / efectivo internacional) y la región del vendedor — todo queda guardado en el historial.</p>
+
+  <div class="panel">
+    <h2>1. ¿A cuál de tus productos corresponde?</h2>
+    <div class="grid-form">
+      <div style="grid-column: 1 / -1;">
+        <label for="in-producto-select">Producto de tu lista (opcional, permite comparar tu precio contra la competencia)</label>
+        <select id="in-producto-select" onchange="mostrarPrecioPropio()">
+          <option value="">— No vincular a un producto (análisis suelto) —</option>
+        </select>
+      </div>
+    </div>
+    <div id="precio-propio-info" style="display:none; font-size:13px; color:var(--muted); margin-top:6px;"></div>
+  </div>
+
+  <div class="panel">
+    <h2>2. Analizar una publicación de la competencia</h2>
+    <label for="in-texto">Título + descripción completa de la publicación (incluye el precio tal como aparece)</label>
+    <textarea id="in-texto" placeholder="Pega aquí el texto tal cual aparece en Mercado Libre, incluyendo el precio..."></textarea>
+    <div class="hint">El sistema detecta automáticamente el precio, la moneda, la forma de pago (BCV / Binance / efectivo internacional) y la región — entre más texto pegues, más precisa es la detección.</div>
+    <button class="primary" onclick="analizarPublicacion()">Analizar y guardar</button>
+    <button class="secondary" onclick="limpiarFormulario()">Limpiar</button>
+    <div class="msg" id="msg-analisis" style="margin-top:10px; font-size:13px;"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Historial de análisis</h2>
+    <div id="resultados"></div>
+    <div class="empty" id="empty-resultados">Todavía no has analizado ninguna publicación.</div>
+  </div>
+</main>
+
+<script type="module">
+  import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+  const SUPABASE_URL = 'https://tkhzuopapvclmcgxyood.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_KQB6B6uLIPr-xKdNDc8iEw_7tcWM5gS';
+  const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  (async function initSesion() {
+    const { data: { session } } = await supabase.auth.getSession();
+    const who = document.getElementById('who');
+    if (!session) { who.textContent = 'No hay sesión — inicia sesión en login.html'; who.style.color = '#C1553B'; }
+    else who.textContent = session.user.email;
+  })();
+
+  // --- Diccionarios de clasificación ---
+
+  const PISTAS_EFECTIVO = [
+    'solo efectivo', 'solo divisas', 'divisas en efectivo', 'efectivo estricto', 'efectivo únicamente',
+    'no bs', 'no bolivares', 'no bolívares', 'no acepto bolivares', 'no acepto bolívares', 'no pago movil',
+    'no pago móvil', 'zelle', 'paypal', 'usdt', 'cripto', 'criptomoneda', 'dolares en mano', 'dólares en mano',
+    'cash', 'usd cash', 'transferencia internacional', 'wise', 'western union', 'efectivo unicamente',
+    'precio estricto', 'no acepto transferencia', 'divisa extranjera'
+  ];
+
+  const PISTAS_BINANCE = [
+    'tasa binance', 'a binance', 'precio binance', 'referencial binance', 'paralelo', 'tasa paralela',
+    'usdt binance', 'binance del dia', 'binance del día'
+  ];
+
+  const PISTAS_BCV = [
+    'tasa bcv', 'precio referencial', 'bcv del dia', 'bcv del día', 'pago movil', 'pago móvil',
+    'transferencia bancaria', 'bolivares', 'bolívares', 'bs.', 'acepto bolivares', 'acepto bolívares',
+    'tasa del dia', 'tasa del día', 'precio en bs', 'precio bs'
+  ];
+
+  const ESTADOS_VENEZUELA = [
+    'distrito capital', 'caracas', 'miranda', 'zulia', 'maracaibo', 'carabobo', 'valencia', 'aragua',
+    'maracay', 'lara', 'barquisimeto', 'tachira', 'táchira', 'san cristobal', 'san cristóbal', 'bolivar',
+    'bolívar', 'ciudad guayana', 'puerto ordaz', 'anzoategui', 'anzoátegui', 'barcelona', 'puerto la cruz',
+    'monagas', 'maturin', 'maturín', 'sucre', 'cumana', 'cumaná', 'nueva esparta', 'margarita', 'porlamar',
+    'falcon', 'falcón', 'coro', 'yaracuy', 'san felipe', 'cojedes', 'san carlos', 'guarico', 'guárico',
+    'san juan de los morros', 'portuguesa', 'guanare', 'acarigua', 'barinas', 'merida', 'mérida', 'trujillo',
+    'apure', 'san fernando de apure', 'amazonas', 'puerto ayacucho', 'delta amacuro', 'tucupita', 'vargas',
+    'la guaira', 'maiquetia', 'maiquetía'
+  ];
+
+  function normalizar(str) {
+    return str.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  }
+
+  function contarCoincidencias(textoNorm, lista) {
+    return lista.filter(pista => textoNorm.includes(normalizar(pista)));
+  }
+
+  function detectarRegion(textoNorm) {
+    for (const estado of ESTADOS_VENEZUELA) {
+      if (textoNorm.includes(normalizar(estado))) return estado;
+    }
+    return null;
+  }
+
+  // Detecta el primer precio mencionado en el texto: en $ (dólares) o en Bs (bolívares)
+  function detectarPrecio(texto) {
+    // Precio en dólares: $145, $1.234,56, US$100, USD 100
+    const matchUsd = texto.match(/(?:US\$|USD|\$)\s*([\d.,]+)/i);
+    if (matchUsd) {
+      const numero = parseNumeroLocal(matchUsd[1]);
+      if (!isNaN(numero) && numero > 0) return { valor: numero, moneda: 'USD' };
+    }
+    // Precio en bolívares: Bs 120.000, Bs. 120.000,00, 120000 Bs
+    const matchBs = texto.match(/(?:Bs\.?\s*)([\d.,]+)|([\d.,]+)\s*(?:Bs\.?|bolivares|bolívares)/i);
+    if (matchBs) {
+      const numero = parseNumeroLocal(matchBs[1] || matchBs[2]);
+      if (!isNaN(numero) && numero > 0) return { valor: numero, moneda: 'VES' };
+    }
+    return { valor: null, moneda: null };
+  }
+
+  // Igual al parser robusto usado en importar-precios.html: última coma o punto = decimal
+  function parseNumeroLocal(raw) {
+    let s = String(raw).trim();
+    if (!s) return NaN;
+    s = s.replace(/[^0-9.,-]/g, '');
+    const lastComma = s.lastIndexOf(',');
+    const lastDot = s.lastIndexOf('.');
+    if (lastComma === -1 && lastDot === -1) return parseFloat(s);
+    const decimalEsComa = lastComma > lastDot;
+    const sepDecimal = decimalEsComa ? ',' : '.';
+    const sepMiles = decimalEsComa ? '.' : ',';
+    s = s.split(sepMiles).join('');
+    s = s.replace(sepDecimal, '.');
+    return parseFloat(s);
+  }
+
+  const ETIQUETAS = {
+    bcv: { texto: 'Referencial BCV (bolívares)', clase: 'bcv' },
+    binance: { texto: 'Referencial Binance / paralelo', clase: 'binance' },
+    efectivo: { texto: 'Exige efectivo / divisa internacional', clase: 'efectivo' },
+    ambiguo: { texto: 'No se detectó forma de pago clara', clase: 'ambiguo' }
+  };
+
+  let tasaBCV = null, tasaBinance = null;
+  let productosCache = {};
+
+  async function cargarTasas() {
+    const { data } = await supabase.from('tasas_cambio').select('*').order('fecha', { ascending: false }).limit(1).single();
+    if (data) { tasaBCV = parseFloat(data.tasa_bcv); tasaBinance = parseFloat(data.tasa_binance); }
+  }
+
+  async function cargarProductos() {
+    const { data } = await supabase
+      .from('productos')
+      .select('id, nombre, costo_usd, publicaciones(precio_efectivo_usd, precio_bcv_usd_equiv, precio_bcv_bs)')
+      .order('nombre');
+    const select = document.getElementById('in-producto-select');
+    (data || []).forEach(p => {
+      productosCache[p.id] = { ...p, pub: (p.publicaciones && p.publicaciones[0]) || {} };
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = p.nombre;
+      select.appendChild(opt);
+    });
+  }
+
+  window.mostrarPrecioPropio = function() {
+    const id = document.getElementById('in-producto-select').value;
+    const info = document.getElementById('precio-propio-info');
+    if (!id || !productosCache[id]) { info.style.display = 'none'; return; }
+    const pub = productosCache[id].pub;
+    info.style.display = 'block';
+    info.innerHTML = `Tu precio actual: <b style="color:var(--teal)">$${pub.precio_bcv_usd_equiv ? parseFloat(pub.precio_bcv_usd_equiv).toFixed(2) : '—'} Ref. BCV</b>
+      &nbsp;·&nbsp; efectivo <b style="color:var(--gold)">$${pub.precio_efectivo_usd ? parseFloat(pub.precio_efectivo_usd).toFixed(2) : '—'}</b>
+      &nbsp;·&nbsp; Bs ${pub.precio_bcv_bs ? parseFloat(pub.precio_bcv_bs).toLocaleString('es-VE', {maximumFractionDigits:0}) : '—'}`;
+  };
+
+  function clasificarPublicacion(texto) {
+    const textoNorm = normalizar(texto);
+    const hitsEfectivo = contarCoincidencias(textoNorm, PISTAS_EFECTIVO);
+    const hitsBinance = contarCoincidencias(textoNorm, PISTAS_BINANCE);
+    const hitsBcv = contarCoincidencias(textoNorm, PISTAS_BCV);
+    const region = detectarRegion(textoNorm);
+
+    let clasificacion = 'ambiguo';
+    let coincidencias = [];
+    if (hitsEfectivo.length > 0 && hitsEfectivo.length >= hitsBcv.length && hitsEfectivo.length >= hitsBinance.length) {
+      clasificacion = 'efectivo'; coincidencias = hitsEfectivo;
+    } else if (hitsBinance.length > 0 && hitsBinance.length >= hitsBcv.length) {
+      clasificacion = 'binance'; coincidencias = hitsBinance;
+    } else if (hitsBcv.length > 0) {
+      clasificacion = 'bcv'; coincidencias = hitsBcv;
+    }
+    return { clasificacion, coincidencias, region };
+  }
+
+  // Convierte el precio detectado del competidor a "$ Ref. BCV" para poder comparar parejo,
+  // sin importar en qué moneda ni bajo qué forma de pago lo publicó.
+  function normalizarPrecioCompetidor(valor, moneda, clasificacion) {
+    if (!valor || !tasaBCV || !tasaBinance) return null;
+    if (moneda === 'VES') {
+      // Bs -> $ Ref. BCV directo
+      return valor / tasaBCV;
+    }
+    // Está en USD: si exige efectivo/divisa, ese $ ya es "real" (equivalente a nuestro precio efectivo).
+    // Para comparar contra nuestro precio Ref. BCV, lo ajustamos por la misma brecha que usamos nosotros.
+    if (clasificacion === 'efectivo') {
+      return valor * (tasaBinance / tasaBCV);
+    }
+    // Si ya es referencial BCV o Binance en dólares, se asume que ya está en términos comparables.
+    return valor;
+  }
+
+  window.analizarPublicacion = async function() {
+    const productoId = document.getElementById('in-producto-select').value;
+    const texto = document.getElementById('in-texto').value.trim();
+    const msg = document.getElementById('msg-analisis');
+
+    if (!texto) { msg.style.color = 'var(--rust)'; msg.textContent = 'Pega el texto de la publicación primero.'; return; }
+
+    const resultado = clasificarPublicacion(texto);
+    const { valor: precioValor, moneda: precioMoneda } = detectarPrecio(texto);
+    const precioEquivBcv = normalizarPrecioCompetidor(precioValor, precioMoneda, resultado.clasificacion);
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const producto = productoId ? productosCache[productoId] : null;
+
+    const { error } = await supabase.from('analisis_competencia').insert({
+      producto_id: productoId || null,
+      producto_nombre_libre: producto ? producto.nombre : null,
+      competidor_texto: texto,
+      precio_detectado: precioValor,
+      moneda_detectada: precioMoneda,
+      clasificacion: resultado.clasificacion,
+      region: resultado.region,
+      precio_equiv_usd_bcv: precioEquivBcv,
+      creado_por: session?.user?.id
+    });
+
+    if (error) { msg.style.color = 'var(--rust)'; msg.textContent = 'Error al guardar: ' + error.message; return; }
+
+    msg.style.color = 'var(--teal)';
+    msg.textContent = 'Análisis guardado.';
+    document.getElementById('in-texto').value = '';
+    await cargarHistorial();
+  };
+
+  window.limpiarFormulario = function() {
+    document.getElementById('in-texto').value = '';
+    document.getElementById('msg-analisis').textContent = '';
+  };
+
+  async function cargarHistorial() {
+    const { data } = await supabase
+      .from('analisis_competencia')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    const cont = document.getElementById('resultados');
+    const empty = document.getElementById('empty-resultados');
+    cont.innerHTML = '';
+
+    if (!data || data.length === 0) { empty.style.display = 'block'; return; }
+    empty.style.display = 'none';
+
+    data.forEach(r => {
+      const etiqueta = ETIQUETAS[r.clasificacion] || ETIQUETAS.ambiguo;
+      const producto = r.producto_id ? productosCache[r.producto_id] : null;
+      const pub = producto?.pub;
+
+      let veredicto = '';
+      if (pub?.precio_bcv_usd_equiv && r.precio_equiv_usd_bcv) {
+        const propio = parseFloat(pub.precio_bcv_usd_equiv);
+        const competidor = parseFloat(r.precio_equiv_usd_bcv);
+        const diffPct = ((propio - competidor) / competidor) * 100;
+        if (diffPct > 2) {
+          veredicto = `<div style="color:var(--rust);">Tu precio es ${diffPct.toFixed(1)}% más caro que este competidor (equiv. $${competidor.toFixed(2)} Ref. BCV).</div>`;
+        } else if (diffPct < -2) {
+          veredicto = `<div style="color:var(--teal);">Tu precio es ${Math.abs(diffPct).toFixed(1)}% más barato que este competidor (equiv. $${competidor.toFixed(2)} Ref. BCV).</div>`;
+        } else {
+          veredicto = `<div style="color:var(--gold);">Tu precio está prácticamente igual a este competidor (equiv. $${competidor.toFixed(2)} Ref. BCV).</div>`;
+        }
+      }
+
+      const card = document.createElement('div');
+      card.className = 'resultado-card';
+      card.innerHTML = `
+        <div class="titulo">${escapeHtml(r.producto_nombre_libre || 'Análisis suelto (sin producto vinculado)')}</div>
+        <div class="badges">
+          <span class="badge ${etiqueta.clase}">${etiqueta.texto}</span>
+          ${r.region ? `<span class="badge region">📍 ${escapeHtml(capitalizar(r.region))}</span>` : ''}
+        </div>
+        <div class="detalle">
+          ${r.precio_detectado ? `<div>Precio detectado: <b>${r.moneda_detectada === 'VES' ? 'Bs ' + parseFloat(r.precio_detectado).toLocaleString('es-VE') : '$' + parseFloat(r.precio_detectado).toFixed(2)}</b></div>` : '<div>No se detectó un precio automáticamente en el texto.</div>'}
+          ${veredicto}
+        </div>
+      `;
+      cont.appendChild(card);
+    });
+  }
+
+  function capitalizar(str) {
+    return str.replace(/\b\w/g, c => c.toUpperCase());
+  }
+
+  function escapeHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  }
+
+  (async function init() {
+    await cargarTasas();
+    await cargarProductos();
+    await cargarHistorial();
+  })();
+</script>
+
+</body>
+</html>
