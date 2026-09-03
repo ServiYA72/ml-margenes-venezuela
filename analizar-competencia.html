@@ -227,18 +227,41 @@
 
   // Igual al parser robusto usado en importar-precios.html: última coma o punto = decimal
   function parseNumeroLocal(raw) {
+    if (typeof raw === 'number') return raw;
     let s = String(raw).trim();
     if (!s) return NaN;
     s = s.replace(/[^0-9.,-]/g, '');
-    const lastComma = s.lastIndexOf(',');
-    const lastDot = s.lastIndexOf('.');
-    if (lastComma === -1 && lastDot === -1) return parseFloat(s);
-    const decimalEsComa = lastComma > lastDot;
-    const sepDecimal = decimalEsComa ? ',' : '.';
-    const sepMiles = decimalEsComa ? '.' : ',';
-    s = s.split(sepMiles).join('');
-    s = s.replace(sepDecimal, '.');
-    return parseFloat(s);
+    if (!s) return NaN;
+
+    const countDots = (s.match(/\./g) || []).length;
+    const countCommas = (s.match(/,/g) || []).length;
+
+    if (countDots > 0 && countCommas > 0) {
+      // Ambos símbolos presentes: el que aparece más a la derecha es el separador decimal
+      const lastComma = s.lastIndexOf(',');
+      const lastDot = s.lastIndexOf('.');
+      const decimalEsComa = lastComma > lastDot;
+      const sepDecimal = decimalEsComa ? ',' : '.';
+      const sepMiles = decimalEsComa ? '.' : ',';
+      s = s.split(sepMiles).join('');
+      s = s.replace(sepDecimal, '.');
+      return parseFloat(s);
+    }
+
+    const sep = countDots > 0 ? '.' : (countCommas > 0 ? ',' : null);
+    if (!sep) return parseFloat(s);
+
+    const partes = s.split(sep);
+    if (partes.length > 2) {
+      // Aparece más de una vez -> son separadores de miles (ej: 1.234.567)
+      return parseFloat(partes.join(''));
+    }
+    // Aparece una sola vez: si deja exactamente 3 dígitos después, es separador de miles (ej: 2.500 = dos mil quinientos)
+    if (partes[1].length === 3) {
+      return parseFloat(partes.join(''));
+    }
+    // Si no, se asume separador decimal (ej: 2.50 = dos con cincuenta centavos)
+    return parseFloat(partes[0] + '.' + partes[1]);
   }
 
   const ETIQUETAS = {

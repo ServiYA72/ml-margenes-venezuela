@@ -233,15 +233,33 @@
     let s = String(raw).trim();
     if (!s) return NaN;
     s = s.replace(/[^0-9.,-]/g, '');
-    const lastComma = s.lastIndexOf(',');
-    const lastDot = s.lastIndexOf('.');
-    if (lastComma === -1 && lastDot === -1) return parseFloat(s);
-    const decimalEsComa = lastComma > lastDot;
-    const sepDecimal = decimalEsComa ? ',' : '.';
-    const sepMiles = decimalEsComa ? '.' : ',';
-    s = s.split(sepMiles).join('');
-    s = s.replace(sepDecimal, '.');
-    return parseFloat(s);
+    if (!s) return NaN;
+
+    const countDots = (s.match(/\./g) || []).length;
+    const countCommas = (s.match(/,/g) || []).length;
+
+    if (countDots > 0 && countCommas > 0) {
+      const lastComma = s.lastIndexOf(',');
+      const lastDot = s.lastIndexOf('.');
+      const decimalEsComa = lastComma > lastDot;
+      const sepDecimal = decimalEsComa ? ',' : '.';
+      const sepMiles = decimalEsComa ? '.' : ',';
+      s = s.split(sepMiles).join('');
+      s = s.replace(sepDecimal, '.');
+      return parseFloat(s);
+    }
+
+    const sep = countDots > 0 ? '.' : (countCommas > 0 ? ',' : null);
+    if (!sep) return parseFloat(s);
+
+    const partes = s.split(sep);
+    if (partes.length > 2) {
+      return parseFloat(partes.join(''));
+    }
+    if (partes[1].length === 3) {
+      return parseFloat(partes.join(''));
+    }
+    return parseFloat(partes[0] + '.' + partes[1]);
   }
 
   function mejorCoincidencia(headers, pistas) {
