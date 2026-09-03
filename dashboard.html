@@ -142,6 +142,15 @@
   }
   td.num, th.num { font-family: 'IBM Plex Mono', monospace; text-align: right; }
   tr:last-child td { border-bottom: none; }
+  .fila-resaltada {
+    background: rgba(201, 162, 39, 0.14) !important;
+    box-shadow: inset 3px 0 0 var(--gold);
+    animation: parpadeoResaltado 1.4s ease-in-out 2;
+  }
+  @keyframes parpadeoResaltado {
+    0%, 100% { background: rgba(201, 162, 39, 0.14); }
+    50% { background: rgba(201, 162, 39, 0.30); }
+  }
   .empty { color: var(--muted); font-size: 14px; padding: 20px 0; }
   .pill {
     display: inline-block;
@@ -588,12 +597,7 @@
     renderizarTablaProductos();
   };
 
-  window.renderizarTablaProductos = function() {
-    const tbody = document.querySelector('#tabla-productos tbody');
-    const empty = document.getElementById('empty-productos');
-    const contador = document.getElementById('contador-resultados');
-    tbody.innerHTML = '';
-
+  function obtenerProductosFiltrados() {
     const busqueda = normalizarCategoria(document.getElementById('filtro-busqueda').value || '');
     const rangoSel = document.getElementById('filtro-precio').value;
     let rangoMin = null, rangoMax = null;
@@ -610,7 +614,7 @@
     const proveedorSel = document.getElementById('filtro-proveedor').value;
 
     const todos = Object.values(productosCache);
-    const filtrados = todos.filter(p => {
+    return todos.filter(p => {
       if (busqueda) {
         const marca = p.especificaciones?.marca || '';
         const haystack = normalizarCategoria([p.nombre, p.sku, p.categoria, marca].filter(Boolean).join(' '));
@@ -627,6 +631,16 @@
       if (proveedorSel && p.proveedores?.id !== proveedorSel) return false;
       return true;
     });
+  }
+
+  window.renderizarTablaProductos = function() {
+    const tbody = document.querySelector('#tabla-productos tbody');
+    const empty = document.getElementById('empty-productos');
+    const contador = document.getElementById('contador-resultados');
+    tbody.innerHTML = '';
+
+    const filtrados = obtenerProductosFiltrados();
+    const todos = Object.values(productosCache);
 
     contador.textContent = `${filtrados.length} de ${todos.length} productos`;
 
@@ -637,6 +651,7 @@
       return;
     }
     empty.style.display = 'none';
+
 
     const porPagina = 50;
     const totalPaginas = Math.max(1, Math.ceil(filtrados.length / porPagina));
@@ -649,6 +664,8 @@
     paginaDeItems.forEach(p => {
       const pub = p.pub || {};
       const tr = document.createElement('tr');
+      tr.dataset.productoId = p.id;
+      if (p.id === productoResaltadoId) tr.classList.add('fila-resaltada');
       tr.innerHTML = `
         <td><input type="checkbox" class="chk-producto" value="${p.id}"></td>
         <td style="min-width:220px;">${escapeHtml(p.nombre)}</td>
@@ -672,6 +689,33 @@
   };
 
   let paginaActualProductos = 1;
+  let productoResaltadoId = null;
+
+  function irYResaltarProducto(id) {
+    productoResaltadoId = id;
+    const filtrados = obtenerProductosFiltrados();
+    const indice = filtrados.findIndex(p => p.id === id);
+
+    if (indice === -1) {
+      // El producto no está visible con los filtros actuales: los limpiamos para poder mostrarlo
+      document.getElementById('filtro-busqueda').value = '';
+      document.getElementById('filtro-precio').value = '';
+      document.getElementById('filtro-costo').value = '';
+      document.getElementById('filtro-proveedor').value = '';
+      const filtradosSinFiltro = obtenerProductosFiltrados();
+      const indice2 = filtradosSinFiltro.findIndex(p => p.id === id);
+      paginaActualProductos = indice2 === -1 ? 1 : Math.floor(indice2 / 50) + 1;
+    } else {
+      paginaActualProductos = Math.floor(indice / 50) + 1;
+    }
+
+    renderizarTablaProductos();
+
+    setTimeout(() => {
+      const fila = document.querySelector(`tr[data-producto-id="${id}"]`);
+      if (fila) fila.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 50);
+  }
 
   function renderizarPaginacion(totalPaginas, totalItems, inicio, cantidadEnPagina) {
     const cont = document.getElementById('paginacion-productos');
@@ -743,6 +787,10 @@
     const pub = p.pub || {};
 
     editandoProductoId = id;
+    productoResaltadoId = id;
+    document.querySelectorAll('.chk-producto').forEach(chk => {
+      chk.closest('tr')?.classList.toggle('fila-resaltada', chk.value === id);
+    });
     document.getElementById('titulo-form-producto').textContent = 'Editando: ' + p.nombre;
     document.getElementById('prod-proveedor').value = p.proveedores?.id || '';
     document.getElementById('prod-nombre').value = p.nombre || '';
@@ -1171,8 +1219,10 @@ RESULTADOS DEL CÁLCULO DE PRECIO
       }
 
       msg.style.color = '';
+      const idParaResaltar = productoId;
       cancelarEdicion();
-      cargarProductos();
+      await cargarProductos();
+      irYResaltarProducto(idParaResaltar);
     }
   };
 
