@@ -580,13 +580,26 @@
   };
 
   async function cargarProductos() {
-    const { data, error } = await supabase
-      .from('productos')
-      .select('id, nombre, categoria, costo_usd, sku, especificaciones, proveedores(id, nombre), publicaciones(id, precio_efectivo_usd, precio_bcv_usd_equiv, precio_bcv_bs, ganancia_real_usd, comision_ml_usd, ganancia_neta_usd, modo_ganancia, margen_objetivo_pct, comision_ml_pct, descripcion, condicion, stock, forma_envio, condiciones_pago, horario_atencion, imagenes)')
-      .order('created_at', { ascending: false });
+    const columnas = 'id, nombre, categoria, costo_usd, sku, especificaciones, proveedores(id, nombre), publicaciones(id, precio_efectivo_usd, precio_bcv_usd_equiv, precio_bcv_bs, ganancia_real_usd, comision_ml_usd, ganancia_neta_usd, modo_ganancia, margen_objetivo_pct, comision_ml_pct, descripcion, condicion, stock, forma_envio, condiciones_pago, horario_atencion, imagenes)';
+    const TAMANO_BLOQUE = 1000;
+    let desde = 0;
+    let todosLosDatos = [];
+
+    while (true) {
+      const { data, error } = await supabase
+        .from('productos')
+        .select(columnas)
+        .order('created_at', { ascending: false })
+        .range(desde, desde + TAMANO_BLOQUE - 1);
+
+      if (error || !data || data.length === 0) break;
+      todosLosDatos = todosLosDatos.concat(data);
+      if (data.length < TAMANO_BLOQUE) break;
+      desde += TAMANO_BLOQUE;
+    }
 
     productosCache = {};
-    (data || []).forEach(p => {
+    todosLosDatos.forEach(p => {
       const pub = (p.publicaciones && p.publicaciones[0]) || {};
       productosCache[p.id] = { ...p, pub };
     });

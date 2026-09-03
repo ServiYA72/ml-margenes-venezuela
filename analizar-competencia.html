@@ -259,11 +259,24 @@
   let productoActivoId = null;
 
   async function cargarProductos() {
-    const { data } = await supabase
-      .from('productos')
-      .select('id, nombre, sku, categoria, especificaciones, costo_usd, publicaciones(precio_efectivo_usd, precio_bcv_usd_equiv, precio_bcv_bs)')
-      .order('nombre');
-    (data || []).forEach(p => {
+    const TAMANO_BLOQUE = 1000;
+    let desde = 0;
+    let todosLosDatos = [];
+
+    while (true) {
+      const { data, error } = await supabase
+        .from('productos')
+        .select('id, nombre, sku, categoria, especificaciones, costo_usd, publicaciones(precio_efectivo_usd, precio_bcv_usd_equiv, precio_bcv_bs)')
+        .order('nombre')
+        .range(desde, desde + TAMANO_BLOQUE - 1);
+
+      if (error || !data || data.length === 0) break;
+      todosLosDatos = todosLosDatos.concat(data);
+      if (data.length < TAMANO_BLOQUE) break;
+      desde += TAMANO_BLOQUE;
+    }
+
+    todosLosDatos.forEach(p => {
       productosCache[p.id] = { ...p, pub: (p.publicaciones && p.publicaciones[0]) || {} };
     });
     renderizarListaProductos(Object.values(productosCache));
