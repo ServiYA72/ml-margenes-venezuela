@@ -476,18 +476,34 @@
       const pub = producto?.pub;
 
       let veredicto = '';
+      let precioMasAlto = false;
       if (pub?.precio_bcv_usd_equiv && r.precio_equiv_usd_bcv) {
         const propio = parseFloat(pub.precio_bcv_usd_equiv);
         const competidor = parseFloat(r.precio_equiv_usd_bcv);
         const diffPct = ((propio - competidor) / competidor) * 100;
         if (diffPct > 2) {
           veredicto = `<div style="color:var(--rust);">Tu precio es ${diffPct.toFixed(1)}% más caro que este competidor (equiv. $${competidor.toFixed(2)} Ref. BCV).</div>`;
+          precioMasAlto = true;
         } else if (diffPct < -2) {
           veredicto = `<div style="color:var(--teal);">Tu precio es ${Math.abs(diffPct).toFixed(1)}% más barato que este competidor (equiv. $${competidor.toFixed(2)} Ref. BCV).</div>`;
         } else {
           veredicto = `<div style="color:var(--gold);">Tu precio está prácticamente igual a este competidor (equiv. $${competidor.toFixed(2)} Ref. BCV).</div>`;
         }
       }
+
+      const mostrarAlerta = precioMasAlto && !r.decision;
+      const alertaHtml = mostrarAlerta ? `
+        <div style="margin-top:10px; padding:10px 12px; background:rgba(193,85,59,0.12); border:1px solid var(--rust);">
+          <div style="font-size:13px; margin-bottom:8px;">⚠️ Tu precio está por encima de este competidor. ¿Qué quieres hacer?</div>
+          <button class="secondary" style="margin:0 8px 0 0; padding:6px 12px; font-size:12px;" onclick="decidirAnalisis('${r.id}', 'dejar')">Dejarlo así</button>
+          <button class="primary" style="margin:0; padding:6px 12px; font-size:12px;" onclick="reajustarPrecioDesdeAnalisis('${r.id}', '${r.producto_id}')">Reajustar precio →</button>
+        </div>` : '';
+
+      const decisionHtml = r.decision === 'dejar'
+        ? `<div class="coincidencias">Decidiste dejar el precio así.</div>`
+        : r.decision === 'reajustar'
+        ? `<div class="coincidencias">Marcado para reajustar.</div>`
+        : '';
 
       const card = document.createElement('div');
       card.className = 'resultado-card';
@@ -501,10 +517,27 @@
           ${r.precio_detectado ? `<div>Precio detectado: <b>${r.moneda_detectada === 'VES' ? 'Bs ' + parseFloat(r.precio_detectado).toLocaleString('es-VE') : '$' + parseFloat(r.precio_detectado).toFixed(2)}</b></div>` : '<div>No se detectó un precio automáticamente en el texto.</div>'}
           ${veredicto}
         </div>
+        ${alertaHtml}
+        ${decisionHtml}
       `;
       cont.appendChild(card);
     });
   }
+
+  window.decidirAnalisis = async function(analisisId, decision) {
+    await supabase.from('analisis_competencia').update({ decision }).eq('id', analisisId);
+    await cargarHistorial();
+  };
+
+  window.reajustarPrecioDesdeAnalisis = async function(analisisId, productoId) {
+    if (!productoId || productoId === 'null') {
+      alert('Este análisis no está vinculado a un producto de tu lista, así que no se puede editar directamente.');
+      return;
+    }
+    await supabase.from('analisis_competencia').update({ decision: 'reajustar' }).eq('id', analisisId);
+    localStorage.setItem('producto-a-editar', productoId);
+    window.location.href = 'dashboard.html';
+  };
 
   function capitalizar(str) {
     return str.replace(/\b\w/g, c => c.toUpperCase());

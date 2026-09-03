@@ -1245,6 +1245,19 @@ RESULTADOS DEL CÁLCULO DE PRECIO
     await cargarProveedores();
     await cargarMargenesCategoria();
     await cargarProductos();
+
+    const idParaEditar = localStorage.getItem('producto-a-editar');
+    if (idParaEditar) {
+      localStorage.removeItem('producto-a-editar');
+      // Asegurarse de estar en la pestaña de Productos
+      const tabProductos = document.querySelector('.tab[onclick*="productos"]');
+      if (tabProductos) switchView('productos', tabProductos);
+      if (productosCache[idParaEditar]) {
+        editarProducto(idParaEditar);
+      } else {
+        irYResaltarProducto(idParaEditar);
+      }
+    }
   })();
 </script>
 
