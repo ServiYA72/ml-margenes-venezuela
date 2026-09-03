@@ -416,7 +416,7 @@
     if (colaComparar.length > 0) mostrarPanelCola();
   }
 
-  function mostrarPanelCola() {
+  async function mostrarPanelCola() {
     const panel = document.getElementById('panel-cola');
     const restantes = document.getElementById('cola-restantes');
     const lista = document.getElementById('cola-lista');
@@ -431,9 +431,23 @@
     restantes.textContent = colaComparar.length;
 
     const actualId = colaComparar[0];
-    const actual = productosCache[actualId];
+    let actual = productosCache[actualId];
+
+    if (!actual) {
+      // No estaba en la caché ya cargada: lo buscamos directo por su ID
+      const { data: prodDirecto } = await supabase
+        .from('productos')
+        .select('id, nombre, sku, categoria, especificaciones, costo_usd, publicaciones(precio_efectivo_usd, precio_bcv_usd_equiv, precio_bcv_bs)')
+        .eq('id', actualId)
+        .single();
+      if (prodDirecto) {
+        productosCache[prodDirecto.id] = { ...prodDirecto, pub: (prodDirecto.publicaciones && prodDirecto.publicaciones[0]) || {} };
+        actual = productosCache[prodDirecto.id];
+      }
+    }
+
     lista.innerHTML = `
-      Analizando ahora: <b style="color:var(--paper)">${escapeHtml(actual ? actual.nombre : 'Producto')}</b>
+      Analizando ahora: <b style="color:var(--paper)">${escapeHtml(actual ? actual.nombre : 'Producto no encontrado')}</b>
       &nbsp;·&nbsp; <button class="secondary" style="margin:0; padding:6px 12px; font-size:12px;" onclick="saltarProductoCola()">Saltar este producto</button>
       &nbsp;·&nbsp; <button class="secondary" style="margin:0; padding:6px 12px; font-size:12px;" onclick="cancelarCola()">Cancelar comparación</button>
     `;
