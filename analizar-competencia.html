@@ -87,6 +87,11 @@
   <h1>Análisis de competencia</h1>
   <p class="sub">Vincula el análisis a uno de tus productos para comparar automáticamente tu precio contra la competencia. Pega el texto de la publicación (incluyendo el precio) y el sistema detecta el precio, la moneda, la forma de pago (BCV / Binance / efectivo internacional) y la región del vendedor — todo queda guardado en el historial.</p>
 
+  <div class="panel" id="panel-cola" style="display:none; border-color: var(--teal);">
+    <h2>Comparando productos seleccionados (<span id="cola-restantes"></span> pendientes)</h2>
+    <div id="cola-lista" style="font-size:13px; color:var(--muted); line-height:1.8;"></div>
+  </div>
+
   <div class="panel">
     <h2>1. ¿A cuál de tus productos corresponde?</h2>
     <div class="grid-form">
@@ -320,11 +325,69 @@
     msg.textContent = 'Análisis guardado.';
     document.getElementById('in-texto').value = '';
     await cargarHistorial();
+    avanzarCola();
   };
 
   window.limpiarFormulario = function() {
     document.getElementById('in-texto').value = '';
     document.getElementById('msg-analisis').textContent = '';
+  };
+
+  // --- Cola de comparación (llegada desde "Comparar en Mercado Libre" del dashboard) ---
+  let colaComparar = [];
+
+  function cargarCola() {
+    const raw = localStorage.getItem('cola-comparar-competencia');
+    if (!raw) return;
+    try { colaComparar = JSON.parse(raw); } catch (e) { colaComparar = []; }
+    if (colaComparar.length > 0) mostrarPanelCola();
+  }
+
+  function mostrarPanelCola() {
+    const panel = document.getElementById('panel-cola');
+    const restantes = document.getElementById('cola-restantes');
+    const lista = document.getElementById('cola-lista');
+
+    if (colaComparar.length === 0) {
+      panel.style.display = 'none';
+      localStorage.removeItem('cola-comparar-competencia');
+      return;
+    }
+
+    panel.style.display = 'block';
+    restantes.textContent = colaComparar.length;
+
+    const actualId = colaComparar[0];
+    const actual = productosCache[actualId];
+    lista.innerHTML = `
+      Analizando ahora: <b style="color:var(--paper)">${escapeHtml(actual ? actual.nombre : 'Producto')}</b>
+      &nbsp;·&nbsp; <button class="secondary" style="margin:0; padding:6px 12px; font-size:12px;" onclick="saltarProductoCola()">Saltar este producto</button>
+      &nbsp;·&nbsp; <button class="secondary" style="margin:0; padding:6px 12px; font-size:12px;" onclick="cancelarCola()">Cancelar comparación</button>
+    `;
+
+    // Preseleccionar el producto actual en el formulario
+    const select = document.getElementById('in-producto-select');
+    if (actual) {
+      select.value = actualId;
+      mostrarPrecioPropio();
+    }
+  }
+
+  function avanzarCola() {
+    if (colaComparar.length === 0) return;
+    colaComparar.shift();
+    localStorage.setItem('cola-comparar-competencia', JSON.stringify(colaComparar));
+    mostrarPanelCola();
+  }
+
+  window.saltarProductoCola = function() {
+    avanzarCola();
+  };
+
+  window.cancelarCola = function() {
+    colaComparar = [];
+    localStorage.removeItem('cola-comparar-competencia');
+    document.getElementById('panel-cola').style.display = 'none';
   };
 
   async function cargarHistorial() {
@@ -391,6 +454,7 @@
     await cargarTasas();
     await cargarProductos();
     await cargarHistorial();
+    cargarCola();
   })();
 </script>
 

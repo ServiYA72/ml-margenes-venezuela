@@ -348,6 +348,7 @@
         <div style="flex:1;"></div>
         <button class="add" style="padding:9px 16px; font-size:13px; background:var(--rust); color:var(--paper);" onclick="eliminarSeleccionados()">Eliminar seleccionados</button>
         <button class="add" style="padding:9px 16px; font-size:13px; background:var(--surface-2); color:var(--rust); border:1px solid var(--rust);" onclick="eliminarTodos()">Eliminar todos</button>
+        <button class="add" style="padding:9px 16px; font-size:13px; background:var(--teal); color:var(--ink);" onclick="compararSeleccionadosEnCompetencia()">Comparar en Mercado Libre →</button>
       </div>
       <div class="msg" id="msg-bulk"></div>
 
@@ -894,6 +895,17 @@ RESULTADOS DEL CÁLCULO DE PRECIO
   function obtenerSeleccionados() {
     return Array.from(document.querySelectorAll('.chk-producto:checked')).map(chk => chk.value);
   }
+
+  window.compararSeleccionadosEnCompetencia = function() {
+    const seleccionados = obtenerSeleccionados();
+    if (seleccionados.length === 0) {
+      document.getElementById('msg-bulk').style.color = 'var(--rust)';
+      document.getElementById('msg-bulk').textContent = 'Selecciona al menos un producto para comparar.';
+      return;
+    }
+    localStorage.setItem('cola-comparar-competencia', JSON.stringify(seleccionados));
+    window.location.href = 'analizar-competencia.html';
+  };
 
   let masivoDetenido = false;
   let ultimoRespaldoMasivo = null;
