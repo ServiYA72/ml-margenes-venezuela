@@ -278,17 +278,14 @@
     const contador = document.getElementById('contador-lista-productos');
     cont.innerHTML = '';
 
-    const limitados = lista.slice(0, 100);
-    contador.textContent = lista.length > 100
-      ? `Mostrando 100 de ${lista.length} — sigue escribiendo para acotar la búsqueda.`
-      : `${lista.length} producto(s)`;
+    contador.textContent = `${lista.length} producto(s)`;
 
-    if (limitados.length === 0) {
+    if (lista.length === 0) {
       cont.innerHTML = '<div class="empty">Ningún producto coincide con la búsqueda.</div>';
       return;
     }
 
-    limitados.forEach(p => {
+    lista.forEach(p => {
       const pub = p.pub || {};
       const fila = document.createElement('div');
       fila.className = 'fila-producto' + (p.id === productoActivoId ? ' activa' : '');
@@ -405,9 +402,17 @@
   let colaComparar = [];
 
   function cargarCola() {
-    const raw = localStorage.getItem('cola-comparar-competencia');
-    if (!raw) return;
-    try { colaComparar = JSON.parse(raw); } catch (e) { colaComparar = []; }
+    const params = new URLSearchParams(window.location.search);
+    const paramComparar = params.get('comparar');
+    if (paramComparar) {
+      colaComparar = paramComparar.split(',').map(s => s.trim()).filter(Boolean);
+      localStorage.setItem('cola-comparar-competencia', JSON.stringify(colaComparar));
+      window.history.replaceState({}, '', 'analizar-competencia.html');
+    } else {
+      const raw = localStorage.getItem('cola-comparar-competencia');
+      if (!raw) return;
+      try { colaComparar = JSON.parse(raw); } catch (e) { colaComparar = []; }
+    }
     if (colaComparar.length > 0) mostrarPanelCola();
   }
 
@@ -535,8 +540,7 @@
       return;
     }
     await supabase.from('analisis_competencia').update({ decision: 'reajustar' }).eq('id', analisisId);
-    localStorage.setItem('producto-a-editar', productoId);
-    window.location.href = 'dashboard.html';
+    window.location.href = 'dashboard.html?editar=' + encodeURIComponent(productoId);
   };
 
   function capitalizar(str) {

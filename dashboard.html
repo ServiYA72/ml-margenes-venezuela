@@ -597,6 +597,7 @@
   window.aplicarFiltrosProductos = function() {
     paginaActualProductos = 1;
     renderizarTablaProductos();
+    guardarEstadoTablaProductos();
   };
 
   function obtenerProductosFiltrados() {
@@ -748,7 +749,18 @@
   window.irAPaginaProductos = function(n) {
     paginaActualProductos = parseInt(n);
     renderizarTablaProductos();
+    guardarEstadoTablaProductos();
   };
+
+  function guardarEstadoTablaProductos() {
+    localStorage.setItem('dashboard-productos-estado', JSON.stringify({
+      busqueda: document.getElementById('filtro-busqueda').value,
+      precio: document.getElementById('filtro-precio').value,
+      costo: document.getElementById('filtro-costo').value,
+      proveedor: document.getElementById('filtro-proveedor').value,
+      pagina: paginaActualProductos
+    }));
+  }
 
 
   function escapeHtml(str) {
@@ -903,8 +915,7 @@ RESULTADOS DEL CÁLCULO DE PRECIO
       document.getElementById('msg-bulk').textContent = 'Selecciona al menos un producto para comparar.';
       return;
     }
-    localStorage.setItem('cola-comparar-competencia', JSON.stringify(seleccionados));
-    window.location.href = 'analizar-competencia.html';
+    window.location.href = 'analizar-competencia.html?comparar=' + encodeURIComponent(seleccionados.join(','));
   };
 
   let masivoDetenido = false;
@@ -1244,19 +1255,43 @@ RESULTADOS DEL CÁLCULO DE PRECIO
     await cargarTasas();
     await cargarProveedores();
     await cargarMargenesCategoria();
+
+    // Restaurar los filtros y la página en que estaba la tabla de productos antes de salir
+    try {
+      const estadoGuardado = JSON.parse(localStorage.getItem('dashboard-productos-estado') || 'null');
+      if (estadoGuardado) {
+        if (estadoGuardado.busqueda) document.getElementById('filtro-busqueda').value = estadoGuardado.busqueda;
+        if (estadoGuardado.precio) document.getElementById('filtro-precio').value = estadoGuardado.precio;
+        if (estadoGuardado.costo) document.getElementById('filtro-costo').value = estadoGuardado.costo;
+        if (estadoGuardado.proveedor) document.getElementById('filtro-proveedor').value = estadoGuardado.proveedor;
+        if (estadoGuardado.pagina) paginaActualProductos = estadoGuardado.pagina;
+      }
+    } catch (e) {}
+
     await cargarProductos();
 
-    const idParaEditar = localStorage.getItem('producto-a-editar');
+    // ¿Venimos de "Reajustar precio" en Análisis de competencia? (?editar=ID en la URL)
+    const params = new URLSearchParams(window.location.search);
+    const idParaEditar = params.get('editar');
     if (idParaEditar) {
-      localStorage.removeItem('producto-a-editar');
-      // Asegurarse de estar en la pestaña de Productos
       const tabProductos = document.querySelector('.tab[onclick*="productos"]');
       if (tabProductos) switchView('productos', tabProductos);
-      if (productosCache[idParaEditar]) {
-        editarProducto(idParaEditar);
-      } else {
-        irYResaltarProducto(idParaEditar);
-      }
+
+      const intentarAbrirEdicion = async (reintento) => {
+        if (productosCache[idParaEditar]) {
+          editarProducto(idParaEditar);
+        } else if (reintento < 3) {
+          await new Promise(r => setTimeout(r, 400));
+          await cargarProductos();
+          await intentarAbrirEdicion(reintento + 1);
+        } else {
+          irYResaltarProducto(idParaEditar);
+          alert('No se pudo abrir el producto para editar automáticamente. Búscalo en la lista de abajo y dale "Editar" manualmente.');
+        }
+      };
+      await intentarAbrirEdicion(0);
+      // Limpiar el parámetro de la URL para que un refresh no vuelva a abrir la edición
+      window.history.replaceState({}, '', 'dashboard.html');
     }
   })();
 </script>
