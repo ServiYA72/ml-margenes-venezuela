@@ -1284,8 +1284,15 @@ RESULTADOS DEL CÁLCULO DE PRECIO
 
     await cargarProductos();
 
-    // ¿Venimos de "Reajustar precio" en Análisis de competencia? (?editar=ID en la URL)
+    // ¿Venimos de un enlace "Volver a productos" (?tab=productos) o de "Reajustar precio" (?editar=ID)?
     const params = new URLSearchParams(window.location.search);
+    const tabSolicitada = params.get('tab');
+    if (tabSolicitada === 'productos') {
+      const tabProductos = document.querySelector('.tab[onclick*="productos"]');
+      if (tabProductos) switchView('productos', tabProductos);
+      window.history.replaceState({}, '', 'dashboard.html');
+    }
+
     const idParaEditar = params.get('editar');
     if (idParaEditar) {
       const tabProductos = document.querySelector('.tab[onclick*="productos"]');
