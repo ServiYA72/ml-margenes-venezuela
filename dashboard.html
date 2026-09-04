@@ -1264,6 +1264,15 @@ RESULTADOS DEL CÁLCULO DE PRECIO
     }
   };
 
+  // Cambiar de pestaña de inmediato (antes de cargar datos) para que no se vea el salto visual
+  (function cambiarPestanaInmediato() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('tab') === 'productos' || params.get('editar')) {
+      const tabProductos = document.querySelector('.tab[onclick*="productos"]');
+      if (tabProductos) switchView('productos', tabProductos);
+    }
+  })();
+
   (async function init() {
     await checkSession();
     await cargarTasas();
