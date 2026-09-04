@@ -85,6 +85,13 @@
   section.view { display: none; }
   section.view.active { display: block; }
 
+  /* Se activa desde el script bloqueante en <head>, antes del primer render,
+     para evitar el parpadeo hacia "Proveedores" al llegar con ?tab=productos o ?editar= */
+  html.forzar-productos #view-proveedores { display: none !important; }
+  html.forzar-productos #view-productos { display: block !important; }
+  html.forzar-productos #tab-proveedores { color: var(--muted); border-bottom-color: transparent; }
+  html.forzar-productos #tab-productos { color: var(--paper); border-bottom-color: var(--gold); }
+
   .panel {
     background: var(--surface);
     border: 1px solid var(--line);
@@ -163,6 +170,16 @@
   .teal-text { color: var(--teal); }
   .msg { font-size: 13px; margin-top: 12px; color: var(--rust); }
 </style>
+<script>
+  // Se ejecuta de inmediato, antes de pintar la página, para no mostrar "Proveedores" ni un instante
+  // si venimos con ?tab=productos o ?editar=ID en la URL.
+  (function() {
+    var params = new URLSearchParams(window.location.search);
+    if (params.get('tab') === 'productos' || params.get('editar')) {
+      document.documentElement.classList.add('forzar-productos');
+    }
+  })();
+</script>
 </head>
 <body>
 
@@ -179,8 +196,8 @@
 
 <main>
   <div class="tabs">
-    <button class="tab active" onclick="switchView('proveedores', this)">Proveedores</button>
-    <button class="tab" onclick="switchView('productos', this)">Productos</button>
+    <button class="tab active" id="tab-proveedores" onclick="switchView('proveedores', this)">Proveedores</button>
+    <button class="tab" id="tab-productos" onclick="switchView('productos', this)">Productos</button>
   </div>
 
   <!-- PROVEEDORES -->
@@ -1271,6 +1288,9 @@ RESULTADOS DEL CÁLCULO DE PRECIO
       const tabProductos = document.querySelector('.tab[onclick*="productos"]');
       if (tabProductos) switchView('productos', tabProductos);
     }
+    // El estado real (clases "active") ya quedó aplicado arriba; a partir de aquí
+    // dejamos de forzarlo por CSS para que el comportamiento normal de las pestañas siga mandando.
+    document.documentElement.classList.remove('forzar-productos');
   })();
 
   (async function init() {
