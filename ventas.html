@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nicom System — Ventas</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #0F1B17; --surface: #16241F; --surface-2: #1D2E27; --line: #2C3F37;
+    --paper: #EDE8DE; --muted: #8FA69B; --gold: #C9A227; --teal: #3FA796; --rust: #C1553B;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; background: var(--ink); font-family: 'IBM Plex Sans', sans-serif; color: var(--paper); }
+  header {
+    border-bottom: 1px solid var(--line); padding: 20px 32px;
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;
+  }
+  .brand-mark { display: flex; align-items: center; }
+  .brand-logo { height: 42px; width: auto; filter: drop-shadow(0 3px 10px rgba(0,0,0,0.5)); }
+  a.nav-link { color: var(--muted); font-size: 13px; text-decoration: none; border-bottom: 1px solid var(--line); }
+  a.nav-link:hover { color: var(--paper); }
+  .who { font-size: 13px; color: var(--muted); }
+
+  main { max-width: 1200px; margin: 0 auto; padding: 32px; }
+  h1 { font-family: 'Fraunces', serif; font-weight: 400; font-size: 26px; margin: 0 0 6px 0; }
+  .sub { color: var(--muted); font-size: 14px; margin: 0 0 28px 0; line-height: 1.6; }
+
+  .panel { background: var(--surface); border: 1px solid var(--line); padding: 22px; margin-bottom: 24px; }
+  .panel h2 { font-family: 'Fraunces', serif; font-weight: 400; font-size: 18px; margin: 0 0 14px 0; }
+
+  .stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--line); padding: 18px 20px; }
+  .stat-card .label { font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  .stat-card .valor { font-family: 'IBM Plex Mono', monospace; font-size: 22px; font-weight: 500; color: var(--gold); }
+
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  input, select, textarea {
+    width: 100%; background: var(--surface-2); border: 1px solid var(--line); color: var(--paper);
+    padding: 10px 12px; font-size: 14px; font-family: 'IBM Plex Sans', sans-serif;
+  }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--gold); }
+  .grid-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 14px; }
+
+  .fila-producto {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 10px 14px; border-bottom: 1px solid var(--line); cursor: pointer; font-size: 13px;
+  }
+  .fila-producto:last-child { border-bottom: none; }
+  .fila-producto:hover { background: var(--surface-2); }
+  .fila-producto.activa { background: rgba(201,162,39,0.15); box-shadow: inset 3px 0 0 var(--gold); }
+  .fila-producto .fp-nombre { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fila-producto .fp-info { display: flex; gap: 12px; white-space: nowrap; font-family: 'IBM Plex Mono', monospace; font-size: 12px; }
+
+  .producto-elegido {
+    margin-top: 14px; padding: 14px 16px; background: var(--surface-2); border: 1px solid var(--gold); display: none;
+  }
+  .producto-elegido .nombre { font-weight: 600; font-size: 15px; margin-bottom: 6px; }
+  .producto-elegido .precios { font-size: 13px; color: var(--muted); }
+
+  button.primary {
+    background: var(--gold); color: var(--ink); border: none; padding: 12px 22px;
+    font-weight: 600; font-size: 14px; cursor: pointer; margin-top: 8px;
+  }
+  button.primary:hover { background: #DAB13A; }
+  button.primary:disabled { background: var(--line); color: var(--muted); cursor: not-allowed; }
+  button.secondary {
+    background: var(--surface-2); color: var(--paper); border: 1px solid var(--line); padding: 12px 22px;
+    font-weight: 500; font-size: 14px; cursor: pointer; margin-top: 8px; margin-left: 10px;
+  }
+
+  .msg { font-size: 13px; margin-top: 12px; }
+  .msg.err { color: var(--rust); }
+  .msg.ok { color: var(--teal); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; font-size: 11px; color: var(--muted); font-weight: 500; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  td { padding: 10px; border-bottom: 1px solid var(--line); }
+  td.num, th.num { font-family: 'IBM Plex Mono', monospace; text-align: right; }
+  .pill { display: inline-block; padding: 3px 9px; font-size: 11px; border: 1px solid var(--line); }
+  .empty { color: var(--muted); font-size: 14px; text-align: center; padding: 24px 0; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand-mark"><img src="logo-nicom.png" alt="Nicom Tech Solutions" class="brand-logo"></div>
+  <a class="nav-link" href="dashboard.html?tab=productos">← Volver a productos</a>
+  <div class="who" id="who">Cargando sesión…</div>
+</header>
+
+<main>
+  <h1>Registro de ventas</h1>
+  <p class="sub">Registra cada venta con el método de pago real y el monto cobrado. El stock del producto se descuenta automáticamente.</p>
+
+  <div class="stats-row" id="stats-row"></div>
+
+  <div class="panel">
+    <h2>1. Elige el producto vendido</h2>
+    <input type="text" id="buscador-productos" placeholder="Busca por nombre, código, categoría o marca..." oninput="filtrarListaProductos()">
+    <div id="lista-productos-buscador" style="max-height: 280px; overflow-y: auto; border: 1px solid var(--line); margin-top: 12px;"></div>
+    <div class="hint" id="contador-lista-productos" style="font-size:12px; color:var(--muted); margin-top:8px;"></div>
+
+    <div class="producto-elegido" id="producto-elegido-panel">
+      <div class="nombre" id="pe-nombre"></div>
+      <div class="precios" id="pe-precios"></div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>2. Detalles de la venta</h2>
+    <div class="grid-form">
+      <div>
+        <label for="v-cantidad">Cantidad vendida</label>
+        <input type="number" id="v-cantidad" value="1" min="1">
+      </div>
+      <div>
+        <label for="v-moneda">Moneda cobrada</label>
+        <select id="v-moneda" onchange="sugerirPrecioVenta()">
+          <option value="USD">Dólares ($)</option>
+          <option value="VES">Bolívares (Bs)</option>
+        </select>
+      </div>
+      <div>
+        <label for="v-precio">Monto cobrado</label>
+        <input type="number" step="0.01" id="v-precio" placeholder="0.00">
+      </div>
+      <div>
+        <label for="v-metodo">Método de pago</label>
+        <select id="v-metodo">
+          <option value="efectivo">Efectivo (USD)</option>
+          <option value="zelle">Zelle</option>
+          <option value="pago_movil">Pago Móvil</option>
+          <option value="transferencia">Transferencia bancaria</option>
+          <option value="binance">Binance / USDT</option>
+          <option value="otro">Otro</option>
+        </select>
+      </div>
+      <div>
+        <label for="v-canal">Canal de venta</label>
+        <select id="v-canal">
+          <option value="manual">Manual / Externo</option>
+          <option value="mercadolibre">Mercado Libre</option>
+        </select>
+      </div>
+    </div>
+    <label for="v-notas">Notas (opcional)</label>
+    <textarea id="v-notas" rows="2" placeholder="Ej: cliente frecuente, entrega a domicilio, etc."></textarea>
+
+    <button class="primary" onclick="registrarVenta()">Registrar venta</button>
+    <button class="secondary" onclick="limpiarFormularioVenta()">Limpiar</button>
+    <div class="msg" id="msg-venta"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Historial de ventas recientes</h2>
+    <div style="overflow-x:auto;">
+    <table id="tabla-ventas">
+      <thead>
+        <tr>
+          <th>Fecha</th><th>Producto</th><th>Cant.</th>
+          <th class="num">Cobrado</th><th>Método</th><th>Canal</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    </div>
+    <div class="empty" id="empty-ventas" style="display:none;">Todavía no hay ventas registradas.</div>
+  </div>
+</main>
+
+<script type="module">
+  import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+  const SUPABASE_URL = 'https://tkhzuopapvclmcgxyood.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_KQB6B6uLIPr-xKdNDc8iEw_7tcWM5gS';
+  const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  let tasaBCV = null, tasaBinance = null;
+  let productosCache = {};
+  let productoElegidoId = null;
+
+  const METODOS_TEXTO = {
+    efectivo: 'Efectivo', zelle: 'Zelle', pago_movil: 'Pago Móvil',
+    transferencia: 'Transferencia', binance: 'Binance/USDT', otro: 'Otro'
+  };
+
+  async function initSesion() {
+    const { data: { session } } = await supabase.auth.getSession();
+    const who = document.getElementById('who');
+    if (!session) { who.textContent = 'No hay sesión — inicia sesión en login.html'; who.style.color = '#C1553B'; }
+    else who.textContent = session.user.email;
+  }
+
+  async function cargarTasas() {
+    const { data } = await supabase.from('tasas_cambio').select('*').order('fecha', { ascending: false }).limit(1).single();
+    if (data) { tasaBCV = parseFloat(data.tasa_bcv); tasaBinance = parseFloat(data.tasa_binance); }
+  }
+
+  async function cargarProductos() {
+    const TAMANO_BLOQUE = 1000;
+    let desde = 0, todos = [];
+    while (true) {
+      const { data, error } = await supabase
+        .from('productos')
+        .select('id, nombre, sku, categoria, especificaciones, costo_usd, publicaciones(precio_efectivo_usd, precio_bcv_usd_equiv, precio_bcv_bs, stock)')
+        .order('nombre')
+        .range(desde, desde + TAMANO_BLOQUE - 1);
+      if (error || !data || data.length === 0) break;
+      todos = todos.concat(data);
+      if (data.length < TAMANO_BLOQUE) break;
+      desde += TAMANO_BLOQUE;
+    }
+    todos.forEach(p => {
+      productosCache[p.id] = { ...p, pub: (p.publicaciones && p.publicaciones[0]) || {} };
+    });
+    renderizarListaProductos(Object.values(productosCache));
+  }
+
+  function normalizarTexto(str) {
+    return String(str || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  }
+
+  window.filtrarListaProductos = function() {
+    const qCompleto = normalizarTexto(document.getElementById('buscador-productos').value);
+    const todos = Object.values(productosCache);
+    if (!qCompleto) { renderizarListaProductos(todos); return; }
+    const palabras = qCompleto.split(/\s+/).filter(p => p.length >= 2);
+    const filtrados = todos.filter(p => {
+      const marca = p.especificaciones?.marca || '';
+      const haystack = normalizarTexto([p.nombre, p.sku, p.categoria, marca].filter(Boolean).join(' '));
+      return palabras.every(palabra => haystack.includes(palabra));
+    });
+    renderizarListaProductos(filtrados);
+  };
+
+  function renderizarListaProductos(lista) {
+    const cont = document.getElementById('lista-productos-buscador');
+    const contador = document.getElementById('contador-lista-productos');
+    cont.innerHTML = '';
+    contador.textContent = `${lista.length} producto(s)`;
+
+    if (lista.length === 0) {
+      cont.innerHTML = '<div class="empty">Ningún producto coincide con la búsqueda.</div>';
+      return;
+    }
+
+    lista.forEach(p => {
+      const pub = p.pub || {};
+      const fila = document.createElement('div');
+      fila.className = 'fila-producto' + (p.id === productoElegidoId ? ' activa' : '');
+      fila.innerHTML = `
+        <span class="fp-nombre">${escapeHtml(p.nombre)}</span>
+        <span class="fp-info">
+          <span style="color:var(--muted)">stock: ${pub.stock ?? '—'}</span>
+          <span style="color:var(--teal)">$${pub.precio_bcv_usd_equiv ? parseFloat(pub.precio_bcv_usd_equiv).toFixed(2) : '—'} BCV</span>
+          <span style="color:var(--gold)">$${pub.precio_efectivo_usd ? parseFloat(pub.precio_efectivo_usd).toFixed(2) : '—'} cash</span>
+        </span>
+      `;
+      fila.onclick = () => elegirProducto(p.id);
+      cont.appendChild(fila);
+    });
+  }
+
+  window.elegirProducto = function(id) {
+    productoElegidoId = id;
+    const p = productosCache[id];
+    if (!p) return;
+    const pub = p.pub || {};
+
+    filtrarListaProductos();
+
+    const panel = document.getElementById('producto-elegido-panel');
+    panel.style.display = 'block';
+    document.getElementById('pe-nombre').textContent = p.nombre;
+    document.getElementById('pe-precios').innerHTML =
+      `Stock disponible: <b style="color:var(--paper)">${pub.stock ?? '—'}</b>
+       &nbsp;·&nbsp; efectivo <b style="color:var(--gold)">$${pub.precio_efectivo_usd ? parseFloat(pub.precio_efectivo_usd).toFixed(2) : '—'}</b>
+       &nbsp;·&nbsp; Ref. BCV <b style="color:var(--teal)">$${pub.precio_bcv_usd_equiv ? parseFloat(pub.precio_bcv_usd_equiv).toFixed(2) : '—'}</b>
+       &nbsp;·&nbsp; Bs ${pub.precio_bcv_bs ? parseFloat(pub.precio_bcv_bs).toLocaleString('es-VE', {maximumFractionDigits:0}) : '—'}`;
+
+    sugerirPrecioVenta();
+  };
+
+  window.sugerirPrecioVenta = function() {
+    if (!productoElegidoId) return;
+    const pub = productosCache[productoElegidoId]?.pub || {};
+    const moneda = document.getElementById('v-moneda').value;
+    const campoPrecio = document.getElementById('v-precio');
+    if (moneda === 'VES') {
+      campoPrecio.value = pub.precio_bcv_bs ? parseFloat(pub.precio_bcv_bs).toFixed(2) : '';
+    } else {
+      campoPrecio.value = pub.precio_efectivo_usd ? parseFloat(pub.precio_efectivo_usd).toFixed(2) : '';
+    }
+  };
+
+  window.registrarVenta = async function() {
+    const msg = document.getElementById('msg-venta');
+    const cantidad = parseInt(document.getElementById('v-cantidad').value);
+    const precio = parseFloat(document.getElementById('v-precio').value);
+    const moneda = document.getElementById('v-moneda').value;
+    const metodo = document.getElementById('v-metodo').value;
+    const canal = document.getElementById('v-canal').value;
+    const notas = document.getElementById('v-notas').value.trim();
+
+    if (!productoElegidoId) { msg.className = 'msg err'; msg.textContent = 'Elige un producto primero.'; return; }
+    if (isNaN(cantidad) || cantidad <= 0) { msg.className = 'msg err'; msg.textContent = 'Cantidad inválida.'; return; }
+    if (isNaN(precio) || precio <= 0) { msg.className = 'msg err'; msg.textContent = 'Escribe el monto cobrado.'; return; }
+    if (!tasaBCV || !tasaBinance) { msg.className = 'msg err'; msg.textContent = 'No hay tasas de cambio cargadas.'; return; }
+
+    const { data: { session } } = await supabase.auth.getSession();
+
+    const { data, error } = await supabase.rpc('registrar_venta', {
+      p_producto_id: productoElegidoId,
+      p_cantidad: cantidad,
+      p_precio_venta: precio,
+      p_moneda_cobrada: moneda,
+      p_metodo_pago: metodo,
+      p_canal: canal,
+      p_notas: notas || null,
+      p_usuario_id: session?.user?.id,
+      p_tasa_bcv: tasaBCV,
+      p_tasa_binance: tasaBinance
+    });
+
+    if (error) { msg.className = 'msg err'; msg.textContent = 'Error: ' + error.message; return; }
+
+    msg.className = 'msg ok';
+    msg.textContent = 'Venta registrada y stock actualizado.';
+    limpiarFormularioVenta();
+    await cargarProductos();
+    await cargarVentas();
+  };
+
+  window.limpiarFormularioVenta = function() {
+    productoElegidoId = null;
+    document.getElementById('producto-elegido-panel').style.display = 'none';
+    document.getElementById('buscador-productos').value = '';
+    document.getElementById('v-cantidad').value = 1;
+    document.getElementById('v-precio').value = '';
+    document.getElementById('v-notas').value = '';
+    filtrarListaProductos();
+  };
+
+  async function cargarVentas() {
+    const { data } = await supabase
+      .from('ventas')
+      .select('id, cantidad, precio_venta, moneda_cobrada, metodo_pago, canal, precio_venta_usd_equiv, created_at, productos(nombre)')
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    const tbody = document.querySelector('#tabla-ventas tbody');
+    const empty = document.getElementById('empty-ventas');
+    tbody.innerHTML = '';
+
+    if (!data || data.length === 0) { empty.style.display = 'block'; renderizarStats([]); return; }
+    empty.style.display = 'none';
+
+    data.forEach(v => {
+      const tr = document.createElement('tr');
+      const fecha = new Date(v.created_at).toLocaleDateString('es-VE', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
+      tr.innerHTML = `
+        <td>${fecha}</td>
+        <td>${escapeHtml(v.productos?.nombre || '—')}</td>
+        <td class="num">${v.cantidad}</td>
+        <td class="num">${v.moneda_cobrada === 'VES' ? 'Bs ' + parseFloat(v.precio_venta).toLocaleString('es-VE') : '$' + parseFloat(v.precio_venta).toFixed(2)}</td>
+        <td><span class="pill">${METODOS_TEXTO[v.metodo_pago] || v.metodo_pago}</span></td>
+        <td><span class="pill">${v.canal === 'mercadolibre' ? 'Mercado Libre' : 'Manual'}</span></td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    renderizarStats(data);
+  }
+
+  function renderizarStats(ventas) {
+    const hoy = new Date().toDateString();
+    const ventasHoy = ventas.filter(v => new Date(v.created_at).toDateString() === hoy);
+    const totalHoyUsd = ventasHoy.reduce((s, v) => s + parseFloat(v.precio_venta_usd_equiv || 0), 0);
+    const totalGeneralUsd = ventas.reduce((s, v) => s + parseFloat(v.precio_venta_usd_equiv || 0), 0);
+    const unidadesHoy = ventasHoy.reduce((s, v) => s + v.cantidad, 0);
+
+    document.getElementById('stats-row').innerHTML = `
+      <div class="stat-card"><div class="label">Ventas de hoy</div><div class="valor">${ventasHoy.length}</div></div>
+      <div class="stat-card"><div class="label">Unidades vendidas hoy</div><div class="valor">${unidadesHoy}</div></div>
+      <div class="stat-card"><div class="label">Total cobrado hoy (equiv. $)</div><div class="valor">$${totalHoyUsd.toFixed(2)}</div></div>
+      <div class="stat-card"><div class="label">Total últimas 50 ventas (equiv. $)</div><div class="valor">$${totalGeneralUsd.toFixed(2)}</div></div>
+    `;
+  }
+
+  function escapeHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  }
+
+  (async function init() {
+    await initSesion();
+    await cargarTasas();
+    await cargarProductos();
+    await cargarVentas();
+  })();
+</script>
+
+</body>
+</html>
