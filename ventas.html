@@ -109,7 +109,59 @@
   </div>
 
   <div class="panel">
-    <h2>2. Detalles de la venta</h2>
+    <h2>2. Datos del cliente (opcional, útil para marketing y seguimiento)</h2>
+    <input type="text" id="buscador-clientes" placeholder="Busca un cliente ya registrado por nombre, documento, teléfono o seudónimo..." oninput="filtrarListaClientes()">
+    <div id="lista-clientes-buscador" style="max-height: 180px; overflow-y: auto; border: 1px solid var(--line); margin-top: 12px; display:none;"></div>
+
+    <div id="cliente-elegido-panel" style="display:none; margin-top:12px; padding:10px 14px; background:var(--surface-2); border:1px solid var(--gold); font-size:13px;">
+      Cliente seleccionado: <b id="cliente-elegido-nombre"></b>
+      <button class="secondary" style="margin:0 0 0 12px; padding:4px 10px; font-size:11px;" onclick="quitarClienteElegido()">Quitar</button>
+    </div>
+
+    <div id="form-nuevo-cliente" style="margin-top:14px;">
+      <div class="grid-form">
+        <div>
+          <label for="c-tipo">Tipo de persona</label>
+          <select id="c-tipo">
+            <option value="natural">Natural</option>
+            <option value="juridica">Jurídica</option>
+          </select>
+        </div>
+        <div>
+          <label for="c-nombre">Nombre / Razón social</label>
+          <input type="text" id="c-nombre" placeholder="Nombre completo o empresa">
+        </div>
+        <div>
+          <label for="c-documento">RIF o Cédula</label>
+          <input type="text" id="c-documento" placeholder="Ej: V-12345678">
+        </div>
+        <div>
+          <label for="c-telefono">Teléfono</label>
+          <input type="text" id="c-telefono" placeholder="0412-1234567">
+        </div>
+        <div>
+          <label for="c-email">Correo</label>
+          <input type="email" id="c-email" placeholder="cliente@correo.com">
+        </div>
+        <div>
+          <label for="c-seudonimo">Seudónimo (Mercado Libre u otro)</label>
+          <input type="text" id="c-seudonimo" placeholder="Ej: usuario_ML123">
+        </div>
+        <div>
+          <label for="c-estado">Estado</label>
+          <input type="text" id="c-estado" placeholder="Ej: Zulia">
+        </div>
+        <div>
+          <label for="c-ciudad">Ciudad</label>
+          <input type="text" id="c-ciudad" placeholder="Ej: Maracaibo">
+        </div>
+      </div>
+      <div class="hint">Deja estos campos vacíos si prefieres registrar la venta sin datos de cliente. Con solo el nombre ya se guarda.</div>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>3. Detalles de la venta</h2>
     <div class="grid-form">
       <div>
         <label for="v-cantidad">Cantidad vendida</label>
@@ -180,6 +232,59 @@
   let tasaBCV = null, tasaBinance = null;
   let productosCache = {};
   let productoElegidoId = null;
+  let clientesCache = {};
+  let clienteElegidoId = null;
+
+  async function cargarClientes() {
+    const { data } = await supabase.from('clientes').select('*').order('nombre');
+    clientesCache = {};
+    (data || []).forEach(c => { clientesCache[c.id] = c; });
+  }
+
+  window.filtrarListaClientes = function() {
+    const q = normalizarTexto(document.getElementById('buscador-clientes').value);
+    const cont = document.getElementById('lista-clientes-buscador');
+    if (!q) { cont.style.display = 'none'; cont.innerHTML = ''; return; }
+
+    const palabras = q.split(/\s+/).filter(p => p.length >= 2);
+    const filtrados = Object.values(clientesCache).filter(c => {
+      const haystack = normalizarTexto([c.nombre, c.documento, c.telefono, c.seudonimo].filter(Boolean).join(' '));
+      return palabras.every(p => haystack.includes(p));
+    });
+
+    if (filtrados.length === 0) {
+      cont.style.display = 'block';
+      cont.innerHTML = '<div class="empty">Ningún cliente coincide — puedes registrarlo como nuevo abajo.</div>';
+      return;
+    }
+
+    cont.style.display = 'block';
+    cont.innerHTML = '';
+    filtrados.forEach(c => {
+      const fila = document.createElement('div');
+      fila.className = 'fila-producto';
+      fila.innerHTML = `<span class="fp-nombre">${escapeHtml(c.nombre)}</span><span class="fp-info">${escapeHtml(c.documento || c.seudonimo || '')}</span>`;
+      fila.onclick = () => elegirCliente(c.id);
+      cont.appendChild(fila);
+    });
+  };
+
+  window.elegirCliente = function(id) {
+    clienteElegidoId = id;
+    const c = clientesCache[id];
+    document.getElementById('cliente-elegido-panel').style.display = 'block';
+    document.getElementById('cliente-elegido-nombre').textContent = c.nombre + (c.documento ? ' — ' + c.documento : '');
+    document.getElementById('lista-clientes-buscador').style.display = 'none';
+    document.getElementById('buscador-clientes').value = '';
+    document.getElementById('form-nuevo-cliente').style.display = 'none';
+  };
+
+  window.quitarClienteElegido = function() {
+    clienteElegidoId = null;
+    document.getElementById('cliente-elegido-panel').style.display = 'none';
+    document.getElementById('form-nuevo-cliente').style.display = 'block';
+  };
+
 
   const METODOS_TEXTO = {
     efectivo: 'Efectivo', zelle: 'Zelle', pago_movil: 'Pago Móvil',
@@ -311,6 +416,25 @@
 
     const { data: { session } } = await supabase.auth.getSession();
 
+    // Si no hay cliente ya elegido pero se escribió al menos el nombre, se crea uno nuevo
+    let clienteId = clienteElegidoId;
+    const nombreNuevoCliente = document.getElementById('c-nombre').value.trim();
+    if (!clienteId && nombreNuevoCliente) {
+      const { data: nuevoCliente, error: errCliente } = await supabase.from('clientes').insert({
+        tipo_persona: document.getElementById('c-tipo').value,
+        nombre: nombreNuevoCliente,
+        documento: document.getElementById('c-documento').value.trim() || null,
+        telefono: document.getElementById('c-telefono').value.trim() || null,
+        email: document.getElementById('c-email').value.trim() || null,
+        seudonimo: document.getElementById('c-seudonimo').value.trim() || null,
+        estado: document.getElementById('c-estado').value.trim() || null,
+        ciudad: document.getElementById('c-ciudad').value.trim() || null,
+        creado_por: session?.user?.id
+      }).select().single();
+      if (errCliente) { msg.className = 'msg err'; msg.textContent = 'Error al guardar el cliente: ' + errCliente.message; return; }
+      clienteId = nuevoCliente.id;
+    }
+
     const { data, error } = await supabase.rpc('registrar_venta', {
       p_producto_id: productoElegidoId,
       p_cantidad: cantidad,
@@ -321,7 +445,8 @@
       p_notas: notas || null,
       p_usuario_id: session?.user?.id,
       p_tasa_bcv: tasaBCV,
-      p_tasa_binance: tasaBinance
+      p_tasa_binance: tasaBinance,
+      p_cliente_id: clienteId
     });
 
     if (error) { msg.className = 'msg err'; msg.textContent = 'Error: ' + error.message; return; }
@@ -330,6 +455,7 @@
     msg.textContent = 'Venta registrada y stock actualizado.';
     limpiarFormularioVenta();
     await cargarProductos();
+    await cargarClientes();
     await cargarVentas();
   };
 
@@ -341,6 +467,14 @@
     document.getElementById('v-precio').value = '';
     document.getElementById('v-notas').value = '';
     filtrarListaProductos();
+
+    clienteElegidoId = null;
+    document.getElementById('cliente-elegido-panel').style.display = 'none';
+    document.getElementById('form-nuevo-cliente').style.display = 'block';
+    document.getElementById('buscador-clientes').value = '';
+    document.getElementById('lista-clientes-buscador').style.display = 'none';
+    ['c-nombre','c-documento','c-telefono','c-email','c-seudonimo','c-estado','c-ciudad']
+      .forEach(id => document.getElementById(id).value = '');
   };
 
   async function cargarVentas() {
@@ -399,6 +533,7 @@
     await initSesion();
     await cargarTasas();
     await cargarProductos();
+    await cargarClientes();
     await cargarVentas();
   })();
 </script>
