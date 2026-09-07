@@ -414,6 +414,7 @@
           <tr>
             <th><input type="checkbox" id="chk-todos" onchange="toggleTodos(this)"></th>
             <th style="min-width:220px;">Producto</th><th>Proveedor</th>
+            <th class="num">Stock</th>
             <th class="num">Costo</th>
             <th class="num" style="color:var(--teal)">Precio final al cliente ($ Ref. BCV)</th>
             <th class="num">Precio Bs (BCV)</th>
@@ -440,6 +441,31 @@
       <button onclick="document.getElementById('modal-desglose').style.display='none'" style="background:none; border:none; color:var(--muted); font-size:20px; cursor:pointer; line-height:1;">×</button>
     </div>
     <pre id="desglose-contenido" style="white-space:pre-wrap; font-family:'IBM Plex Mono',monospace; font-size:12.5px; line-height:1.7; color:var(--paper); margin:0;"></pre>
+  </div>
+</div>
+
+<div id="modal-ventas" style="display:none; position:fixed; inset:0; background:rgba(15,27,23,0.85); z-index:50; align-items:center; justify-content:center; padding:24px;">
+  <div style="background:var(--surface); border:1px solid var(--line); max-width:680px; width:100%; max-height:85vh; overflow-y:auto; padding:28px;">
+    <div style="display:flex; justify-content:space-between; align-items:start; margin-bottom:18px;">
+      <h2 style="font-family:'Fraunces',serif; font-weight:400; font-size:20px; margin:0;" id="ventas-titulo">Historial de ventas</h2>
+      <button onclick="document.getElementById('modal-ventas').style.display='none'" style="background:none; border:none; color:var(--muted); font-size:20px; cursor:pointer; line-height:1;">×</button>
+    </div>
+    <div id="ventas-resumen" style="display:flex; gap:24px; margin-bottom:18px; font-size:13px; color:var(--muted);"></div>
+    <div style="overflow-x:auto;">
+    <table style="width:100%; border-collapse:collapse; font-size:13px;">
+      <thead>
+        <tr>
+          <th style="text-align:left; font-size:11px; color:var(--muted); font-weight:500; padding:8px 10px; border-bottom:1px solid var(--line);">Fecha</th>
+          <th style="text-align:right; font-size:11px; color:var(--muted); font-weight:500; padding:8px 10px; border-bottom:1px solid var(--line);">Cant.</th>
+          <th style="text-align:right; font-size:11px; color:var(--muted); font-weight:500; padding:8px 10px; border-bottom:1px solid var(--line);">Cobrado</th>
+          <th style="text-align:left; font-size:11px; color:var(--muted); font-weight:500; padding:8px 10px; border-bottom:1px solid var(--line);">Método</th>
+          <th style="text-align:left; font-size:11px; color:var(--muted); font-weight:500; padding:8px 10px; border-bottom:1px solid var(--line);">Canal</th>
+        </tr>
+      </thead>
+      <tbody id="ventas-tbody"></tbody>
+    </table>
+    </div>
+    <div id="ventas-vacio" style="display:none; color:var(--muted); font-size:14px; text-align:center; padding:24px 0;">Este producto todavía no tiene ventas registradas.</div>
   </div>
 </div>
 
@@ -701,10 +727,22 @@
       const tr = document.createElement('tr');
       tr.dataset.productoId = p.id;
       if (p.id === productoResaltadoId) tr.classList.add('fila-resaltada');
+
+      const stock = pub.stock;
+      let stockHtml = '—';
+      if (stock !== null && stock !== undefined) {
+        let color = 'var(--teal)';
+        let etiqueta = '';
+        if (stock <= 0) { color = 'var(--rust)'; etiqueta = ' ⚠ agotado'; }
+        else if (stock <= 3) { color = 'var(--gold)'; etiqueta = ' ⚠ bajo'; }
+        stockHtml = `<span style="color:${color}; font-weight:600;">${stock}${etiqueta}</span>`;
+      }
+
       tr.innerHTML = `
         <td><input type="checkbox" class="chk-producto" value="${p.id}"></td>
         <td style="min-width:220px;">${escapeHtml(p.nombre)}</td>
         <td>${escapeHtml(p.proveedores?.nombre || '—')}</td>
+        <td class="num">${stockHtml}</td>
         <td class="num">$${parseFloat(p.costo_usd).toFixed(2)}</td>
         <td class="num" style="color:var(--teal); font-weight:700; font-size:14px;">${pub.precio_bcv_usd_equiv ? '$' + parseFloat(pub.precio_bcv_usd_equiv).toFixed(2) : '—'}</td>
         <td class="num teal-text">${pub.precio_bcv_bs ? 'Bs ' + parseFloat(pub.precio_bcv_bs).toLocaleString('es-VE', {maximumFractionDigits: 2}) : '—'}</td>
@@ -715,6 +753,7 @@
         <td>
           <button class="add" style="padding:6px 12px; font-size:12px;" onclick="editarProducto('${p.id}')">Editar</button>
           <button class="add" style="padding:6px 12px; font-size:12px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line); margin-top:4px;" onclick="verDesglose('${p.id}')">Desglose</button>
+          <button class="add" style="padding:6px 12px; font-size:12px; background:var(--surface-2); color:var(--teal); border:1px solid var(--teal); margin-top:4px;" onclick="verVentasProducto('${p.id}')">Ventas</button>
         </td>
       `;
       tbody.appendChild(tr);
@@ -930,6 +969,57 @@ RESULTADOS DEL CÁLCULO DE PRECIO
 --------------------------------------------------`;
 
     document.getElementById('modal-desglose').style.display = 'flex';
+  };
+
+  const METODOS_PAGO_TEXTO = {
+    efectivo: 'Efectivo', zelle: 'Zelle', pago_movil: 'Pago Móvil',
+    transferencia: 'Transferencia', binance: 'Binance/USDT', otro: 'Otro'
+  };
+
+  window.verVentasProducto = async function(id) {
+    const p = productosCache[id];
+    if (!p) return;
+
+    document.getElementById('ventas-titulo').textContent = 'Ventas: ' + p.nombre;
+    document.getElementById('modal-ventas').style.display = 'flex';
+    document.getElementById('ventas-resumen').innerHTML = 'Cargando...';
+    document.getElementById('ventas-tbody').innerHTML = '';
+    document.getElementById('ventas-vacio').style.display = 'none';
+
+    const { data, error } = await supabase
+      .from('ventas')
+      .select('cantidad, precio_venta, moneda_cobrada, metodo_pago, canal, precio_venta_usd_equiv, created_at')
+      .eq('producto_id', id)
+      .order('created_at', { ascending: false });
+
+    if (error || !data || data.length === 0) {
+      document.getElementById('ventas-resumen').innerHTML = '';
+      document.getElementById('ventas-vacio').style.display = 'block';
+      return;
+    }
+
+    const totalUnidades = data.reduce((s, v) => s + v.cantidad, 0);
+    const totalUsd = data.reduce((s, v) => s + parseFloat(v.precio_venta_usd_equiv || 0), 0);
+
+    document.getElementById('ventas-resumen').innerHTML = `
+      <div><b style="color:var(--paper); font-size:16px;">${data.length}</b><br>venta(s)</div>
+      <div><b style="color:var(--paper); font-size:16px;">${totalUnidades}</b><br>unidades vendidas</div>
+      <div><b style="color:var(--gold); font-size:16px;">$${totalUsd.toFixed(2)}</b><br>total acumulado (equiv. $)</div>
+    `;
+
+    const tbody = document.getElementById('ventas-tbody');
+    data.forEach(v => {
+      const fecha = new Date(v.created_at).toLocaleDateString('es-VE', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td style="padding:10px; border-bottom:1px solid var(--line);">${fecha}</td>
+        <td style="padding:10px; border-bottom:1px solid var(--line); text-align:right; font-family:'IBM Plex Mono',monospace;">${v.cantidad}</td>
+        <td style="padding:10px; border-bottom:1px solid var(--line); text-align:right; font-family:'IBM Plex Mono',monospace;">${v.moneda_cobrada === 'VES' ? 'Bs ' + parseFloat(v.precio_venta).toLocaleString('es-VE') : '$' + parseFloat(v.precio_venta).toFixed(2)}</td>
+        <td style="padding:10px; border-bottom:1px solid var(--line);"><span class="pill">${METODOS_PAGO_TEXTO[v.metodo_pago] || v.metodo_pago}</span></td>
+        <td style="padding:10px; border-bottom:1px solid var(--line);"><span class="pill">${v.canal === 'mercadolibre' ? 'Mercado Libre' : 'Manual'}</span></td>
+      `;
+      tbody.appendChild(tr);
+    });
   };
 
   window.toggleTodos = function(chkTodos) {
