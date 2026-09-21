@@ -188,6 +188,7 @@
   <a href="importar-precios.html" style="color: var(--muted); font-size: 13px; text-decoration: none; border-bottom: 1px solid var(--line);">Importar lista de precios →</a>
   <a href="analizar-competencia.html" style="color: var(--muted); font-size: 13px; text-decoration: none; border-bottom: 1px solid var(--line);">Análisis de competencia →</a>
   <a href="ventas.html" style="color: var(--muted); font-size: 13px; text-decoration: none; border-bottom: 1px solid var(--line);">Registrar venta →</a>
+  <a href="cotizaciones.html" style="color: var(--muted); font-size: 13px; text-decoration: none; border-bottom: 1px solid var(--line);">Cotizaciones →</a>
   <div class="rate-strip">
     <span>BCV <b class="gold" id="rate-bcv">—</b></span>
     <span>Binance <b class="teal" id="rate-binance">—</b></span>
@@ -403,6 +404,12 @@
           <label for="filtro-proveedor" style="display:block; font-size:12px; color:var(--muted); margin-bottom:6px;">Proveedor</label>
           <select id="filtro-proveedor" onchange="aplicarFiltrosProductos()" style="background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:9px 10px; font-size:14px;">
             <option value="">Todos los proveedores</option>
+          </select>
+        </div>
+        <div>
+          <label for="filtro-categoria" style="display:block; font-size:12px; color:var(--muted); margin-bottom:6px;">Categoría</label>
+          <select id="filtro-categoria" onchange="aplicarFiltrosProductos()" style="background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:9px 10px; font-size:14px;">
+            <option value="">Todas las categorías</option>
           </select>
         </div>
         <div id="contador-resultados" style="font-size:12px; color:var(--muted); padding-bottom:10px;"></div>
@@ -683,6 +690,7 @@
       productosCache[p.id] = { ...p, pub };
     });
 
+    actualizarFiltroCategorias();
     renderizarTablaProductos();
   }
 
@@ -700,10 +708,26 @@
     document.getElementById('filtro-precio').value = '';
     document.getElementById('filtro-costo').value = '';
     document.getElementById('filtro-proveedor').value = '';
+    document.getElementById('filtro-categoria').value = '';
     paginaActualProductos = 1;
     renderizarTablaProductos();
     guardarEstadoTablaProductos();
   };
+
+  // Recalcula las categorías disponibles en el filtro a partir de lo que hay realmente
+  // cargado en el catálogo (incluye las asignadas a mano y las clasificadas automáticamente
+  // al importar), conservando la selección actual si sigue existiendo.
+  function actualizarFiltroCategorias() {
+    const select = document.getElementById('filtro-categoria');
+    if (!select) return;
+    const valorPrevio = select.value;
+    const categorias = new Set();
+    Object.values(productosCache).forEach(p => { if (p.categoria) categorias.add(p.categoria); });
+    const ordenadas = Array.from(categorias).sort((a, b) => a.localeCompare(b, 'es'));
+    select.innerHTML = '<option value="">Todas las categorías</option>' +
+      ordenadas.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+    if (ordenadas.includes(valorPrevio)) select.value = valorPrevio;
+  }
 
   function obtenerProductosFiltrados() {
     const busqueda = normalizarCategoria(document.getElementById('filtro-busqueda').value || '');
@@ -721,6 +745,7 @@
       costoMin = min; costoMax = max;
     }
     const proveedorSel = document.getElementById('filtro-proveedor').value;
+    const categoriaSel = document.getElementById('filtro-categoria').value;
 
     const todos = Object.values(productosCache);
     return todos.filter(p => {
@@ -738,6 +763,7 @@
         if (isNaN(costo) || costo < costoMin || costo > costoMax) return false;
       }
       if (proveedorSel && p.proveedores?.id !== proveedorSel) return false;
+      if (categoriaSel && p.categoria !== categoriaSel) return false;
       return true;
     });
   }
@@ -786,9 +812,13 @@
         stockHtml = `<span style="color:${color}; font-weight:600;">${stock}${etiqueta}</span>`;
       }
 
+      const tieneDescripcion = !!(pub.descripcion && pub.descripcion.trim());
+      const nombreHtml = `${escapeHtml(p.nombre)}${tieneDescripcion ? ` <span title="${escapeHtml(pub.descripcion)}" style="color:var(--muted); cursor:help;">ⓘ</span>` : ''}` +
+        (p.categoria ? `<div style="font-size:11px; color:var(--muted); margin-top:2px;">${escapeHtml(p.categoria)}</div>` : '');
+
       tr.innerHTML = `
         <td><input type="checkbox" class="chk-producto" value="${p.id}"></td>
-        <td style="min-width:220px;">${escapeHtml(p.nombre)}</td>
+        <td style="min-width:220px;">${nombreHtml}</td>
         <td>${escapeHtml(p.proveedores?.nombre || '—')}</td>
         <td class="num">${stockHtml}</td>
         <td class="num">$${parseFloat(p.costo_usd).toFixed(2)}</td>
@@ -824,11 +854,12 @@
       document.getElementById('filtro-precio').value = '';
       document.getElementById('filtro-costo').value = '';
       document.getElementById('filtro-proveedor').value = '';
+      document.getElementById('filtro-categoria').value = '';
       const filtradosSinFiltro = obtenerProductosFiltrados();
       const indice2 = filtradosSinFiltro.findIndex(p => p.id === id);
-      paginaActualProductos = indice2 === -1 ? 1 : Math.floor(indice2 / 50) + 1;
+      paginaActualProductos = indice2 === -1 ? 1 : Math.floor(indice2 / 100) + 1;
     } else {
-      paginaActualProductos = Math.floor(indice / 50) + 1;
+      paginaActualProductos = Math.floor(indice / 100) + 1;
     }
 
     renderizarTablaProductos();
@@ -877,6 +908,7 @@
       precio: document.getElementById('filtro-precio').value,
       costo: document.getElementById('filtro-costo').value,
       proveedor: document.getElementById('filtro-proveedor').value,
+      categoria: document.getElementById('filtro-categoria').value,
       pagina: paginaActualProductos
     }));
   }
@@ -1547,6 +1579,7 @@ RESULTADOS DEL CÁLCULO DE PRECIO
     await cargarMargenesCategoria();
 
     // Restaurar los filtros y la página en que estaba la tabla de productos antes de salir
+    let categoriaGuardada = '';
     try {
       const estadoGuardado = JSON.parse(localStorage.getItem('dashboard-productos-estado') || 'null');
       if (estadoGuardado) {
@@ -1554,11 +1587,22 @@ RESULTADOS DEL CÁLCULO DE PRECIO
         if (estadoGuardado.precio) document.getElementById('filtro-precio').value = estadoGuardado.precio;
         if (estadoGuardado.costo) document.getElementById('filtro-costo').value = estadoGuardado.costo;
         if (estadoGuardado.proveedor) document.getElementById('filtro-proveedor').value = estadoGuardado.proveedor;
+        if (estadoGuardado.categoria) categoriaGuardada = estadoGuardado.categoria;
         if (estadoGuardado.pagina) paginaActualProductos = estadoGuardado.pagina;
       }
     } catch (e) {}
 
     await cargarProductos();
+
+    // La categoría se aplica después de cargar productos, porque las opciones del filtro
+    // se generan a partir del catálogo real (no existen todavía cuando se restauran los demás filtros).
+    if (categoriaGuardada) {
+      const selCategoria = document.getElementById('filtro-categoria');
+      if (Array.from(selCategoria.options).some(o => o.value === categoriaGuardada)) {
+        selCategoria.value = categoriaGuardada;
+        renderizarTablaProductos();
+      }
+    }
 
     // ¿Venimos de un enlace "Volver a productos" (?tab=productos) o de "Reajustar precio" (?editar=ID)?
     const params = new URLSearchParams(window.location.search);

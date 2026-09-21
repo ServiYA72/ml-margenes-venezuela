@@ -1,0 +1,852 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nicom System — Cotizaciones</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf-autotable.min.js"></script>
+<style>
+  :root {
+    --ink: #0F1B17; --surface: #16241F; --surface-2: #1D2E27; --line: #2C3F37;
+    --paper: #EDE8DE; --muted: #8FA69B; --gold: #C9A227; --teal: #3FA796; --rust: #C1553B;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; background: var(--ink); font-family: 'IBM Plex Sans', sans-serif; color: var(--paper); }
+  header {
+    border-bottom: 1px solid var(--line); padding: 20px 32px;
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;
+  }
+  .brand-mark { display: flex; align-items: center; }
+  .brand-logo { height: 42px; width: auto; filter: drop-shadow(0 3px 10px rgba(0,0,0,0.5)); }
+  a.nav-link { color: var(--muted); font-size: 13px; text-decoration: none; border-bottom: 1px solid var(--line); }
+  a.nav-link:hover { color: var(--paper); }
+  .who { font-size: 13px; color: var(--muted); }
+
+  main { max-width: 1200px; margin: 0 auto; padding: 32px; }
+  h1 { font-family: 'Fraunces', serif; font-weight: 400; font-size: 26px; margin: 0 0 6px 0; }
+  .sub { color: var(--muted); font-size: 14px; margin: 0 0 28px 0; line-height: 1.6; }
+
+  .panel { background: var(--surface); border: 1px solid var(--line); padding: 22px; margin-bottom: 24px; }
+  .panel h2 { font-family: 'Fraunces', serif; font-weight: 400; font-size: 18px; margin: 0 0 14px 0; }
+
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  input, select, textarea {
+    width: 100%; background: var(--surface-2); border: 1px solid var(--line); color: var(--paper);
+    padding: 10px 12px; font-size: 14px; font-family: 'IBM Plex Sans', sans-serif;
+  }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--gold); }
+  .grid-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 14px; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 8px; line-height: 1.5; }
+
+  .fila-producto {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 10px 14px; border-bottom: 1px solid var(--line); cursor: pointer; font-size: 13px;
+  }
+  .fila-producto:last-child { border-bottom: none; }
+  .fila-producto:hover { background: var(--surface-2); }
+  .fila-producto.activa { background: rgba(201,162,39,0.15); box-shadow: inset 3px 0 0 var(--gold); }
+  .fila-producto .fp-nombre { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fila-producto .fp-info { display: flex; gap: 12px; white-space: nowrap; font-family: 'IBM Plex Mono', monospace; font-size: 12px; }
+
+  .producto-elegido {
+    margin-top: 14px; padding: 14px 16px; background: var(--surface-2); border: 1px solid var(--gold); display: none;
+  }
+  .producto-elegido .nombre { font-weight: 600; font-size: 15px; margin-bottom: 10px; }
+
+  button.primary {
+    background: var(--gold); color: var(--ink); border: none; padding: 12px 22px;
+    font-weight: 600; font-size: 14px; cursor: pointer; margin-top: 8px;
+  }
+  button.primary:hover { background: #DAB13A; }
+  button.primary:disabled { background: var(--line); color: var(--muted); cursor: not-allowed; }
+  button.secondary {
+    background: var(--surface-2); color: var(--paper); border: 1px solid var(--line); padding: 12px 22px;
+    font-weight: 500; font-size: 14px; cursor: pointer; margin-top: 8px; margin-left: 10px;
+  }
+  button.secondary:disabled { opacity: 0.5; cursor: not-allowed; }
+  button.chip {
+    background: var(--surface-2); color: var(--paper); border: 1px solid var(--line); padding: 7px 12px;
+    font-size: 12.5px; cursor: pointer;
+  }
+  button.chip:hover { border-color: var(--gold); }
+
+  .msg { font-size: 13px; margin-top: 12px; }
+  .msg.err { color: var(--rust); }
+  .msg.ok { color: var(--teal); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; font-size: 11px; color: var(--muted); font-weight: 500; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+  td { padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  td.num, th.num { font-family: 'IBM Plex Mono', monospace; text-align: right; }
+  .empty { color: var(--muted); font-size: 14px; text-align: center; padding: 20px 0; }
+  .fila-item input { width: 90px; padding: 6px 8px; font-size: 12.5px; }
+  .fila-item input.input-desc { width: 100%; }
+
+  .totales-box { display: flex; justify-content: flex-end; margin-top: 14px; }
+  .totales-box table { width: auto; min-width: 260px; }
+  .totales-box td { border-bottom: none; padding: 6px 10px; }
+  .totales-box tr.total td { font-size: 16px; font-weight: 600; color: var(--gold); border-top: 1px solid var(--line); padding-top: 10px; }
+
+  .estado-pill { font-size: 11px; padding: 3px 9px; border: 1px solid var(--line); display: inline-block; }
+  .estado-borrador { color: var(--muted); }
+  .estado-enviada { color: var(--teal); border-color: var(--teal); }
+  .estado-aceptada { color: var(--gold); border-color: var(--gold); }
+  .estado-rechazada, .estado-vencida { color: var(--rust); border-color: var(--rust); }
+
+  details.datos-empresa { margin-bottom: 24px; }
+  details.datos-empresa summary { cursor: pointer; font-size: 12.5px; color: var(--muted); padding: 6px 0; }
+  details.datos-empresa summary:hover { color: var(--paper); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand-mark"><img src="logo-nicom.png" alt="Nicom Tech Solutions" class="brand-logo"></div>
+  <a class="nav-link" href="dashboard.html?tab=productos">← Volver a productos</a>
+  <div class="who" id="who">Cargando sesión…</div>
+</header>
+
+<main>
+  <h1>Cotizaciones</h1>
+  <p class="sub">Arma una cotización con precios propios — independiente de las comisiones de Mercado Libre — y compártela en PDF por correo o WhatsApp.</p>
+
+  <details class="datos-empresa">
+    <summary>Datos de tu empresa para el PDF (dirección, teléfono, RIF) — se guardan en este navegador</summary>
+    <div class="panel" style="margin-top:10px;">
+      <div class="grid-form">
+        <div>
+          <label for="emp-direccion">Dirección</label>
+          <input type="text" id="emp-direccion" placeholder="Ej: Maracaibo, Zulia, Venezuela">
+        </div>
+        <div>
+          <label for="emp-telefono">Teléfono</label>
+          <input type="text" id="emp-telefono" placeholder="0412-1234567">
+        </div>
+        <div>
+          <label for="emp-email">Correo</label>
+          <input type="email" id="emp-email" placeholder="ventas@nicomtech.com">
+        </div>
+        <div>
+          <label for="emp-rif">RIF / Documento fiscal (opcional)</label>
+          <input type="text" id="emp-rif" placeholder="J-12345678-9">
+        </div>
+      </div>
+      <button class="secondary" style="margin-left:0;" onclick="guardarDatosEmpresa()">Guardar datos</button>
+      <div class="msg" id="msg-empresa"></div>
+    </div>
+  </details>
+
+  <div class="panel">
+    <h2>1. Cliente</h2>
+    <input type="text" id="buscador-clientes" placeholder="Busca un cliente ya registrado por nombre, documento, teléfono o seudónimo..." oninput="filtrarListaClientes()">
+    <div id="lista-clientes-buscador" style="max-height: 180px; overflow-y: auto; border: 1px solid var(--line); margin-top: 12px; display:none;"></div>
+
+    <div id="cliente-elegido-panel" style="display:none; margin-top:12px; padding:10px 14px; background:var(--surface-2); border:1px solid var(--gold); font-size:13px;">
+      Cliente seleccionado: <b id="cliente-elegido-nombre"></b>
+      <button class="secondary" style="margin:0 0 0 12px; padding:4px 10px; font-size:11px;" onclick="quitarClienteElegido()">Quitar</button>
+    </div>
+
+    <div class="grid-form" style="margin-top:14px;">
+      <div>
+        <label for="cot-cliente-nombre">Nombre / Razón social</label>
+        <input type="text" id="cot-cliente-nombre" placeholder="Nombre completo o empresa">
+      </div>
+      <div>
+        <label for="cot-cliente-empresa">Empresa (opcional)</label>
+        <input type="text" id="cot-cliente-empresa" placeholder="Si cotiza a nombre de una empresa">
+      </div>
+      <div>
+        <label for="cot-cliente-telefono">Teléfono (para WhatsApp)</label>
+        <input type="text" id="cot-cliente-telefono" placeholder="0412-1234567">
+      </div>
+      <div>
+        <label for="cot-cliente-email">Correo (para enviar por email)</label>
+        <input type="email" id="cot-cliente-email" placeholder="cliente@correo.com">
+      </div>
+    </div>
+    <div class="hint">Puedes elegir un cliente ya registrado o simplemente escribir el nombre para una cotización rápida — no hace falta registrarlo primero.</div>
+  </div>
+
+  <div class="panel">
+    <h2>2. Agrega productos del catálogo</h2>
+    <input type="text" id="buscador-productos" placeholder="Busca por nombre, código, categoría o marca..." oninput="filtrarListaProductos()">
+    <div id="lista-productos-buscador" style="max-height: 240px; overflow-y: auto; border: 1px solid var(--line); margin-top: 12px;"></div>
+    <div class="hint" id="contador-lista-productos"></div>
+
+    <div class="producto-elegido" id="producto-elegido-panel">
+      <div class="nombre" id="pe-nombre"></div>
+      <div class="grid-form" style="margin-bottom:0;">
+        <div>
+          <label for="pe-cantidad">Cantidad</label>
+          <input type="number" id="pe-cantidad" value="1" min="1">
+        </div>
+        <div>
+          <label for="pe-precio">Precio unitario (sin comisión ML)</label>
+          <input type="number" step="0.01" id="pe-precio">
+        </div>
+      </div>
+      <div class="hint" id="pe-costo-ref" style="margin-top:0;"></div>
+      <button class="primary" onclick="agregarItemDesdeProducto()">Agregar a la cotización</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>3. O agrega un ítem libre (no está en el catálogo)</h2>
+    <div class="grid-form" style="margin-bottom:0;">
+      <div style="flex:2;">
+        <label for="libre-desc">Descripción</label>
+        <input type="text" id="libre-desc" placeholder="Ej: Instalación y configuración">
+      </div>
+      <div>
+        <label for="libre-cantidad">Cantidad</label>
+        <input type="number" id="libre-cantidad" value="1" min="1">
+      </div>
+      <div>
+        <label for="libre-precio">Precio unitario</label>
+        <input type="number" step="0.01" id="libre-precio" placeholder="0.00">
+      </div>
+    </div>
+    <button class="secondary" style="margin-left:0;" onclick="agregarItemLibre()">Agregar ítem libre</button>
+  </div>
+
+  <div class="panel">
+    <h2>4. Ítems de la cotización</h2>
+    <div style="overflow-x:auto;">
+    <table id="tabla-items">
+      <thead>
+        <tr>
+          <th style="min-width:240px;">Descripción</th>
+          <th class="num" style="width:90px;">Cant.</th>
+          <th class="num" style="width:120px;">Precio unit.</th>
+          <th class="num" style="width:120px;">Subtotal</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="tbody-items"></tbody>
+    </table>
+    </div>
+    <div class="empty" id="empty-items">Todavía no agregaste ningún producto o ítem.</div>
+
+    <div class="totales-box">
+      <table>
+        <tr><td>Subtotal</td><td class="num" id="txt-subtotal">$0.00</td></tr>
+        <tr class="total"><td>Total</td><td class="num" id="txt-total">$0.00</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>5. Condiciones</h2>
+    <div class="grid-form">
+      <div>
+        <label for="cot-validez">Validez de la cotización (días)</label>
+        <input type="number" id="cot-validez" value="7" min="1">
+      </div>
+      <div>
+        <label for="cot-condiciones-pago">Condiciones de pago</label>
+        <input type="text" id="cot-condiciones-pago" placeholder="Ej: 50% de anticipo, resto contra entrega">
+      </div>
+    </div>
+    <label for="cot-notas">Notas (opcional, aparecen en el PDF)</label>
+    <textarea id="cot-notas" rows="2" placeholder="Ej: precios sujetos a disponibilidad de inventario"></textarea>
+
+    <button class="primary" id="btn-guardar-cot" onclick="guardarCotizacion()">Guardar cotización</button>
+    <button class="secondary" onclick="limpiarFormularioCotizacion()">Nueva cotización</button>
+    <div class="msg" id="msg-cotizacion"></div>
+
+    <div id="acciones-post-guardado" style="display:none; margin-top:16px; padding-top:16px; border-top:1px solid var(--line);">
+      <div class="hint" style="margin-top:0;">Cotización guardada — ahora puedes descargarla o compartirla. Como este sistema no envía correos ni mensajes automáticamente, el PDF se descarga primero y luego se abre WhatsApp o tu correo con el mensaje listo para que adjuntes ese archivo.</div>
+      <button class="secondary" style="margin-left:0;" onclick="descargarPDF()">Descargar PDF</button>
+      <button class="secondary" onclick="enviarPorWhatsApp()">Enviar por WhatsApp</button>
+      <button class="secondary" onclick="enviarPorCorreo()">Enviar por correo</button>
+    </div>
+  </div>
+
+  <div class="panel">
+    <h2>Historial de cotizaciones recientes</h2>
+    <div style="overflow-x:auto;">
+    <table id="tabla-historial">
+      <thead>
+        <tr>
+          <th>N°</th><th>Cliente</th><th>Fecha</th><th class="num">Total</th><th>Estado</th><th></th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    </div>
+    <div class="empty" id="empty-historial" style="display:none;">Todavía no hay cotizaciones guardadas.</div>
+  </div>
+</main>
+
+<script type="module">
+  import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+  const SUPABASE_URL = 'https://tkhzuopapvclmcgxyood.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_KQB6B6uLIPr-xKdNDc8iEw_7tcWM5gS';
+  const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  let clientesCache = {};
+  let clienteElegidoId = null;
+  let productosCache = {};
+  let productoElegidoId = null;
+  let itemsCotizacion = []; // { producto_id, descripcion, cantidad, precioUnitario }
+  let cotizacionGuardada = null; // { id, numero, cliente_nombre, cliente_telefono, cliente_email, ...totales }
+  let logoBase64Cache = null;
+
+  function escapeHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = str == null ? '' : String(str);
+    return d.innerHTML;
+  }
+
+  function normalizarTexto(str) {
+    return String(str || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  }
+
+  async function initSesion() {
+    const { data: { session } } = await supabase.auth.getSession();
+    const who = document.getElementById('who');
+    if (!session) { who.textContent = 'No hay sesión — inicia sesión en login.html'; who.style.color = '#C1553B'; }
+    else who.textContent = session.user.email;
+  }
+
+  // ---------- Datos de la empresa para el PDF (guardados en este navegador) ----------
+  const CLAVE_DATOS_EMPRESA = 'nicom-datos-empresa-cotizacion';
+
+  function cargarDatosEmpresa() {
+    try {
+      const datos = JSON.parse(localStorage.getItem(CLAVE_DATOS_EMPRESA) || 'null');
+      if (datos) {
+        document.getElementById('emp-direccion').value = datos.direccion || '';
+        document.getElementById('emp-telefono').value = datos.telefono || '';
+        document.getElementById('emp-email').value = datos.email || '';
+        document.getElementById('emp-rif').value = datos.rif || '';
+      }
+    } catch (e) {}
+  }
+
+  window.guardarDatosEmpresa = function() {
+    const datos = {
+      direccion: document.getElementById('emp-direccion').value.trim(),
+      telefono: document.getElementById('emp-telefono').value.trim(),
+      email: document.getElementById('emp-email').value.trim(),
+      rif: document.getElementById('emp-rif').value.trim()
+    };
+    try {
+      localStorage.setItem(CLAVE_DATOS_EMPRESA, JSON.stringify(datos));
+      const msg = document.getElementById('msg-empresa');
+      msg.className = 'msg ok';
+      msg.textContent = 'Guardado. Se usará en el encabezado de las próximas cotizaciones en PDF.';
+    } catch (e) {}
+  };
+
+  function obtenerDatosEmpresa() {
+    try { return JSON.parse(localStorage.getItem(CLAVE_DATOS_EMPRESA) || '{}'); } catch (e) { return {}; }
+  }
+
+  async function obtenerLogoBase64() {
+    if (logoBase64Cache) return logoBase64Cache;
+    try {
+      const resp = await fetch('logo-nicom.png');
+      const blob = await resp.blob();
+      logoBase64Cache = await new Promise((resolve, reject) => {
+        const lector = new FileReader();
+        lector.onload = () => resolve(lector.result);
+        lector.onerror = reject;
+        lector.readAsDataURL(blob);
+      });
+    } catch (e) { logoBase64Cache = null; }
+    return logoBase64Cache;
+  }
+
+  // ---------- Clientes ----------
+  async function cargarClientes() {
+    const { data } = await supabase.from('clientes').select('*').order('nombre');
+    clientesCache = {};
+    (data || []).forEach(c => { clientesCache[c.id] = c; });
+  }
+
+  window.filtrarListaClientes = function() {
+    const q = normalizarTexto(document.getElementById('buscador-clientes').value);
+    const cont = document.getElementById('lista-clientes-buscador');
+    if (!q) { cont.style.display = 'none'; cont.innerHTML = ''; return; }
+
+    const palabras = q.split(/\s+/).filter(p => p.length >= 2);
+    const filtrados = Object.values(clientesCache).filter(c => {
+      const haystack = normalizarTexto([c.nombre, c.documento, c.telefono, c.seudonimo].filter(Boolean).join(' '));
+      return palabras.every(p => haystack.includes(p));
+    });
+
+    cont.style.display = 'block';
+    if (filtrados.length === 0) {
+      cont.innerHTML = '<div class="empty">Ningún cliente coincide — puedes escribir sus datos directamente abajo.</div>';
+      return;
+    }
+    cont.innerHTML = '';
+    filtrados.forEach(c => {
+      const fila = document.createElement('div');
+      fila.className = 'fila-producto';
+      fila.innerHTML = `<span class="fp-nombre">${escapeHtml(c.nombre)}</span><span class="fp-info">${escapeHtml(c.documento || c.seudonimo || '')}</span>`;
+      fila.onclick = () => elegirCliente(c.id);
+      cont.appendChild(fila);
+    });
+  };
+
+  window.elegirCliente = function(id) {
+    clienteElegidoId = id;
+    const c = clientesCache[id];
+    if (!c) return;
+    document.getElementById('cliente-elegido-panel').style.display = 'block';
+    document.getElementById('cliente-elegido-nombre').textContent = c.nombre + (c.documento ? ' — ' + c.documento : '');
+    document.getElementById('lista-clientes-buscador').style.display = 'none';
+    document.getElementById('buscador-clientes').value = '';
+    document.getElementById('cot-cliente-nombre').value = c.nombre || '';
+    document.getElementById('cot-cliente-telefono').value = c.telefono || '';
+    document.getElementById('cot-cliente-email').value = c.email || '';
+  };
+
+  window.quitarClienteElegido = function() {
+    clienteElegidoId = null;
+    document.getElementById('cliente-elegido-panel').style.display = 'none';
+  };
+
+  // ---------- Productos ----------
+  async function cargarProductos() {
+    const TAMANO_BLOQUE = 1000;
+    let desde = 0, todos = [];
+    while (true) {
+      const { data, error } = await supabase
+        .from('productos')
+        .select('id, nombre, sku, categoria, especificaciones, costo_usd')
+        .order('nombre')
+        .range(desde, desde + TAMANO_BLOQUE - 1);
+      if (error || !data || data.length === 0) break;
+      todos = todos.concat(data);
+      if (data.length < TAMANO_BLOQUE) break;
+      desde += TAMANO_BLOQUE;
+    }
+    productosCache = {};
+    todos.forEach(p => { productosCache[p.id] = p; });
+  }
+
+  window.filtrarListaProductos = function() {
+    const qCompleto = normalizarTexto(document.getElementById('buscador-productos').value);
+    const cont = document.getElementById('lista-productos-buscador');
+    const contador = document.getElementById('contador-lista-productos');
+    if (!qCompleto) { cont.innerHTML = ''; contador.textContent = ''; return; }
+
+    const palabras = qCompleto.split(/\s+/).filter(p => p.length >= 2);
+    const filtrados = Object.values(productosCache).filter(p => {
+      const marca = p.especificaciones?.marca || '';
+      const haystack = normalizarTexto([p.nombre, p.sku, p.categoria, marca].filter(Boolean).join(' '));
+      return palabras.every(palabra => haystack.includes(palabra));
+    }).slice(0, 60);
+
+    contador.textContent = `${filtrados.length} producto(s)${filtrados.length === 60 ? ' (afina la búsqueda para ver más)' : ''}`;
+    cont.innerHTML = '';
+    if (filtrados.length === 0) {
+      cont.innerHTML = '<div class="empty">Ningún producto coincide con la búsqueda.</div>';
+      return;
+    }
+    filtrados.forEach(p => {
+      const fila = document.createElement('div');
+      fila.className = 'fila-producto' + (p.id === productoElegidoId ? ' activa' : '');
+      fila.innerHTML = `
+        <span class="fp-nombre">${escapeHtml(p.nombre)}</span>
+        <span class="fp-info">
+          <span style="color:var(--muted)">${escapeHtml(p.categoria || '')}</span>
+          <span style="color:var(--gold)">costo $${parseFloat(p.costo_usd || 0).toFixed(2)}</span>
+        </span>
+      `;
+      fila.onclick = () => elegirProducto(p.id);
+      cont.appendChild(fila);
+    });
+  };
+
+  window.elegirProducto = function(id) {
+    productoElegidoId = id;
+    const p = productosCache[id];
+    if (!p) return;
+    filtrarListaProductos();
+
+    const panel = document.getElementById('producto-elegido-panel');
+    panel.style.display = 'block';
+    document.getElementById('pe-nombre').textContent = p.nombre;
+    document.getElementById('pe-costo-ref').textContent = `Costo de referencia (proveedor): $${parseFloat(p.costo_usd || 0).toFixed(2)} — el precio unitario es el que le vas a cobrar al cliente, sin comisión de Mercado Libre.`;
+    document.getElementById('pe-cantidad').value = 1;
+    document.getElementById('pe-precio').value = parseFloat(p.costo_usd || 0).toFixed(2);
+  };
+
+  window.agregarItemDesdeProducto = function() {
+    if (!productoElegidoId) return;
+    const p = productosCache[productoElegidoId];
+    const cantidad = parseFloat(document.getElementById('pe-cantidad').value);
+    const precioUnitario = parseFloat(document.getElementById('pe-precio').value);
+    if (!cantidad || cantidad <= 0 || isNaN(precioUnitario) || precioUnitario < 0) {
+      alert('Revisa la cantidad y el precio unitario.');
+      return;
+    }
+    itemsCotizacion.push({ producto_id: p.id, descripcion: p.nombre, cantidad, precioUnitario });
+    renderizarTablaItems();
+
+    productoElegidoId = null;
+    document.getElementById('producto-elegido-panel').style.display = 'none';
+    document.getElementById('buscador-productos').value = '';
+    document.getElementById('lista-productos-buscador').innerHTML = '';
+    document.getElementById('contador-lista-productos').textContent = '';
+  };
+
+  window.agregarItemLibre = function() {
+    const descripcion = document.getElementById('libre-desc').value.trim();
+    const cantidad = parseFloat(document.getElementById('libre-cantidad').value);
+    const precioUnitario = parseFloat(document.getElementById('libre-precio').value);
+    if (!descripcion) { alert('Escribe una descripción para el ítem.'); return; }
+    if (!cantidad || cantidad <= 0 || isNaN(precioUnitario) || precioUnitario < 0) {
+      alert('Revisa la cantidad y el precio unitario.');
+      return;
+    }
+    itemsCotizacion.push({ producto_id: null, descripcion, cantidad, precioUnitario });
+    renderizarTablaItems();
+
+    document.getElementById('libre-desc').value = '';
+    document.getElementById('libre-cantidad').value = 1;
+    document.getElementById('libre-precio').value = '';
+  };
+
+  window.quitarItem = function(idx) {
+    itemsCotizacion.splice(idx, 1);
+    renderizarTablaItems();
+  };
+
+  window.actualizarItem = function(idx, campo, valor) {
+    const item = itemsCotizacion[idx];
+    if (!item) return;
+    if (campo === 'cantidad') item.cantidad = parseFloat(valor) || 0;
+    if (campo === 'precioUnitario') item.precioUnitario = parseFloat(valor) || 0;
+    renderizarTablaItems(true);
+  };
+
+  function calcularTotales() {
+    const subtotal = itemsCotizacion.reduce((acc, it) => acc + (it.cantidad * it.precioUnitario), 0);
+    return { subtotal, total: subtotal };
+  }
+
+  function renderizarTablaItems(conservarFoco) {
+    const tbody = document.getElementById('tbody-items');
+    const empty = document.getElementById('empty-items');
+    tbody.innerHTML = '';
+
+    if (itemsCotizacion.length === 0) {
+      empty.style.display = 'block';
+    } else {
+      empty.style.display = 'none';
+      itemsCotizacion.forEach((it, idx) => {
+        const subtotal = it.cantidad * it.precioUnitario;
+        const tr = document.createElement('tr');
+        tr.className = 'fila-item';
+        tr.innerHTML = `
+          <td>${escapeHtml(it.descripcion)}${it.producto_id ? ' <span style="color:var(--muted); font-size:11px;">(catálogo)</span>' : ''}</td>
+          <td class="num"><input type="number" value="${it.cantidad}" min="0" oninput="actualizarItem(${idx}, 'cantidad', this.value)"></td>
+          <td class="num"><input type="number" step="0.01" value="${it.precioUnitario}" min="0" oninput="actualizarItem(${idx}, 'precioUnitario', this.value)"></td>
+          <td class="num">$${subtotal.toFixed(2)}</td>
+          <td><button class="secondary" style="margin:0; padding:5px 10px; font-size:11px;" onclick="quitarItem(${idx})">Quitar</button></td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    const { subtotal, total } = calcularTotales();
+    document.getElementById('txt-subtotal').textContent = '$' + subtotal.toFixed(2);
+    document.getElementById('txt-total').textContent = '$' + total.toFixed(2);
+
+    // Si se edita un ítem después de guardar la cotización, hay que guardar de nuevo
+    // para que el PDF y el historial reflejen el cambio.
+    if (cotizacionGuardada) {
+      document.getElementById('acciones-post-guardado').style.display = 'none';
+      cotizacionGuardada = null;
+    }
+  }
+
+  // ---------- Guardar cotización ----------
+  window.guardarCotizacion = async function() {
+    const msg = document.getElementById('msg-cotizacion');
+    const clienteNombre = document.getElementById('cot-cliente-nombre').value.trim();
+
+    if (!clienteNombre) { msg.className = 'msg err'; msg.textContent = 'Escribe el nombre del cliente.'; return; }
+    if (itemsCotizacion.length === 0) { msg.className = 'msg err'; msg.textContent = 'Agrega al menos un producto o ítem.'; return; }
+
+    const btn = document.getElementById('btn-guardar-cot');
+    btn.disabled = true;
+    btn.textContent = 'Guardando...';
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const { subtotal, total } = calcularTotales();
+
+    const cabecera = {
+      cliente_id: clienteElegidoId || null,
+      cliente_nombre: clienteNombre,
+      cliente_empresa: document.getElementById('cot-cliente-empresa').value.trim() || null,
+      cliente_telefono: document.getElementById('cot-cliente-telefono').value.trim() || null,
+      cliente_email: document.getElementById('cot-cliente-email').value.trim() || null,
+      validez_dias: parseInt(document.getElementById('cot-validez').value) || 7,
+      condiciones_pago: document.getElementById('cot-condiciones-pago').value.trim() || null,
+      notas: document.getElementById('cot-notas').value.trim() || null,
+      subtotal: subtotal.toFixed(2),
+      total: total.toFixed(2),
+      creado_por: session?.user?.id
+    };
+
+    const { data: cotizacion, error: errCab } = await supabase.from('cotizaciones').insert(cabecera).select().single();
+    if (errCab) {
+      btn.disabled = false;
+      btn.textContent = 'Guardar cotización';
+      msg.className = 'msg err';
+      msg.textContent = 'Error al guardar: ' + errCab.message;
+      return;
+    }
+
+    const filasItems = itemsCotizacion.map((it, idx) => ({
+      cotizacion_id: cotizacion.id,
+      producto_id: it.producto_id,
+      descripcion: it.descripcion,
+      cantidad: it.cantidad,
+      precio_unitario: it.precioUnitario.toFixed(2),
+      subtotal: (it.cantidad * it.precioUnitario).toFixed(2),
+      orden: idx
+    }));
+    const { error: errItems } = await supabase.from('cotizacion_items').insert(filasItems);
+
+    btn.disabled = false;
+    btn.textContent = 'Guardar cotización';
+
+    if (errItems) {
+      msg.className = 'msg err';
+      msg.textContent = 'La cotización se creó pero hubo un error guardando los ítems: ' + errItems.message;
+      return;
+    }
+
+    msg.className = 'msg ok';
+    msg.textContent = `Cotización N° ${cotizacion.numero} guardada.`;
+
+    cotizacionGuardada = { ...cabecera, id: cotizacion.id, numero: cotizacion.numero, fecha: cotizacion.fecha, items: itemsCotizacion.map(it => ({ ...it })) };
+    document.getElementById('acciones-post-guardado').style.display = 'block';
+
+    cargarHistorial();
+  };
+
+  window.limpiarFormularioCotizacion = function() {
+    clienteElegidoId = null;
+    productoElegidoId = null;
+    itemsCotizacion = [];
+    cotizacionGuardada = null;
+    document.getElementById('cliente-elegido-panel').style.display = 'none';
+    document.getElementById('buscador-clientes').value = '';
+    document.getElementById('cot-cliente-nombre').value = '';
+    document.getElementById('cot-cliente-empresa').value = '';
+    document.getElementById('cot-cliente-telefono').value = '';
+    document.getElementById('cot-cliente-email').value = '';
+    document.getElementById('buscador-productos').value = '';
+    document.getElementById('lista-productos-buscador').innerHTML = '';
+    document.getElementById('producto-elegido-panel').style.display = 'none';
+    document.getElementById('cot-validez').value = 7;
+    document.getElementById('cot-condiciones-pago').value = '';
+    document.getElementById('cot-notas').value = '';
+    document.getElementById('acciones-post-guardado').style.display = 'none';
+    document.getElementById('msg-cotizacion').textContent = '';
+    renderizarTablaItems();
+  };
+
+  // ---------- PDF ----------
+  async function construirPDF(cot) {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: 'pt', format: 'letter' });
+    const empresa = obtenerDatosEmpresa();
+    const logo = await obtenerLogoBase64();
+    const margenX = 40;
+    let y = 50;
+
+    if (logo) {
+      try { doc.addImage(logo, 'PNG', margenX, y - 20, 110, 40, undefined, 'FAST'); } catch (e) {}
+    }
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(20);
+    doc.setTextColor(20, 30, 26);
+    doc.text('COTIZACIÓN', 555, y, { align: 'right' });
+    doc.setFontSize(11);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`N° ${String(cot.numero).padStart(4, '0')}`, 555, y + 18, { align: 'right' });
+    doc.text(`Fecha: ${cot.fecha || new Date().toISOString().slice(0, 10)}`, 555, y + 34, { align: 'right' });
+    doc.text(`Válida por ${cot.validez_dias || 7} día(s)`, 555, y + 50, { align: 'right' });
+
+    y += 60;
+    doc.setDrawColor(200, 200, 200);
+    doc.line(margenX, y, 555, y);
+    y += 20;
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(10);
+    doc.text('Nicom Tech Solutions', margenX, y);
+    doc.setFont('helvetica', 'normal');
+    let yEmpresa = y + 14;
+    [empresa.direccion, empresa.telefono, empresa.email, empresa.rif ? `RIF: ${empresa.rif}` : null]
+      .filter(Boolean)
+      .forEach(linea => { doc.text(linea, margenX, yEmpresa); yEmpresa += 13; });
+
+    doc.setFont('helvetica', 'bold');
+    doc.text('Cotizado a', 320, y);
+    doc.setFont('helvetica', 'normal');
+    let yCliente = y + 14;
+    [cot.cliente_nombre, cot.cliente_empresa, cot.cliente_telefono, cot.cliente_email]
+      .filter(Boolean)
+      .forEach(linea => { doc.text(String(linea), 320, yCliente); yCliente += 13; });
+
+    y = Math.max(yEmpresa, yCliente) + 16;
+
+    const filas = (cot.items || []).map(it => [
+      it.descripcion,
+      String(it.cantidad),
+      '$' + Number(it.precioUnitario ?? it.precio_unitario).toFixed(2),
+      '$' + (it.cantidad * (it.precioUnitario ?? it.precio_unitario)).toFixed(2)
+    ]);
+
+    doc.autoTable({
+      startY: y,
+      margin: { left: margenX, right: 40 },
+      head: [['Descripción', 'Cant.', 'Precio unit.', 'Subtotal']],
+      body: filas,
+      styles: { font: 'helvetica', fontSize: 10, cellPadding: 6 },
+      headStyles: { fillColor: [22, 36, 31], textColor: [237, 232, 222] },
+      columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' } }
+    });
+
+    let yFinal = doc.lastAutoTable.finalY + 20;
+    const subtotal = Number(cot.subtotal || 0);
+    const total = Number(cot.total || 0);
+    doc.setFont('helvetica', 'normal');
+    doc.text('Subtotal', 420, yFinal);
+    doc.text('$' + subtotal.toFixed(2), 555, yFinal, { align: 'right' });
+    yFinal += 16;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.text('Total', 420, yFinal);
+    doc.text('$' + total.toFixed(2), 555, yFinal, { align: 'right' });
+    yFinal += 26;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(10);
+    if (cot.condiciones_pago) { doc.text('Condiciones de pago: ' + cot.condiciones_pago, margenX, yFinal); yFinal += 16; }
+    if (cot.notas) {
+      const notasWrap = doc.splitTextToSize('Notas: ' + cot.notas, 515);
+      doc.text(notasWrap, margenX, yFinal);
+    }
+
+    return doc;
+  }
+
+  function nombreArchivoPDF(cot) {
+    const cliente = (cot.cliente_nombre || 'cliente').replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+    return `cotizacion-${String(cot.numero).padStart(4, '0')}-${cliente}.pdf`;
+  }
+
+  window.descargarPDF = async function() {
+    if (!cotizacionGuardada) return;
+    const doc = await construirPDF(cotizacionGuardada);
+    doc.save(nombreArchivoPDF(cotizacionGuardada));
+  };
+
+  function normalizarTelefonoVE(tel) {
+    let digitos = String(tel || '').replace(/\D/g, '');
+    if (!digitos) return '';
+    if (digitos.startsWith('58')) return digitos;
+    if (digitos.startsWith('0')) return '58' + digitos.slice(1);
+    return digitos;
+  }
+
+  window.enviarPorWhatsApp = async function() {
+    if (!cotizacionGuardada) return;
+    if (!cotizacionGuardada.cliente_telefono) {
+      alert('Este cliente no tiene teléfono guardado en la cotización. Agrégalo en el paso 1 y vuelve a guardar.');
+      return;
+    }
+    const doc = await construirPDF(cotizacionGuardada);
+    doc.save(nombreArchivoPDF(cotizacionGuardada));
+
+    const numero = normalizarTelefonoVE(cotizacionGuardada.cliente_telefono);
+    const mensaje = `Hola ${cotizacionGuardada.cliente_nombre}, te comparto la cotización N° ${cotizacionGuardada.numero} de Nicom Tech Solutions por $${Number(cotizacionGuardada.total).toFixed(2)}. Adjunto el PDF que se acaba de descargar.`;
+    window.open(`https://wa.me/${numero}?text=${encodeURIComponent(mensaje)}`, '_blank');
+  };
+
+  window.enviarPorCorreo = async function() {
+    if (!cotizacionGuardada) return;
+    if (!cotizacionGuardada.cliente_email) {
+      alert('Este cliente no tiene correo guardado en la cotización. Agrégalo en el paso 1 y vuelve a guardar.');
+      return;
+    }
+    const doc = await construirPDF(cotizacionGuardada);
+    doc.save(nombreArchivoPDF(cotizacionGuardada));
+
+    const asunto = `Cotización N° ${cotizacionGuardada.numero} — Nicom Tech Solutions`;
+    const cuerpo = `Hola ${cotizacionGuardada.cliente_nombre},\n\nAdjunto la cotización N° ${cotizacionGuardada.numero} por $${Number(cotizacionGuardada.total).toFixed(2)} (el PDF se acaba de descargar en tu equipo — adjúntalo aquí antes de enviar).\n\nSaludos,\nNicom Tech Solutions`;
+    window.location.href = `mailto:${encodeURIComponent(cotizacionGuardada.cliente_email)}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
+  };
+
+  // ---------- Historial ----------
+  const ESTADOS = ['borrador', 'enviada', 'aceptada', 'rechazada', 'vencida'];
+
+  async function cargarHistorial() {
+    const { data } = await supabase
+      .from('cotizaciones')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(30);
+
+    const tbody = document.querySelector('#tabla-historial tbody');
+    const empty = document.getElementById('empty-historial');
+    tbody.innerHTML = '';
+
+    if (!data || data.length === 0) {
+      empty.style.display = 'block';
+      return;
+    }
+    empty.style.display = 'none';
+
+    data.forEach(c => {
+      const tr = document.createElement('tr');
+      const opciones = ESTADOS.map(e => `<option value="${e}" ${e === c.estado ? 'selected' : ''}>${e}</option>`).join('');
+      tr.innerHTML = `
+        <td>#${String(c.numero).padStart(4, '0')}</td>
+        <td>${escapeHtml(c.cliente_nombre)}</td>
+        <td>${escapeHtml(c.fecha)}</td>
+        <td class="num">$${parseFloat(c.total).toFixed(2)}</td>
+        <td><select class="estado-select" onchange="actualizarEstadoCotizacion('${c.id}', this.value)">${opciones}</select></td>
+        <td><button class="secondary" style="margin:0; padding:5px 10px; font-size:11px;" onclick="regenerarPDFHistorial('${c.id}')">PDF</button></td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  window.actualizarEstadoCotizacion = async function(id, estado) {
+    await supabase.from('cotizaciones').update({ estado, updated_at: new Date().toISOString() }).eq('id', id);
+  };
+
+  window.regenerarPDFHistorial = async function(id) {
+    const { data: cot } = await supabase.from('cotizaciones').select('*').eq('id', id).single();
+    const { data: items } = await supabase.from('cotizacion_items').select('*').eq('cotizacion_id', id).order('orden');
+    if (!cot) return;
+    const doc = await construirPDF({ ...cot, items: (items || []).map(it => ({ descripcion: it.descripcion, cantidad: parseFloat(it.cantidad), precioUnitario: parseFloat(it.precio_unitario) })) });
+    doc.save(nombreArchivoPDF(cot));
+  };
+
+  (async function init() {
+    cargarDatosEmpresa();
+    await initSesion();
+    await Promise.all([cargarClientes(), cargarProductos(), cargarHistorial()]);
+    renderizarTablaItems();
+  })();
+</script>
+
+</body>
+</html>
