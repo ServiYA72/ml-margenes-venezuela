@@ -406,6 +406,7 @@
           </select>
         </div>
         <div id="contador-resultados" style="font-size:12px; color:var(--muted); padding-bottom:10px;"></div>
+        <button class="add" style="padding:9px 14px; font-size:12.5px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line);" onclick="limpiarFiltrosProductos()">Limpiar filtros</button>
       </div>
 
       <div style="overflow-x:auto;">
@@ -432,8 +433,12 @@
       <div id="paginacion-productos"></div>
     </div>
 
-    <div class="panel" style="border-color:var(--rust);">
-      <h2 style="color:var(--rust);">Zona de limpieza de base de datos</h2>
+    <div class="panel" style="padding: 12px 22px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;" onclick="toggleZonaLimpieza()">
+        <span style="font-size:12.5px; color:var(--muted);">⚠ Zona de limpieza de base de datos</span>
+        <span id="icono-limpieza" style="font-size:12px; color:var(--muted);">Mostrar ▾</span>
+      </div>
+      <div id="contenido-limpieza" style="display:none; margin-top:14px;">
       <div class="hint" style="margin-top:0;">Borra productos y sus publicaciones de forma permanente, de un proveedor específico o de todos. Antes de borrar se descarga un respaldo automático y queda un registro de quién lo hizo, cuándo y cuántos productos.</div>
       <div style="display:flex; gap:12px; align-items:end; flex-wrap:wrap; margin-top:14px;">
         <div>
@@ -447,6 +452,7 @@
       </div>
       <div class="msg" id="msg-limpieza"></div>
       <div id="historial-limpieza" style="display:none; margin-top:14px; font-size:12.5px; color:var(--muted); line-height:1.8;"></div>
+      </div>
     </div>
   </section>
 </main>
@@ -686,6 +692,19 @@
     guardarEstadoTablaProductos();
   };
 
+  // El filtro de proveedor/búsqueda/precio/costo queda guardado en este navegador (localStorage)
+  // para que al volver no tengas que rehacerlo — pero si alguno queda puesto sin darte cuenta,
+  // este botón lo limpia todo y vuelve a mostrar el catálogo completo.
+  window.limpiarFiltrosProductos = function() {
+    document.getElementById('filtro-busqueda').value = '';
+    document.getElementById('filtro-precio').value = '';
+    document.getElementById('filtro-costo').value = '';
+    document.getElementById('filtro-proveedor').value = '';
+    paginaActualProductos = 1;
+    renderizarTablaProductos();
+    guardarEstadoTablaProductos();
+  };
+
   function obtenerProductosFiltrados() {
     const busqueda = normalizarCategoria(document.getElementById('filtro-busqueda').value || '');
     const palabrasBusqueda = busqueda.split(/\s+/).filter(p => p.length >= 2);
@@ -743,7 +762,7 @@
     empty.style.display = 'none';
 
 
-    const porPagina = 50;
+    const porPagina = 100;
     const totalPaginas = Math.max(1, Math.ceil(filtrados.length / porPagina));
     if (paginaActualProductos > totalPaginas) paginaActualProductos = totalPaginas;
     if (paginaActualProductos < 1) paginaActualProductos = 1;
@@ -1218,6 +1237,14 @@ RESULTADOS DEL CÁLCULO DE PRECIO
     a.remove();
     URL.revokeObjectURL(url);
   }
+
+  window.toggleZonaLimpieza = function() {
+    const cont = document.getElementById('contenido-limpieza');
+    const icono = document.getElementById('icono-limpieza');
+    const abierta = cont.style.display === 'block';
+    cont.style.display = abierta ? 'none' : 'block';
+    icono.textContent = abierta ? 'Mostrar ▾' : 'Ocultar ▴';
+  };
 
   window.ejecutarLimpieza = async function() {
     const msg = document.getElementById('msg-limpieza');
