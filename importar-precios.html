@@ -53,6 +53,9 @@
   td { padding: 9px 10px; border-bottom: 1px solid var(--line); }
   td.num, th.num { font-family: 'IBM Plex Mono', monospace; text-align: right; }
   tr.row-error td { color: var(--rust); }
+  tr.row-duplicado td { color: var(--muted); }
+  .badge-nuevo { color: var(--teal); font-size: 11px; font-weight: 600; }
+  .badge-duplicado { color: var(--rust); font-size: 11px; }
 
   button.primary {
     background: var(--gold); color: var(--ink); border: none; padding: 12px 22px;
@@ -363,7 +366,7 @@
     document.getElementById('label-ganancia').textContent = unidad === 'usd' ? 'Ganancia en $ (por producto)' : 'Ganancia en %';
   };
 
-  window.generarVistaPrevia = function() {
+  window.generarVistaPrevia = async function() {
     const colNombre = document.getElementById('map-nombre').value;
     const colCosto = document.getElementById('map-costo').value;
     const colCategoria = document.getElementById('map-categoria').value;
@@ -377,15 +380,33 @@
       });
     }
 
+    // --- Anti-duplicados: traemos lo que ya existe en el sistema para este proveedor,
+    // para no volver a insertar lo mismo si el archivo se sube dos veces o repite productos ya cargados.
+    const skusExistentes = new Set();
+    const nombresExistentes = new Set();
+    if (proveedorId) {
+      const { data: existentes } = await supabase
+        .from('productos')
+        .select('sku, nombre')
+        .eq('proveedor_id', proveedorId);
+      (existentes || []).forEach(p => {
+        if (p.sku) skusExistentes.add(normalizeKey(p.sku));
+        if (p.nombre) nombresExistentes.add(normalizeKey(p.nombre));
+      });
+    }
+    const clavesEnEsteArchivo = new Set();
+
     filasValidas = [];
     const panel = document.getElementById('panel-preview');
     panel.style.display = 'block';
     panel.innerHTML = `
       <h2>4. Revisa antes de cargar</h2>
+      <div class="hint" style="margin-top:0;">Las filas marcadas como <span class="badge-duplicado">Ya existe</span> no se van a cargar — ya hay un producto con ese código (o ese nombre) para este proveedor.</div>
       <div style="overflow-x:auto;">
-      <table style="min-width: 1200px;">
+      <table style="min-width: 1300px;">
         <thead>
           <tr>
+            <th>Estado</th>
             <th>Código</th><th>Marca</th><th style="min-width:220px;">Producto</th><th>Categoría</th>
             <th class="num">Costo</th>
             <th class="num">Precio efectivo</th>
@@ -419,7 +440,7 @@
 
       if (!nombre || isNaN(costo) || costo <= 0) {
         tr.className = 'row-error';
-        tr.innerHTML = `<td colspan="2">${escapeHtml(String(codigo || ''))}</td><td>${escapeHtml(String(nombre || '(sin nombre)'))}</td><td colspan="6">Fila omitida: falta nombre o costo válido</td>`;
+        tr.innerHTML = `<td></td><td colspan="2">${escapeHtml(String(codigo || ''))}</td><td>${escapeHtml(String(nombre || '(sin nombre)'))}</td><td colspan="6">Fila omitida: falta nombre o costo válido</td>`;
         tbody.appendChild(tr);
         continue;
       }
@@ -445,9 +466,21 @@
       const precioBcvUsdEquiv = precioEfectivo * (tasaBinance / tasaBCV);
 
       const nombreFinal = marca ? `${marca} ${nombre}` : nombre;
-      filasValidas.push({ nombre: nombreFinal, categoria, costo, precioEfectivo, gananciaDeseada, comisionMlUsd, gananciaNetaUsd, precioBcvUsdEquiv, precioBcvBs, codigo, marca });
 
+      // Clave de comparación: si hay código/SKU se usa eso; si no, el nombre final ya armado
+      // (marca + nombre), que es tal como se guardó en productos.nombre la vez anterior.
+      const codigoNorm = codigo ? normalizeKey(String(codigo)) : '';
+      const claveDuplicado = codigoNorm ? ('sku:' + codigoNorm) : ('nombre:' + normalizeKey(nombreFinal));
+      const yaExiste = (codigoNorm && skusExistentes.has(codigoNorm)) ||
+                        (!codigoNorm && nombresExistentes.has(normalizeKey(nombreFinal))) ||
+                        clavesEnEsteArchivo.has(claveDuplicado);
+      clavesEnEsteArchivo.add(claveDuplicado);
+
+      filasValidas.push({ nombre: nombreFinal, categoria, costo, precioEfectivo, gananciaDeseada, comisionMlUsd, gananciaNetaUsd, precioBcvUsdEquiv, precioBcvBs, codigo, marca, omitir: yaExiste });
+
+      if (yaExiste) tr.className = 'row-duplicado';
       tr.innerHTML = `
+        <td>${yaExiste ? '<span class="badge-duplicado">Ya existe</span>' : '<span class="badge-nuevo">Nuevo</span>'}</td>
         <td>${escapeHtml(String(codigo || ''))}</td>
         <td>${escapeHtml(String(marca || ''))}</td>
         <td>${escapeHtml(String(nombre))}</td>
@@ -479,13 +512,22 @@
     if (!proveedor_id) { msg.className = 'msg err'; msg.textContent = 'Selecciona un proveedor.'; return; }
     if (filasValidas.length === 0) { msg.className = 'msg err'; msg.textContent = 'No hay filas válidas para cargar.'; return; }
 
+    const aInsertar = filasValidas.filter(f => !f.omitir);
+    const omitidos = filasValidas.length - aInsertar.length;
+
+    if (aInsertar.length === 0) {
+      msg.className = 'msg err';
+      msg.textContent = `Nada que cargar: los ${omitidos} producto(s) de este archivo ya existen para este proveedor.`;
+      return;
+    }
+
     btn.disabled = true;
-    btn.textContent = `Cargando 0 / ${filasValidas.length}...`;
+    btn.textContent = `Cargando 0 / ${aInsertar.length}...`;
 
     const { data: { session } } = await supabase.auth.getSession();
     let cargados = 0;
 
-    for (const fila of filasValidas) {
+    for (const fila of aInsertar) {
       const { data: producto, error: errProd } = await supabase
         .from('productos')
         .insert({
@@ -512,13 +554,15 @@
         });
         cargados++;
       }
-      btn.textContent = `Cargando ${cargados} / ${filasValidas.length}...`;
+      btn.textContent = `Cargando ${cargados} / ${aInsertar.length}...`;
     }
 
     btn.disabled = false;
     btn.textContent = 'Cargar productos al sistema';
     msg.className = 'msg ok';
-    msg.textContent = `Listo: ${cargados} de ${filasValidas.length} productos cargados. Puedes verlos en dashboard.html.`;
+    msg.textContent = omitidos > 0
+      ? `Listo: ${cargados} producto(s) nuevo(s) cargado(s). ${omitidos} omitido(s) por ya existir para este proveedor. Puedes verlos en dashboard.html.`
+      : `Listo: ${cargados} de ${aInsertar.length} productos cargados. Puedes verlos en dashboard.html.`;
     filasValidas = [];
     document.getElementById('preview-body').innerHTML = '';
   };
