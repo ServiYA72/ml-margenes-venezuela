@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 <style>
   :root {
     --ink: #0F1B17; --surface: #16241F; --surface-2: #1D2E27; --line: #2C3F37;
@@ -123,14 +124,15 @@
   </div>
 
   <div class="panel">
-    <h2>2. Sube el archivo (.xlsx o .csv)</h2>
+    <h2>2. Sube el archivo (.xlsx, .csv o .pdf)</h2>
     <div class="dropzone" id="dropzone" onclick="document.getElementById('file-input').click()">
       Haz clic para elegir el archivo, o arrástralo aquí
     </div>
-    <input type="file" id="file-input" accept=".xlsx,.xls,.csv" style="display:none;">
+    <input type="file" id="file-input" accept=".xlsx,.xls,.csv,.pdf" style="display:none;">
     <div class="hint">
       El archivo debe tener una columna con el <b>nombre del producto</b> y otra con el <b>costo en USD</b>.
       Opcionalmente también reconoce columnas de <b>código/SKU</b>, <b>marca</b> y <b>categoría</b> — en el siguiente paso confirmas cuál es cuál, sin importar cómo las haya nombrado el proveedor.
+      Para PDF: debe tener texto seleccionable y una tabla de precios clara — no funciona con PDFs escaneados como imagen.
     </div>
   </div>
 
@@ -186,6 +188,10 @@
   const SUPABASE_URL = 'https://tkhzuopapvclmcgxyood.supabase.co';
   const SUPABASE_KEY = 'sb_publishable_KQB6B6uLIPr-xKdNDc8iEw_7tcWM5gS';
   const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  if (window.pdfjsLib) {
+    window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+  }
 
   let tasaBCV = null, tasaBinance = null;
   let filasValidas = [];
@@ -288,12 +294,103 @@
     } catch (e) { return null; }
   }
 
-  async function detectarColumnas(file) {
+  // Extrae una tabla de un PDF con texto seleccionable, agrupando los fragmentos de texto
+  // por posición: primero en líneas (misma coordenada Y), luego en celdas dentro de cada línea
+  // (un espacio en blanco más ancho que lo normal se interpreta como separador de columna).
+  async function extraerFilasDesdePDF(file) {
+    if (!window.pdfjsLib) {
+      alert('No se pudo cargar el lector de PDF. Revisa tu conexión e intenta de nuevo.');
+      return null;
+    }
+
     const buffer = await file.arrayBuffer();
-    // raw:false = usar el texto formateado tal como Excel lo muestra, evita errores de decimales
-    const wb = XLSX.read(buffer, { type: 'array' });
-    const sheet = wb.Sheets[wb.SheetNames[0]];
-    filasCrudas = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
+    const pdf = await window.pdfjsLib.getDocument({ data: buffer }).promise;
+
+    const lineas = [];
+    for (let n = 1; n <= pdf.numPages; n++) {
+      const page = await pdf.getPage(n);
+      const contenido = await page.getTextContent();
+      const items = contenido.items.filter(it => it.str && it.str.trim() !== '');
+
+      const filasPorY = [];
+      items.forEach(it => {
+        const x = it.transform[4];
+        const y = it.transform[5];
+        const ancho = it.width || (it.str.length * 4);
+        let fila = filasPorY.find(f => Math.abs(f.y - y) < 3);
+        if (!fila) { fila = { y, items: [] }; filasPorY.push(fila); }
+        fila.items.push({ x, ancho, texto: it.str });
+      });
+
+      filasPorY.sort((a, b) => b.y - a.y); // de arriba hacia abajo
+      filasPorY.forEach(f => f.items.sort((a, b) => a.x - b.x)); // de izquierda a derecha
+      lineas.push(...filasPorY);
+    }
+
+    const UMBRAL_COLUMNA = 8; // puntos de espacio en blanco que se interpretan como separador de columna
+    const filasComoCeldas = lineas.map(f => {
+      const celdas = [];
+      let actual = '';
+      let finAnterior = null;
+      f.items.forEach(it => {
+        if (finAnterior !== null && (it.x - finAnterior) > UMBRAL_COLUMNA) {
+          celdas.push(actual.trim());
+          actual = '';
+        }
+        actual += (actual ? ' ' : '') + it.texto;
+        finAnterior = it.x + it.ancho;
+      });
+      if (actual.trim()) celdas.push(actual.trim());
+      return celdas;
+    }).filter(celdas => celdas.length >= 2); // descarta títulos y pies de página sueltos (1 sola celda)
+
+    if (filasComoCeldas.length < 2) {
+      alert('No se pudo detectar una tabla en este PDF. Prueba exportándolo como Excel o CSV, o revisa que el PDF tenga texto seleccionable (no una imagen escaneada).');
+      return null;
+    }
+
+    // La cantidad de columnas más frecuente define cuál es "la tabla" de precios;
+    // filas sueltas con otra cantidad de columnas (notas, totales, etc.) se descartan.
+    const conteoColumnas = {};
+    filasComoCeldas.forEach(c => { conteoColumnas[c.length] = (conteoColumnas[c.length] || 0) + 1; });
+    const numColumnas = Object.keys(conteoColumnas).reduce((mejor, n) => conteoColumnas[n] > (conteoColumnas[mejor] || 0) ? n : mejor, Object.keys(conteoColumnas)[0]);
+    const filasTabla = filasComoCeldas.filter(c => c.length === Number(numColumnas));
+
+    if (filasTabla.length < 2) {
+      alert('No se pudo detectar una tabla consistente en este PDF. Prueba exportándolo como Excel o CSV.');
+      return null;
+    }
+
+    const encabezadosCrudos = filasTabla[0];
+    const encabezadosUnicos = [];
+    encabezadosCrudos.forEach((h, i) => {
+      let nombre = (h || `Columna ${i + 1}`).trim();
+      let n = 1;
+      while (encabezadosUnicos.includes(nombre)) { n++; nombre = `${h || 'Columna'} (${n})`; }
+      encabezadosUnicos.push(nombre);
+    });
+
+    return filasTabla.slice(1).map(fila => {
+      const obj = {};
+      encabezadosUnicos.forEach((h, i) => { obj[h] = fila[i] !== undefined ? fila[i] : ''; });
+      return obj;
+    });
+  }
+
+  async function detectarColumnas(file) {
+    const esPDF = /\.pdf$/i.test(file.name) || file.type === 'application/pdf';
+
+    if (esPDF) {
+      const filas = await extraerFilasDesdePDF(file);
+      if (!filas) return; // ya se mostró el mensaje de error correspondiente
+      filasCrudas = filas;
+    } else {
+      const buffer = await file.arrayBuffer();
+      // raw:false = usar el texto formateado tal como Excel lo muestra, evita errores de decimales
+      const wb = XLSX.read(buffer, { type: 'array' });
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      filasCrudas = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
+    }
 
     if (filasCrudas.length === 0) {
       alert('El archivo no tiene filas de datos.');
