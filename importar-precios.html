@@ -57,6 +57,10 @@
   tr.row-duplicado td { color: var(--muted); }
   .badge-nuevo { color: var(--teal); font-size: 11px; font-weight: 600; }
   .badge-duplicado { color: var(--rust); font-size: 11px; }
+  .badge-sin-precio { color: var(--gold); font-size: 11px; font-weight: 600; }
+  tr.row-sin-precio td { color: var(--muted); }
+  td.celda-descripcion { max-width: 260px; font-size: 12px; color: var(--muted); white-space: normal; }
+  input.input-categoria-fila { width: 100%; background: var(--surface-2); border: 1px solid var(--line); color: var(--paper); padding: 6px 8px; font-size: 12.5px; }
 
   button.primary {
     background: var(--gold); color: var(--ink); border: none; padding: 12px 22px;
@@ -131,7 +135,8 @@
     <input type="file" id="file-input" accept=".xlsx,.xls,.csv,.pdf" style="display:none;">
     <div class="hint">
       El archivo debe tener una columna con el <b>nombre del producto</b> y otra con el <b>costo en USD</b>.
-      Opcionalmente también reconoce columnas de <b>código/SKU</b>, <b>marca</b> y <b>categoría</b> — en el siguiente paso confirmas cuál es cuál, sin importar cómo las haya nombrado el proveedor.
+      Opcionalmente también reconoce columnas de <b>código/SKU</b>, <b>marca</b>, <b>categoría</b> y <b>descripción</b> — en el siguiente paso confirmas cuál es cuál, sin importar cómo las haya nombrado el proveedor.
+      Si una fila no trae costo válido (por ejemplo "no disponible" en esa versión del producto), igual se carga al catálogo con su descripción para no perderla — solo queda pendiente completarle el precio.
       Para PDF: debe tener texto seleccionable y una tabla de precios clara — no funciona con PDFs escaneados como imagen.
     </div>
   </div>
@@ -160,6 +165,11 @@
         <label for="map-marca">Columna de marca (opcional)</label>
         <select id="map-marca"></select>
       </div>
+      <div>
+        <label for="map-descripcion">Columna de descripción (opcional)</label>
+        <select id="map-descripcion"></select>
+      </div>
+      <div class="hint" style="grid-column: 1 / -1; margin-top:0;">Si el archivo no trae una columna de categoría, o la deja vacía en algunas filas, el sistema intenta clasificar el producto automáticamente (laptop, desktop, UPS, cámaras, accesorios, etc.) a partir del nombre y la descripción — puedes corregirla fila por fila en la vista previa antes de cargar.</div>
       <button class="primary" style="margin-top:0;" onclick="generarVistaPrevia()">Generar vista previa</button>
     </div>
   </div>
@@ -180,6 +190,8 @@
     <button class="primary" id="btn-confirmar" onclick="confirmarImportacion()">Cargar productos al sistema</button>
     <div class="msg" id="msg-import"></div>
   </div>
+
+  <datalist id="lista-categorias-import"></datalist>
 </main>
 
 <script type="module">
@@ -234,6 +246,33 @@
   const PISTAS_CATEGORIA = ['categoria', 'rubro', 'tipo', 'familia'];
   const PISTAS_CODIGO = ['codigo', 'sku', 'referencia', 'cod'];
   const PISTAS_MARCA = ['marca', 'brand'];
+  const PISTAS_DESCRIPCION = ['descripcion', 'detalle', 'especificacion', 'caracteristica', 'informacion'];
+
+  // Reglas de clasificación automática por categoría: se evalúan en orden y gana la primera
+  // que encuentre alguna de sus palabras clave en el nombre + descripción + marca del producto.
+  // Sirven como respaldo cuando el archivo del proveedor no trae columna de categoría,
+  // o la deja vacía en algunas filas.
+  const REGLAS_CATEGORIA = [
+    { categoria: 'Control de acceso', palabras: ['control de acceso', 'lectora', 'biometrico', 'huella dactilar', 'torniquete', 'molinete', 'cerradura electrica'] },
+    { categoria: 'Cámaras y CCTV', palabras: ['camara', 'cctv', 'dvr', 'nvr', 'videoportero', 'domo', 'turret', 'videovigilancia', 'ptz'] },
+    { categoria: 'Redes', palabras: ['router', 'switch', 'access point', 'antena', 'patch panel', 'cable utp', 'fibra optica', 'modem', 'repetidor wifi'] },
+    { categoria: 'UPS y energía', palabras: ['ups', 'no break', 'regulador de voltaje', 'planta electrica', 'bateria de respaldo', 'inversor'] },
+    { categoria: 'Laptops', palabras: ['laptop', 'notebook', 'portatil'] },
+    { categoria: 'Desktops', palabras: ['desktop', 'pc de escritorio', 'computadora de escritorio', 'all in one', 'todo en uno'] },
+    { categoria: 'Monitores', palabras: ['monitor', 'pantalla'] },
+    { categoria: 'Impresoras', palabras: ['impresora', 'multifuncional', 'escaner', 'toner', 'cartucho de tinta'] },
+    { categoria: 'Almacenamiento y memoria', palabras: ['disco duro', 'ssd', 'hdd', 'memoria ram', 'pendrive', 'memoria usb', 'tarjeta sd', 'nas'] },
+    { categoria: 'Accesorios', palabras: ['teclado', 'mouse', 'audifono', 'diadema', 'cargador', 'adaptador', 'funda', 'soporte', 'bocina', 'parlante', 'webcam', 'hub usb', 'cable hdmi'] },
+    { categoria: 'Software y licencias', palabras: ['licencia', 'software', 'antivirus'] }
+  ];
+
+  function clasificarProducto(texto) {
+    const norm = normalizeKey(texto || '');
+    for (const regla of REGLAS_CATEGORIA) {
+      if (regla.palabras.some(p => norm.includes(normalizeKey(p)))) return regla.categoria;
+    }
+    return '';
+  }
 
   // Convierte el texto FORMATEADO de la celda (tal como se ve en Excel) a un número,
   // sin importar si el archivo usa coma o punto como separador decimal.
@@ -328,6 +367,11 @@
     }
 
     const UMBRAL_COLUMNA = 8; // puntos de espacio en blanco que se interpretan como separador de columna
+    // Ya NO se descartan las líneas de una sola celda: en varias listas de proveedores la
+    // descripción de un producto ocupa una celda combinada en el PDF original que abarca varios
+    // modelos/variantes (mismo texto para 2, 3 o más filas de código+precio distintos). Esa
+    // descripción aparece en el texto del PDF como líneas sueltas que no encajan en la tabla de
+    // código/precio/disponibilidad, y antes se perdían por completo junto con esas filas.
     const filasComoCeldas = lineas.map(f => {
       const celdas = [];
       let actual = '';
@@ -342,26 +386,53 @@
       });
       if (actual.trim()) celdas.push(actual.trim());
       return celdas;
-    }).filter(celdas => celdas.length >= 2); // descarta títulos y pies de página sueltos (1 sola celda)
+    }).filter(celdas => celdas.length >= 1);
 
     if (filasComoCeldas.length < 2) {
       alert('No se pudo detectar una tabla en este PDF. Prueba exportándolo como Excel o CSV, o revisa que el PDF tenga texto seleccionable (no una imagen escaneada).');
       return null;
     }
 
-    // La cantidad de columnas más frecuente define cuál es "la tabla" de precios;
-    // filas sueltas con otra cantidad de columnas (notas, totales, etc.) se descartan.
+    // La cantidad de columnas más frecuente entre las líneas con 2 o más celdas define cuál es
+    // "la fila de producto" (código, precio, disponibilidad, etc.). Las líneas de una sola celda
+    // sueltas entre dos filas de producto se tratan como fragmentos de una descripción compartida.
     const conteoColumnas = {};
-    filasComoCeldas.forEach(c => { conteoColumnas[c.length] = (conteoColumnas[c.length] || 0) + 1; });
+    filasComoCeldas.forEach(c => { if (c.length >= 2) conteoColumnas[c.length] = (conteoColumnas[c.length] || 0) + 1; });
     const numColumnas = Object.keys(conteoColumnas).reduce((mejor, n) => conteoColumnas[n] > (conteoColumnas[mejor] || 0) ? n : mejor, Object.keys(conteoColumnas)[0]);
-    const filasTabla = filasComoCeldas.filter(c => c.length === Number(numColumnas));
+
+    if (!numColumnas) {
+      alert('No se pudo detectar una tabla consistente en este PDF. Prueba exportándolo como Excel o CSV.');
+      return null;
+    }
+
+    // Recorremos todas las líneas en el orden en que aparecen en el PDF. Las que calzan con
+    // "numColumnas" son filas de producto; el resto son fragmentos de texto sueltos (a menudo la
+    // descripción de una celda combinada). Esos fragmentos se acumulan y se le asignan a la fila
+    // (o filas) de producto que los rodean, en vez de descartarlos junto con esa fila — así,
+    // si varios modelos seguidos comparten la misma descripción combinada, todos la conservan,
+    // incluidos los que en la columna de precio dicen "no disponible" o "-".
+    const filasTabla = [];
+    let bufferDescripcion = [];
+    let bufferListoParaReiniciar = true;
+    filasComoCeldas.forEach(celdas => {
+      if (celdas.length === Number(numColumnas)) {
+        filasTabla.push({ celdas, descripcionExtra: bufferDescripcion.join(' ').trim() });
+        bufferListoParaReiniciar = true;
+      } else {
+        const texto = celdas.join(' ').trim();
+        if (texto) {
+          if (bufferListoParaReiniciar) { bufferDescripcion = []; bufferListoParaReiniciar = false; }
+          bufferDescripcion.push(texto);
+        }
+      }
+    });
 
     if (filasTabla.length < 2) {
       alert('No se pudo detectar una tabla consistente en este PDF. Prueba exportándolo como Excel o CSV.');
       return null;
     }
 
-    const encabezadosCrudos = filasTabla[0];
+    const encabezadosCrudos = filasTabla[0].celdas;
     const encabezadosUnicos = [];
     encabezadosCrudos.forEach((h, i) => {
       let nombre = (h || `Columna ${i + 1}`).trim();
@@ -369,10 +440,12 @@
       while (encabezadosUnicos.includes(nombre)) { n++; nombre = `${h || 'Columna'} (${n})`; }
       encabezadosUnicos.push(nombre);
     });
+    const COL_DESCRIPCION_DETECTADA = 'Descripción (detectada automáticamente)';
 
     return filasTabla.slice(1).map(fila => {
       const obj = {};
-      encabezadosUnicos.forEach((h, i) => { obj[h] = fila[i] !== undefined ? fila[i] : ''; });
+      encabezadosUnicos.forEach((h, i) => { obj[h] = fila.celdas[i] !== undefined ? fila.celdas[i] : ''; });
+      obj[COL_DESCRIPCION_DETECTADA] = fila.descripcionExtra || '';
       return obj;
     });
   }
@@ -404,6 +477,7 @@
     const selCategoria = document.getElementById('map-categoria');
     const selCodigo = document.getElementById('map-codigo');
     const selMarca = document.getElementById('map-marca');
+    const selDescripcion = document.getElementById('map-descripcion');
 
     const opciones = (incluirNinguna) => {
       let html = incluirNinguna ? '<option value="">(ninguna)</option>' : '';
@@ -416,18 +490,23 @@
     selCategoria.innerHTML = opciones(true);
     selCodigo.innerHTML = opciones(true);
     selMarca.innerHTML = opciones(true);
+    selDescripcion.innerHTML = opciones(true);
 
     const guessNombre = mejorCoincidencia(encabezados, PISTAS_NOMBRE) || encabezados[0];
     const guessCosto = mejorCoincidencia(encabezados, PISTAS_COSTO) || encabezados[1] || encabezados[0];
     const guessCategoria = mejorCoincidencia(encabezados, PISTAS_CATEGORIA);
     const guessCodigo = mejorCoincidencia(encabezados, PISTAS_CODIGO);
     const guessMarca = mejorCoincidencia(encabezados, PISTAS_MARCA);
+    // La columna de descripción se busca aparte de la de nombre, para no mapear la misma
+    // columna dos veces cuando el archivo trae "Producto" y "Descripción" por separado.
+    const guessDescripcion = mejorCoincidencia(encabezados.filter(h => h !== guessNombre), PISTAS_DESCRIPCION);
 
     selNombre.value = guessNombre;
     selCosto.value = guessCosto;
     if (guessCategoria) selCategoria.value = guessCategoria;
     if (guessCodigo) selCodigo.value = guessCodigo;
     if (guessMarca) selMarca.value = guessMarca;
+    if (guessDescripcion) selDescripcion.value = guessDescripcion;
 
     // Si ya se importó una lista de este mismo proveedor antes, usar ese mapeo recordado
     // (solo si las mismas columnas siguen existiendo en el archivo nuevo)
@@ -439,6 +518,7 @@
       if (recordado.categoria && encabezados.includes(recordado.categoria)) selCategoria.value = recordado.categoria;
       if (recordado.codigo && encabezados.includes(recordado.codigo)) selCodigo.value = recordado.codigo;
       if (recordado.marca && encabezados.includes(recordado.marca)) selMarca.value = recordado.marca;
+      if (recordado.descripcion && encabezados.includes(recordado.descripcion)) selDescripcion.value = recordado.descripcion;
     }
 
     document.getElementById('panel-mapeo').style.display = 'block';
@@ -469,13 +549,18 @@
     const colCategoria = document.getElementById('map-categoria').value;
     const colCodigo = document.getElementById('map-codigo').value;
     const colMarca = document.getElementById('map-marca').value;
+    const colDescripcion = document.getElementById('map-descripcion').value;
 
     const proveedorId = document.getElementById('proveedor').value;
     if (proveedorId) {
       guardarMapeoRecordado(proveedorId, {
-        nombre: colNombre, costo: colCosto, categoria: colCategoria, codigo: colCodigo, marca: colMarca
+        nombre: colNombre, costo: colCosto, categoria: colCategoria, codigo: colCodigo, marca: colMarca, descripcion: colDescripcion
       });
     }
+
+    // Lista de categorías conocidas, para sugerirlas en el campo editable de cada fila
+    const listaCategorias = document.getElementById('lista-categorias-import');
+    listaCategorias.innerHTML = REGLAS_CATEGORIA.map(r => `<option value="${escapeHtml(r.categoria)}">`).join('');
 
     // --- Anti-duplicados: traemos lo que ya existe en el sistema para este proveedor,
     // para no volver a insertar lo mismo si el archivo se sube dos veces o repite productos ya cargados.
@@ -498,13 +583,19 @@
     panel.style.display = 'block';
     panel.innerHTML = `
       <h2>4. Revisa antes de cargar</h2>
-      <div class="hint" style="margin-top:0;">Las filas marcadas como <span class="badge-duplicado">Ya existe</span> no se van a cargar — ya hay un producto con ese código (o ese nombre) para este proveedor.</div>
+      <div class="hint" style="margin-top:0;">
+        Las filas marcadas como <span class="badge-duplicado">Ya existe</span> no se van a cargar — ya hay un producto con ese código (o ese nombre) para este proveedor.
+        Las filas marcadas como <span class="badge-sin-precio">Sin precio</span> sí se cargan al catálogo (con su descripción y categoría) pero sin cálculo de venta — antes no se detectaba esta variante del proveedor, esto puede pasar cuando el producto no está disponible en esa versión/modelo; luego puedes completarle el costo desde el panel de productos.
+        La categoría es una sugerencia automática — corrígela si hace falta antes de cargar.
+      </div>
       <div style="overflow-x:auto;">
-      <table style="min-width: 1300px;">
+      <table style="min-width: 1500px;">
         <thead>
           <tr>
             <th>Estado</th>
-            <th>Código</th><th>Marca</th><th style="min-width:220px;">Producto</th><th>Categoría</th>
+            <th>Código</th><th>Marca</th><th style="min-width:200px;">Producto</th>
+            <th style="min-width:220px;">Descripción</th>
+            <th style="min-width:170px;">Categoría</th>
             <th class="num">Costo</th>
             <th class="num">Precio efectivo</th>
             <th class="num">Ganancia deseada</th>
@@ -526,18 +617,58 @@
     const valorGanancia = parseFloat(document.getElementById('valor-ganancia').value);
     const comision = parseFloat(document.getElementById('comision').value);
 
+    let indiceFila = 0;
     for (const row of filasCrudas) {
       const nombre = row[colNombre];
-      const categoria = colCategoria ? row[colCategoria] : '';
+      const categoriaArchivo = colCategoria ? String(row[colCategoria] || '').trim() : '';
       const codigo = colCodigo ? row[colCodigo] : '';
       const marca = colMarca ? row[colMarca] : '';
+      const descripcion = colDescripcion ? String(row[colDescripcion] || '').trim() : '';
       const costo = parseNumeroLocal(row[colCosto]);
 
       const tr = document.createElement('tr');
 
-      if (!nombre || isNaN(costo) || costo <= 0) {
+      // Solo el nombre es realmente obligatorio. Antes, una fila sin costo válido (por ejemplo
+      // "NO DISPONIBLE" o "-" en esa versión/modelo del producto) se descartaba por completo y
+      // se perdía junto con ella la descripción — aunque esa misma descripción aplicara también
+      // a otras versiones del producto sí disponibles. Ahora esas filas SÍ se cargan al catálogo
+      // (sin cálculo de precio, para completar el costo más adelante) en vez de perderse.
+      if (!nombre) {
         tr.className = 'row-error';
-        tr.innerHTML = `<td></td><td colspan="2">${escapeHtml(String(codigo || ''))}</td><td>${escapeHtml(String(nombre || '(sin nombre)'))}</td><td colspan="6">Fila omitida: falta nombre o costo válido</td>`;
+        tr.innerHTML = `<td></td><td colspan="2">${escapeHtml(String(codigo || ''))}</td><td colspan="7">Fila omitida: falta el nombre del producto</td>`;
+        tbody.appendChild(tr);
+        continue;
+      }
+
+      const sinPrecio = isNaN(costo) || costo <= 0;
+
+      const nombreFinal = marca ? `${marca} ${nombre}` : nombre;
+      const categoriaFinal = categoriaArchivo || clasificarProducto([nombreFinal, descripcion, marca].filter(Boolean).join(' ')) || '';
+
+      // Clave de comparación: si hay código/SKU se usa eso; si no, el nombre final ya armado
+      // (marca + nombre), que es tal como se guardó en productos.nombre la vez anterior.
+      const codigoNorm = codigo ? normalizeKey(String(codigo)) : '';
+      const claveDuplicado = codigoNorm ? ('sku:' + codigoNorm) : ('nombre:' + normalizeKey(nombreFinal));
+      const yaExiste = (codigoNorm && skusExistentes.has(codigoNorm)) ||
+                        (!codigoNorm && nombresExistentes.has(normalizeKey(nombreFinal))) ||
+                        clavesEnEsteArchivo.has(claveDuplicado);
+      clavesEnEsteArchivo.add(claveDuplicado);
+
+      const idx = indiceFila++;
+
+      if (sinPrecio) {
+        filasValidas.push({ idx, nombre: nombreFinal, categoria: categoriaFinal, descripcion, codigo, marca, omitir: yaExiste, sinPrecio: true });
+
+        tr.className = yaExiste ? 'row-duplicado' : 'row-sin-precio';
+        tr.innerHTML = `
+          <td>${yaExiste ? '<span class="badge-duplicado">Ya existe</span>' : '<span class="badge-sin-precio">Sin precio</span>'}</td>
+          <td>${escapeHtml(String(codigo || ''))}</td>
+          <td>${escapeHtml(String(marca || ''))}</td>
+          <td>${escapeHtml(String(nombre))}</td>
+          <td class="celda-descripcion" title="${escapeHtml(descripcion)}">${escapeHtml(descripcion)}</td>
+          <td><input class="input-categoria-fila" list="lista-categorias-import" value="${escapeHtml(categoriaFinal)}" oninput="actualizarCategoriaFilaImport(${idx}, this.value)"></td>
+          <td class="num" colspan="6" style="text-align:left; color:var(--muted);">Sin costo válido en el archivo — se carga al catálogo, completa el precio luego en dashboard.html</td>
+        `;
         tbody.appendChild(tr);
         continue;
       }
@@ -562,18 +693,7 @@
       const precioBcvBs = precioEfectivo * tasaBinance;
       const precioBcvUsdEquiv = precioEfectivo * (tasaBinance / tasaBCV);
 
-      const nombreFinal = marca ? `${marca} ${nombre}` : nombre;
-
-      // Clave de comparación: si hay código/SKU se usa eso; si no, el nombre final ya armado
-      // (marca + nombre), que es tal como se guardó en productos.nombre la vez anterior.
-      const codigoNorm = codigo ? normalizeKey(String(codigo)) : '';
-      const claveDuplicado = codigoNorm ? ('sku:' + codigoNorm) : ('nombre:' + normalizeKey(nombreFinal));
-      const yaExiste = (codigoNorm && skusExistentes.has(codigoNorm)) ||
-                        (!codigoNorm && nombresExistentes.has(normalizeKey(nombreFinal))) ||
-                        clavesEnEsteArchivo.has(claveDuplicado);
-      clavesEnEsteArchivo.add(claveDuplicado);
-
-      filasValidas.push({ nombre: nombreFinal, categoria, costo, precioEfectivo, gananciaDeseada, comisionMlUsd, gananciaNetaUsd, precioBcvUsdEquiv, precioBcvBs, codigo, marca, omitir: yaExiste });
+      filasValidas.push({ idx, nombre: nombreFinal, categoria: categoriaFinal, descripcion, costo, precioEfectivo, gananciaDeseada, comisionMlUsd, gananciaNetaUsd, precioBcvUsdEquiv, precioBcvBs, codigo, marca, omitir: yaExiste, sinPrecio: false });
 
       if (yaExiste) tr.className = 'row-duplicado';
       tr.innerHTML = `
@@ -581,7 +701,8 @@
         <td>${escapeHtml(String(codigo || ''))}</td>
         <td>${escapeHtml(String(marca || ''))}</td>
         <td>${escapeHtml(String(nombre))}</td>
-        <td>${escapeHtml(String(categoria || ''))}</td>
+        <td class="celda-descripcion" title="${escapeHtml(descripcion)}">${escapeHtml(descripcion)}</td>
+        <td><input class="input-categoria-fila" list="lista-categorias-import" value="${escapeHtml(categoriaFinal)}" oninput="actualizarCategoriaFilaImport(${idx}, this.value)"></td>
         <td class="num">$${costo.toFixed(2)}</td>
         <td class="num" style="color:var(--gold)">$${precioEfectivo.toFixed(2)}</td>
         <td class="num">$${gananciaDeseada.toFixed(2)}</td>
@@ -591,6 +712,13 @@
       `;
       tbody.appendChild(tr);
     }
+  };
+
+  // Permite corregir a mano la categoría sugerida automáticamente, fila por fila,
+  // antes de confirmar la carga.
+  window.actualizarCategoriaFilaImport = function(idx, valor) {
+    const fila = filasValidas.find(f => f.idx === idx);
+    if (fila) fila.categoria = valor.trim();
   };
 
   function escapeHtml(str) {
@@ -623,43 +751,60 @@
 
     const { data: { session } } = await supabase.auth.getSession();
     let cargados = 0;
+    let cargadosSinPrecio = 0;
 
     for (const fila of aInsertar) {
       const { data: producto, error: errProd } = await supabase
         .from('productos')
         .insert({
-          proveedor_id, nombre: fila.nombre, categoria: fila.categoria,
+          proveedor_id, nombre: fila.nombre, categoria: fila.categoria || null,
           sku: fila.codigo || null,
           especificaciones: fila.marca ? { marca: fila.marca } : {},
-          costo_usd: fila.costo, creado_por: session?.user?.id
+          costo_usd: fila.sinPrecio ? 0 : fila.costo, creado_por: session?.user?.id
         })
         .select()
         .single();
 
       if (!errProd) {
-        await supabase.from('publicaciones').insert({
-          producto_id: producto.id,
-          modo_ganancia: modo,
-          comision_ml_pct: comision,
-          precio_efectivo_usd: fila.precioEfectivo.toFixed(2),
-          precio_bcv_usd_equiv: fila.precioBcvUsdEquiv.toFixed(2),
-          precio_bcv_bs: fila.precioBcvBs.toFixed(2),
-          ganancia_real_usd: fila.gananciaDeseada.toFixed(2),
-          comision_ml_usd: fila.comisionMlUsd.toFixed(2),
-          ganancia_neta_usd: fila.gananciaNetaUsd.toFixed(2),
-          creado_por: session?.user?.id
-        });
-        cargados++;
+        if (fila.sinPrecio) {
+          // Sin costo válido del proveedor: guardamos el producto y su descripción para no
+          // perderlos, pero sin publicación con precios calculados (se completa manualmente
+          // luego desde dashboard.html cuando se tenga el costo real).
+          if (fila.descripcion) {
+            await supabase.from('publicaciones').insert({
+              producto_id: producto.id,
+              descripcion: fila.descripcion,
+              creado_por: session?.user?.id
+            });
+          }
+          cargadosSinPrecio++;
+        } else {
+          await supabase.from('publicaciones').insert({
+            producto_id: producto.id,
+            descripcion: fila.descripcion || null,
+            modo_ganancia: modo,
+            comision_ml_pct: comision,
+            precio_efectivo_usd: fila.precioEfectivo.toFixed(2),
+            precio_bcv_usd_equiv: fila.precioBcvUsdEquiv.toFixed(2),
+            precio_bcv_bs: fila.precioBcvBs.toFixed(2),
+            ganancia_real_usd: fila.gananciaDeseada.toFixed(2),
+            comision_ml_usd: fila.comisionMlUsd.toFixed(2),
+            ganancia_neta_usd: fila.gananciaNetaUsd.toFixed(2),
+            creado_por: session?.user?.id
+          });
+          cargados++;
+        }
       }
-      btn.textContent = `Cargando ${cargados} / ${aInsertar.length}...`;
+      btn.textContent = `Cargando ${cargados + cargadosSinPrecio} / ${aInsertar.length}...`;
     }
 
     btn.disabled = false;
     btn.textContent = 'Cargar productos al sistema';
     msg.className = 'msg ok';
-    msg.textContent = omitidos > 0
-      ? `Listo: ${cargados} producto(s) nuevo(s) cargado(s). ${omitidos} omitido(s) por ya existir para este proveedor. Puedes verlos en dashboard.html.`
-      : `Listo: ${cargados} de ${aInsertar.length} productos cargados. Puedes verlos en dashboard.html.`;
+    const partes = [`${cargados} producto(s) con precio calculado`];
+    if (cargadosSinPrecio > 0) partes.push(`${cargadosSinPrecio} sin precio (pendientes de completar costo)`);
+    if (omitidos > 0) partes.push(`${omitidos} omitido(s) por ya existir para este proveedor`);
+    msg.textContent = `Listo: ${partes.join(', ')}. Puedes verlos en dashboard.html.`;
     filasValidas = [];
     document.getElementById('preview-body').innerHTML = '';
   };
