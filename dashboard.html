@@ -431,6 +431,23 @@
       <div class="empty" id="empty-productos" style="display:none;">Todavía no hay productos cargados.</div>
       <div id="paginacion-productos"></div>
     </div>
+
+    <div class="panel" style="border-color:var(--rust);">
+      <h2 style="color:var(--rust);">Zona de limpieza de base de datos</h2>
+      <div class="hint" style="margin-top:0;">Borra productos y sus publicaciones de forma permanente, de un proveedor específico o de todos. Antes de borrar se descarga un respaldo automático y queda un registro de quién lo hizo, cuándo y cuántos productos.</div>
+      <div style="display:flex; gap:12px; align-items:end; flex-wrap:wrap; margin-top:14px;">
+        <div>
+          <label for="limpieza-proveedor" style="display:block; font-size:12px; color:var(--muted); margin-bottom:6px;">Proveedor a limpiar</label>
+          <select id="limpieza-proveedor" style="background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:9px 10px; font-size:14px; min-width:240px;">
+            <option value="">Todos los proveedores (TODO el catálogo)</option>
+          </select>
+        </div>
+        <button class="add" style="padding:9px 16px; font-size:13px; background:var(--rust); color:var(--paper);" onclick="ejecutarLimpieza()">Limpiar base de datos</button>
+        <button class="add" style="padding:9px 16px; font-size:13px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line);" onclick="verHistorialLimpieza()">Ver historial de limpiezas</button>
+      </div>
+      <div class="msg" id="msg-limpieza"></div>
+      <div id="historial-limpieza" style="display:none; margin-top:14px; font-size:12.5px; color:var(--muted); line-height:1.8;"></div>
+    </div>
   </section>
 </main>
 
@@ -554,6 +571,18 @@
       filtroProveedor.appendChild(opt);
     });
     filtroProveedor.value = valorPrevio;
+
+    // refrescar el selector de la zona de limpieza de base de datos
+    const limpiezaProveedor = document.getElementById('limpieza-proveedor');
+    if (limpiezaProveedor) {
+      limpiezaProveedor.innerHTML = '<option value="">Todos los proveedores (TODO el catálogo)</option>';
+      (data || []).forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = p.nombre;
+        limpiezaProveedor.appendChild(opt);
+      });
+    }
   }
 
   let productosCache = {};
@@ -1174,6 +1203,106 @@ RESULTADOS DEL CÁLCULO DE PRECIO
     msg.style.color = 'var(--teal)';
     msg.textContent = 'Todos los productos fueron eliminados.';
     cargarProductos();
+  };
+
+  // --- Zona de limpieza de base de datos: por proveedor o todos, con respaldo y auditoría ---
+
+  function descargarJSON(nombreArchivo, datos) {
+    const blob = new Blob([JSON.stringify(datos, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nombreArchivo;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  window.ejecutarLimpieza = async function() {
+    const msg = document.getElementById('msg-limpieza');
+    const sel = document.getElementById('limpieza-proveedor');
+    const proveedorId = sel.value;
+    const proveedorNombre = proveedorId ? sel.options[sel.selectedIndex].textContent : 'Todos los proveedores';
+
+    const objetivo = Object.values(productosCache).filter(p => !proveedorId || p.proveedores?.id === proveedorId);
+
+    if (objetivo.length === 0) {
+      msg.style.color = 'var(--rust)';
+      msg.textContent = 'No hay productos para ese proveedor — no hay nada que limpiar.';
+      return;
+    }
+
+    const textoEsperado = proveedorId ? proveedorNombre : 'ELIMINAR TODO';
+    const textoIngresado = prompt(
+      `Vas a eliminar ${objetivo.length} producto(s) de "${proveedorNombre}" de forma PERMANENTE (no se puede deshacer).\n\nSe descargará un respaldo antes de borrar. Para confirmar, escribe exactamente:\n${textoEsperado}`
+    );
+    if (textoIngresado === null) return; // el usuario canceló
+    if (textoIngresado.trim().toLowerCase() !== textoEsperado.trim().toLowerCase()) {
+      msg.style.color = 'var(--rust)';
+      msg.textContent = 'Texto de confirmación incorrecto — no se eliminó nada.';
+      return;
+    }
+
+    const { data: { session } } = await supabase.auth.getSession();
+
+    // Respaldo descargable ANTES de borrar nada
+    const respaldo = objetivo.map(p => ({
+      id: p.id, nombre: p.nombre, sku: p.sku, categoria: p.categoria, costo_usd: p.costo_usd,
+      proveedor: p.proveedores?.nombre || null, especificaciones: p.especificaciones, publicacion: p.pub || null
+    }));
+    const fecha = new Date().toISOString().slice(0, 10);
+    const nombreProveedorArchivo = proveedorId ? proveedorNombre.replace(/[^a-z0-9]+/gi, '-') : 'todos';
+    descargarJSON(`respaldo-productos-${nombreProveedorArchivo}-${fecha}.json`, respaldo);
+
+    msg.style.color = 'var(--muted)';
+    msg.textContent = `Eliminando ${objetivo.length} producto(s)...`;
+
+    const ids = objetivo.map(p => p.id);
+    await supabase.from('publicaciones').delete().in('producto_id', ids);
+    const { error } = await supabase.from('productos').delete().in('id', ids);
+
+    if (error) {
+      msg.style.color = 'var(--rust)';
+      msg.textContent = 'Error al eliminar: ' + error.message + ' (ya se descargó el respaldo, no se perdió nada).';
+      return;
+    }
+
+    // Registro de auditoría — se guarda una vez confirmado que el borrado sí ocurrió
+    const { error: errAuditoria } = await supabase.from('auditoria_eliminaciones').insert({
+      creado_por: session?.user?.id,
+      creado_por_email: session?.user?.email,
+      proveedor_id: proveedorId || null,
+      proveedor_nombre: proveedorNombre,
+      cantidad_productos: objetivo.length,
+      productos_eliminados: respaldo
+    });
+
+    msg.style.color = 'var(--teal)';
+    msg.textContent = errAuditoria
+      ? `${objetivo.length} producto(s) eliminados y respaldo descargado, pero no se pudo guardar el registro de auditoría: ${errAuditoria.message}`
+      : `Listo: ${objetivo.length} producto(s) de "${proveedorNombre}" eliminados. Se descargó el respaldo y quedó registrado en el historial.`;
+    cargarProductos();
+  };
+
+  window.verHistorialLimpieza = async function() {
+    const cont = document.getElementById('historial-limpieza');
+    if (cont.style.display === 'block') { cont.style.display = 'none'; return; }
+
+    const { data, error } = await supabase
+      .from('auditoria_eliminaciones')
+      .select('*')
+      .order('creado_en', { ascending: false })
+      .limit(20);
+
+    if (error) { cont.style.display = 'block'; cont.innerHTML = 'No se pudo cargar el historial: ' + escapeHtml(error.message); return; }
+    if (!data || data.length === 0) { cont.style.display = 'block'; cont.innerHTML = 'Todavía no hay limpiezas registradas.'; return; }
+
+    cont.innerHTML = data.map(r => {
+      const fecha = new Date(r.creado_en).toLocaleString('es-VE');
+      return `${escapeHtml(fecha)} — ${escapeHtml(r.creado_por_email || 'usuario desconocido')} eliminó ${r.cantidad_productos} producto(s) de "${escapeHtml(r.proveedor_nombre)}"`;
+    }).join('<br>');
+    cont.style.display = 'block';
   };
 
   let secuenciaComparacion = 0;
