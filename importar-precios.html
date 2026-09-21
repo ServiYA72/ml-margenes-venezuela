@@ -136,7 +136,7 @@
     <div class="hint">
       El archivo debe tener una columna con el <b>nombre del producto</b> y otra con el <b>costo en USD</b>.
       Opcionalmente también reconoce columnas de <b>código/SKU</b>, <b>marca</b>, <b>categoría</b> y <b>descripción</b> — en el siguiente paso confirmas cuál es cuál, sin importar cómo las haya nombrado el proveedor.
-      Si una fila no trae costo válido (por ejemplo "no disponible" en esa versión del producto), igual se carga al catálogo con su descripción para no perderla — solo queda pendiente completarle el precio.
+      Si una variante/modelo no tiene precio del proveedor (por ejemplo "no disponible"), no se importa — pero si comparte descripción con otras variantes que sí tienen precio, esas sí la conservan completa.
       Para PDF: debe tener texto seleccionable y una tabla de precios clara — no funciona con PDFs escaneados como imagen.
     </div>
   </div>
@@ -585,7 +585,7 @@
       <h2>4. Revisa antes de cargar</h2>
       <div class="hint" style="margin-top:0;">
         Las filas marcadas como <span class="badge-duplicado">Ya existe</span> no se van a cargar — ya hay un producto con ese código (o ese nombre) para este proveedor.
-        Las filas marcadas como <span class="badge-sin-precio">Sin precio</span> sí se cargan al catálogo (con su descripción y categoría) pero sin cálculo de venta — antes no se detectaba esta variante del proveedor, esto puede pasar cuando el producto no está disponible en esa versión/modelo; luego puedes completarle el costo desde el panel de productos.
+        Las filas marcadas como <span class="badge-sin-precio">No disponible</span> tampoco se cargan — el proveedor no tiene precio para esa variante/modelo. Solo se monta la(s) variante(s) que sí tienen precio; su descripción (si venía combinada con la de las variantes no disponibles) igual queda completa gracias a la detección automática.
         La categoría es una sugerencia automática — corrígela si hace falta antes de cargar.
       </div>
       <div style="overflow-x:auto;">
@@ -618,6 +618,7 @@
     const comision = parseFloat(document.getElementById('comision').value);
 
     let indiceFila = 0;
+    let omitidosSinPrecioPreview = 0;
     for (const row of filasCrudas) {
       const nombre = row[colNombre];
       const categoriaArchivo = colCategoria ? String(row[colCategoria] || '').trim() : '';
@@ -628,11 +629,12 @@
 
       const tr = document.createElement('tr');
 
-      // Solo el nombre es realmente obligatorio. Antes, una fila sin costo válido (por ejemplo
-      // "NO DISPONIBLE" o "-" en esa versión/modelo del producto) se descartaba por completo y
-      // se perdía junto con ella la descripción — aunque esa misma descripción aplicara también
-      // a otras versiones del producto sí disponibles. Ahora esas filas SÍ se cargan al catálogo
-      // (sin cálculo de precio, para completar el costo más adelante) en vez de perderse.
+      // El nombre siempre es obligatorio. El costo/precio también lo es para que la fila se
+      // monte: una variante/modelo sin precio (el proveedor la marca "no disponible") no se
+      // importa ni se sugiere — solo se carga la(s) variante(s) que sí tienen precio. Eso sí,
+      // la descripción combinada (cuando varias variantes la comparten en el PDF original) se
+      // detecta completa y se conserva para la(s) variante(s) disponible(s), aunque el bloque de
+      // texto en el PDF también mencionara a la(s) variante(s) sin precio.
       if (!nombre) {
         tr.className = 'row-error';
         tr.innerHTML = `<td></td><td colspan="2">${escapeHtml(String(codigo || ''))}</td><td colspan="7">Fila omitida: falta el nombre del producto</td>`;
@@ -656,18 +658,19 @@
 
       const idx = indiceFila++;
 
+      // No disponible en el proveedor (sin costo válido): no se importa ni se sugiere una
+      // categoría para cargar — solo queda registrada aquí como informativa, para que se vea
+      // que la fila fue detectada y por qué no se monta.
       if (sinPrecio) {
-        filasValidas.push({ idx, nombre: nombreFinal, categoria: categoriaFinal, descripcion, codigo, marca, omitir: yaExiste, sinPrecio: true });
-
-        tr.className = yaExiste ? 'row-duplicado' : 'row-sin-precio';
+        omitidosSinPrecioPreview++;
+        tr.className = 'row-sin-precio';
         tr.innerHTML = `
-          <td>${yaExiste ? '<span class="badge-duplicado">Ya existe</span>' : '<span class="badge-sin-precio">Sin precio</span>'}</td>
+          <td><span class="badge-sin-precio">No disponible</span></td>
           <td>${escapeHtml(String(codigo || ''))}</td>
           <td>${escapeHtml(String(marca || ''))}</td>
           <td>${escapeHtml(String(nombre))}</td>
           <td class="celda-descripcion" title="${escapeHtml(descripcion)}">${escapeHtml(descripcion)}</td>
-          <td><input class="input-categoria-fila" list="lista-categorias-import" value="${escapeHtml(categoriaFinal)}" oninput="actualizarCategoriaFilaImport(${idx}, this.value)"></td>
-          <td class="num" colspan="6" style="text-align:left; color:var(--muted);">Sin costo válido en el archivo — se carga al catálogo, completa el precio luego en dashboard.html</td>
+          <td colspan="6" style="text-align:left; color:var(--muted);">Sin precio del proveedor — no se importa</td>
         `;
         tbody.appendChild(tr);
         continue;
@@ -712,6 +715,13 @@
       `;
       tbody.appendChild(tr);
     }
+
+    if (omitidosSinPrecioPreview > 0) {
+      const notaSinPrecio = document.createElement('div');
+      notaSinPrecio.className = 'hint';
+      notaSinPrecio.textContent = `${omitidosSinPrecioPreview} variante(s) sin precio del proveedor — marcadas "No disponible" arriba, no se van a importar.`;
+      panel.appendChild(notaSinPrecio);
+    }
   };
 
   // Permite corregir a mano la categoría sugerida automáticamente, fila por fila,
@@ -751,8 +761,9 @@
 
     const { data: { session } } = await supabase.auth.getSession();
     let cargados = 0;
-    let cargadosSinPrecio = 0;
 
+    // A este punto filasValidas ya solo contiene variantes con precio válido del proveedor
+    // (las "no disponibles" se descartaron desde la vista previa y nunca llegan aquí).
     for (const fila of aInsertar) {
       const { data: producto, error: errProd } = await supabase
         .from('productos')
@@ -760,51 +771,36 @@
           proveedor_id, nombre: fila.nombre, categoria: fila.categoria || null,
           sku: fila.codigo || null,
           especificaciones: fila.marca ? { marca: fila.marca } : {},
-          costo_usd: fila.sinPrecio ? 0 : fila.costo, creado_por: session?.user?.id
+          costo_usd: fila.costo, creado_por: session?.user?.id
         })
         .select()
         .single();
 
       if (!errProd) {
-        if (fila.sinPrecio) {
-          // Sin costo válido del proveedor: guardamos el producto y su descripción para no
-          // perderlos, pero sin publicación con precios calculados (se completa manualmente
-          // luego desde dashboard.html cuando se tenga el costo real).
-          if (fila.descripcion) {
-            await supabase.from('publicaciones').insert({
-              producto_id: producto.id,
-              descripcion: fila.descripcion,
-              creado_por: session?.user?.id
-            });
-          }
-          cargadosSinPrecio++;
-        } else {
-          await supabase.from('publicaciones').insert({
-            producto_id: producto.id,
-            descripcion: fila.descripcion || null,
-            modo_ganancia: modo,
-            comision_ml_pct: comision,
-            precio_efectivo_usd: fila.precioEfectivo.toFixed(2),
-            precio_bcv_usd_equiv: fila.precioBcvUsdEquiv.toFixed(2),
-            precio_bcv_bs: fila.precioBcvBs.toFixed(2),
-            ganancia_real_usd: fila.gananciaDeseada.toFixed(2),
-            comision_ml_usd: fila.comisionMlUsd.toFixed(2),
-            ganancia_neta_usd: fila.gananciaNetaUsd.toFixed(2),
-            creado_por: session?.user?.id
-          });
-          cargados++;
-        }
+        await supabase.from('publicaciones').insert({
+          producto_id: producto.id,
+          descripcion: fila.descripcion || null,
+          modo_ganancia: modo,
+          comision_ml_pct: comision,
+          precio_efectivo_usd: fila.precioEfectivo.toFixed(2),
+          precio_bcv_usd_equiv: fila.precioBcvUsdEquiv.toFixed(2),
+          precio_bcv_bs: fila.precioBcvBs.toFixed(2),
+          ganancia_real_usd: fila.gananciaDeseada.toFixed(2),
+          comision_ml_usd: fila.comisionMlUsd.toFixed(2),
+          ganancia_neta_usd: fila.gananciaNetaUsd.toFixed(2),
+          creado_por: session?.user?.id
+        });
+        cargados++;
       }
-      btn.textContent = `Cargando ${cargados + cargadosSinPrecio} / ${aInsertar.length}...`;
+      btn.textContent = `Cargando ${cargados} / ${aInsertar.length}...`;
     }
 
     btn.disabled = false;
     btn.textContent = 'Cargar productos al sistema';
     msg.className = 'msg ok';
-    const partes = [`${cargados} producto(s) con precio calculado`];
-    if (cargadosSinPrecio > 0) partes.push(`${cargadosSinPrecio} sin precio (pendientes de completar costo)`);
-    if (omitidos > 0) partes.push(`${omitidos} omitido(s) por ya existir para este proveedor`);
-    msg.textContent = `Listo: ${partes.join(', ')}. Puedes verlos en dashboard.html.`;
+    msg.textContent = omitidos > 0
+      ? `Listo: ${cargados} producto(s) nuevo(s) cargado(s). ${omitidos} omitido(s) por ya existir para este proveedor. Puedes verlos en dashboard.html.`
+      : `Listo: ${cargados} de ${aInsertar.length} productos cargados. Puedes verlos en dashboard.html.`;
     filasValidas = [];
     document.getElementById('preview-body').innerHTML = '';
   };
