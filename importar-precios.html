@@ -450,6 +450,70 @@
     });
   }
 
+  // Lee la hoja adaptándose a cómo esté armada, en vez de asumir un formato fijo — para que
+  // cualquier lista de Excel de cualquier proveedor se lea bien, no solo la que se probó:
+  //
+  // 1) No asume que la fila 1 tiene los encabezados reales: varias listas traen antes una fila
+  //    de título (nombre de la distribuidora, fecha, logo) con la mayoría de las celdas vacías.
+  //    Si se usa esa fila como encabezado, SheetJS genera nombres de columna genéricos
+  //    ("__EMPTY", "__EMPTY_1") y el sistema no reconoce ni nombre, ni costo, ni categoría — de
+  //    ahí que pareciera que "no clasifica": en realidad no encontraba ninguna columna real
+  //    para empezar. Se busca la primera fila con al menos 2 celdas con texto (entre las
+  //    primeras 15, sin contar filas en blanco) y esa se usa como encabezado de verdad.
+  // 2) Completa las celdas combinadas de Excel usando la información real del archivo
+  //    (sheet['!merges']): si el proveedor combinó, por ejemplo, la marca o la descripción para
+  //    varias filas de modelos distintos, SheetJS solo guarda ese valor en la primera celda del
+  //    grupo y deja las demás vacías — se copia el mismo valor a todo el rango combinado, igual
+  //    que se ve visualmente en Excel. Una celda vacía que NO está combinada se deja igual que
+  //    antes (no se inventa nada).
+  function extraerFilasDesdeHoja(sheet) {
+    const matrizOriginal = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
+
+    // La fila de encabezado se busca ANTES de completar las celdas combinadas: si no, un
+    // título en una celda combinada (que ocupa varias columnas) se contaría como si tuviera
+    // varias celdas con texto y se confundiría con la fila de encabezados real.
+    let indiceEncabezado = 0;
+    let filasNoBlancoVistas = 0;
+    for (let i = 0; i < matrizOriginal.length && filasNoBlancoVistas < 15; i++) {
+      const fila = matrizOriginal[i];
+      if (!Array.isArray(fila) || !fila.some(c => String(c || '').trim() !== '')) continue;
+      filasNoBlancoVistas++;
+      const celdasConTexto = fila.filter(c => String(c || '').trim() !== '');
+      if (celdasConTexto.length >= 2) { indiceEncabezado = i; break; }
+    }
+
+    (sheet['!merges'] || []).forEach(rango => {
+      const filaOrigen = matrizOriginal[rango.s.r];
+      const valorOrigen = filaOrigen ? filaOrigen[rango.s.c] : undefined;
+      if (valorOrigen === undefined || String(valorOrigen).trim() === '') return;
+      for (let r = rango.s.r; r <= rango.e.r; r++) {
+        if (!matrizOriginal[r]) matrizOriginal[r] = [];
+        for (let c = rango.s.c; c <= rango.e.c; c++) {
+          if (r === rango.s.r && c === rango.s.c) continue;
+          matrizOriginal[r][c] = valorOrigen;
+        }
+      }
+    });
+
+    const encabezadosCrudos = matrizOriginal[indiceEncabezado] || [];
+    const encabezadosUnicos = [];
+    encabezadosCrudos.forEach((h, i) => {
+      let nombre = String(h || '').trim() || `Columna ${i + 1}`;
+      let n = 1;
+      while (encabezadosUnicos.includes(nombre)) { n++; nombre = `${nombre} (${n})`; }
+      encabezadosUnicos.push(nombre);
+    });
+    if (encabezadosUnicos.length === 0) return [];
+
+    return matrizOriginal.slice(indiceEncabezado + 1)
+      .filter(fila => Array.isArray(fila) && fila.some(c => String(c || '').trim() !== ''))
+      .map(fila => {
+        const obj = {};
+        encabezadosUnicos.forEach((h, i) => { obj[h] = fila[i] !== undefined ? String(fila[i]) : ''; });
+        return obj;
+      });
+  }
+
   async function detectarColumnas(file) {
     const esPDF = /\.pdf$/i.test(file.name) || file.type === 'application/pdf';
 
@@ -462,7 +526,7 @@
       // raw:false = usar el texto formateado tal como Excel lo muestra, evita errores de decimales
       const wb = XLSX.read(buffer, { type: 'array' });
       const sheet = wb.Sheets[wb.SheetNames[0]];
-      filasCrudas = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: false });
+      filasCrudas = extraerFilasDesdeHoja(sheet);
     }
 
     if (filasCrudas.length === 0) {
