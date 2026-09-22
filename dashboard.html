@@ -503,6 +503,17 @@
     </div>
 
     <div class="panel" style="padding: 12px 22px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;" onclick="toggleProductosSinCategoria()">
+        <span style="font-size:12.5px; color:var(--muted);">📦 Productos sin categoría <span id="conteo-sin-categoria" style="color:var(--rust);"></span></span>
+        <span id="icono-sin-categoria" style="font-size:12px; color:var(--muted);">Mostrar ▾</span>
+      </div>
+      <div id="contenido-sin-categoria" style="display:none; margin-top:14px;">
+        <div class="hint" style="margin-top:0;">Productos que todavía no tienen categoría asignada. Haz clic en uno para abrirlo completo — nombre, descripción, precio, imágenes — revisarlo con calma y asignarle su categoría correspondiente.</div>
+        <div id="lista-sin-categoria" style="max-height: 320px; overflow-y: auto; border: 1px solid var(--line); margin-top: 12px;"></div>
+      </div>
+    </div>
+
+    <div class="panel" style="padding: 12px 22px;">
       <div style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;" onclick="toggleGestionCategorias()">
         <span style="font-size:12.5px; color:var(--muted);">🏷 Gestionar categorías</span>
         <span id="icono-categorias" style="font-size:12px; color:var(--muted);">Mostrar ▾</span>
@@ -752,7 +763,64 @@
 
     actualizarFiltroCategorias();
     renderizarTablaProductos();
+    actualizarProductosSinCategoria();
   }
+
+  // --- Productos sin categoría: lista aparte para revisar cada producto completo
+  // (nombre, descripción, precio, imágenes, etc.) antes de decidir en qué categoría va,
+  // en vez de tener que adivinar a partir de solo el nombre en la tabla general. ---
+
+  function productosSinCategoria() {
+    return Object.values(productosCache).filter(p => !(p.categoria || '').trim());
+  }
+
+  function actualizarProductosSinCategoria() {
+    const sinCategoria = productosSinCategoria();
+    const conteoSpan = document.getElementById('conteo-sin-categoria');
+    if (conteoSpan) conteoSpan.textContent = sinCategoria.length > 0 ? `(${sinCategoria.length})` : '';
+    const cont = document.getElementById('contenido-sin-categoria');
+    if (cont && cont.style.display === 'block') renderizarListaSinCategoria(sinCategoria);
+  }
+
+  function renderizarListaSinCategoria(lista) {
+    const cont = document.getElementById('lista-sin-categoria');
+    const sinCategoria = lista || productosSinCategoria();
+    if (sinCategoria.length === 0) {
+      cont.innerHTML = '<div class="empty">Todos los productos tienen categoría asignada.</div>';
+      return;
+    }
+    const ordenados = [...sinCategoria].sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '', 'es'));
+    cont.innerHTML = ordenados.map(p => {
+      const proveedor = p.proveedores?.nombre || 'sin proveedor';
+      return `
+        <div class="fila-producto" style="cursor:pointer;" onclick="revisarProductoSinCategoria('${p.id}')">
+          <span class="fp-nombre">${escapeHtml(p.nombre || '(sin nombre)')}</span>
+          <span class="fp-info">${escapeHtml(proveedor)} · $${Number(p.costo_usd || 0).toFixed(2)} · Revisar y clasificar →</span>
+        </div>`;
+    }).join('');
+  }
+
+  window.toggleProductosSinCategoria = function() {
+    const cont = document.getElementById('contenido-sin-categoria');
+    const icono = document.getElementById('icono-sin-categoria');
+    const abierta = cont.style.display === 'block';
+    cont.style.display = abierta ? 'none' : 'block';
+    icono.textContent = abierta ? 'Mostrar ▾' : 'Ocultar ▴';
+    if (!abierta) renderizarListaSinCategoria();
+  };
+
+  // Abre el producto en el formulario completo de edición (mismo formulario que "Editar" en la
+  // tabla de productos) para que se pueda leer todo antes de definir la categoría, y resalta el
+  // campo de categoría para que sea obvio qué hay que completar.
+  window.revisarProductoSinCategoria = function(id) {
+    editarProducto(id);
+    const campoCategoria = document.getElementById('prod-categoria');
+    if (campoCategoria) {
+      campoCategoria.focus();
+      campoCategoria.style.outline = '2px solid var(--gold)';
+      setTimeout(() => { campoCategoria.style.outline = ''; }, 2500);
+    }
+  };
 
   window.aplicarFiltrosProductos = function() {
     paginaActualProductos = 1;
