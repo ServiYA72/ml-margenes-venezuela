@@ -378,7 +378,7 @@
   let itemsCotizacion = []; // { producto_id, descripcion, cantidad, precioUnitario, precioUnitarioBs, costoOriginal, avisos }
   let cotizacionGuardada = null; // { id, numero, cliente_nombre, cliente_telefono, cliente_email, ...totales }
   let cotizacionEnEdicionId = null; // id de la cotización que se está retomando/actualizando (null = cotización nueva)
-  let logoBase64Cache = null;
+  let logoBase64Cache; // undefined = aún no se intentó cargar; null = se intentó y falló; objeto = listo
   let tasaBCV = null;
   let tasaBinance = null;
 
@@ -473,17 +473,32 @@
   }
 
   async function obtenerLogoBase64() {
-    if (logoBase64Cache) return logoBase64Cache;
+    if (logoBase64Cache !== undefined) return logoBase64Cache;
     try {
       const resp = await fetch('logo-nicom.png');
+      if (!resp.ok) throw new Error('logo-nicom.png respondió ' + resp.status);
       const blob = await resp.blob();
-      logoBase64Cache = await new Promise((resolve, reject) => {
-        const lector = new FileReader();
-        lector.onload = () => resolve(lector.result);
-        lector.onerror = reject;
-        lector.readAsDataURL(blob);
+      const urlObjeto = URL.createObjectURL(blob);
+      const imagen = await new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error('No se pudo decodificar logo-nicom.png'));
+        img.src = urlObjeto;
       });
-    } catch (e) { logoBase64Cache = null; }
+      // Se vuelve a dibujar en un <canvas> y se re-codifica desde ahí, en vez de usar los
+      // bytes originales del PNG tal cual — así jsPDF siempre recibe un PNG "estándar" del
+      // navegador y no falla en silencio con variantes (paleta indexada, canal alfa, etc.)
+      // que su decodificador interno a veces no soporta.
+      const canvas = document.createElement('canvas');
+      canvas.width = imagen.naturalWidth || imagen.width;
+      canvas.height = imagen.naturalHeight || imagen.height;
+      canvas.getContext('2d').drawImage(imagen, 0, 0);
+      logoBase64Cache = { dataUrl: canvas.toDataURL('image/png'), ancho: canvas.width, alto: canvas.height };
+      URL.revokeObjectURL(urlObjeto);
+    } catch (e) {
+      console.error('No se pudo preparar el logo para el PDF:', e);
+      logoBase64Cache = null;
+    }
     return logoBase64Cache;
   }
 
@@ -1243,9 +1258,12 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
     let y = 50;
 
     if (logo) {
-      // Mismo archivo logo-nicom.png que usa el catálogo (dashboard.html); se respeta su
-      // proporción real (≈373x120) en vez de forzarlo a un ancho x alto fijo que lo deforma.
-      try { doc.addImage(logo, 'PNG', margenX, y - 24, 118, 38, undefined, 'FAST'); } catch (e) {}
+      // Mismo archivo logo-nicom.png que usa el catálogo (dashboard.html), con su proporción
+      // real (ancho/alto tal como se cargó) en vez de forzarlo a un tamaño fijo que lo deforma.
+      const altoLogo = 38;
+      const anchoLogo = logo.alto ? (logo.ancho / logo.alto) * altoLogo : 118;
+      try { doc.addImage(logo.dataUrl, 'PNG', margenX, y - 24, anchoLogo, altoLogo, undefined, 'FAST'); }
+      catch (e) { console.error('No se pudo dibujar el logo en el PDF:', e); }
     }
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(20);
@@ -1298,23 +1316,57 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
 
     const yTrasTabla = dibujarTablaItemsPDF(doc, filas, y, margenX);
 
-    let yFinal = yTrasTabla + 20;
+    let yFinal = yTrasTabla + 24;
     // Si la tabla llegó muy abajo (cotización con muchos ítems), abrimos página nueva
     // para que el resumen de totales, condiciones y notas no se corten ni se encimen.
-    if (yFinal > 700) { doc.addPage(); yFinal = 60; }
+    if (yFinal > 640) { doc.addPage(); yFinal = 60; }
     const subtotal = Number(cot.subtotal || 0);
     const total = Number(cot.total || 0);
     const subtotalBs = Number(cot.subtotal_bs || 0);
     const totalBs = Number(cot.total_bs || 0);
+
+    // Caja de resumen: el $ y el Bs de cada renglón van en LÍNEAS separadas (no en un solo
+    // texto largo "$... Bs...") para que nunca se encimen con la etiqueta ni entre ellos,
+    // sin importar cuántos dígitos tenga el monto — antes se encimaban porque "$1350.00
+    // Bs 1.146.911,40" en negrita no cabía en el espacio entre la etiqueta y el borde.
+    const cajaAncho = 220, cajaX = 555 - cajaAncho, cajaPad = 12, cajaAlto = 84;
+    doc.setFillColor(244, 242, 236);
+    doc.roundedRect(cajaX, yFinal, cajaAncho, cajaAlto, 4, 4, 'F');
+
+    let yCaja = yFinal + 18;
     doc.setFont('helvetica', 'normal');
-    doc.text('Subtotal', 400, yFinal);
-    doc.text('$' + subtotal.toFixed(2) + '   ' + fmtBsPdf(subtotalBs), 555, yFinal, { align: 'right' });
-    yFinal += 16;
+    doc.setFontSize(9);
+    doc.setTextColor(110, 120, 114);
+    doc.text('Subtotal', cajaX + cajaPad, yCaja);
+    doc.setFontSize(10.5);
+    doc.setTextColor(50, 60, 55);
+    doc.text('$' + subtotal.toFixed(2), 555 - cajaPad, yCaja, { align: 'right' });
+    yCaja += 12;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(8.5);
+    doc.setTextColor(140, 140, 140);
+    doc.text(fmtBsPdf(subtotalBs), 555 - cajaPad, yCaja, { align: 'right' });
+
+    yCaja += 12;
+    doc.setDrawColor(205, 198, 178);
+    doc.line(cajaX + cajaPad, yCaja, 555 - cajaPad, yCaja);
+    yCaja += 17;
+
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(12);
-    doc.text('Total', 400, yFinal);
-    doc.text('$' + total.toFixed(2) + '   ' + fmtBsPdf(totalBs), 555, yFinal, { align: 'right' });
-    yFinal += 22;
+    doc.setFontSize(11);
+    doc.setTextColor(20, 30, 26);
+    doc.text('TOTAL', cajaX + cajaPad, yCaja);
+    doc.setFontSize(15);
+    doc.setTextColor(160, 128, 26);
+    doc.text('$' + total.toFixed(2), 555 - cajaPad, yCaja, { align: 'right' });
+    yCaja += 14;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(120, 120, 120);
+    doc.text(fmtBsPdf(totalBs), 555 - cajaPad, yCaja, { align: 'right' });
+    doc.setTextColor(20, 30, 26);
+
+    yFinal += cajaAlto + 18;
 
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
