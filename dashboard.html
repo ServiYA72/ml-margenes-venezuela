@@ -381,7 +381,14 @@
         </div>
         <div style="grid-column: 1 / -1;">
           <label for="prod-imagenes">Imágenes (URLs separadas por coma)</label>
-          <input type="text" id="prod-imagenes" placeholder="https://... , https://...">
+          <input type="text" id="prod-imagenes" placeholder="https://... , https://..." oninput="actualizarPrevisualizacionFotos()">
+          <div style="display:flex; align-items:center; gap:10px; margin-top:8px; flex-wrap:wrap;">
+            <label for="input-subir-fotos" class="add" style="padding:7px 14px; font-size:12.5px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line); cursor:pointer; display:inline-block; margin-top:0;">📷 Subir fotos</label>
+            <input type="file" id="input-subir-fotos" accept="image/jpeg,image/png,image/webp" multiple style="display:none;" onchange="subirFotosProducto(this.files)">
+            <span id="msg-subida-fotos" style="font-size:12px; color:var(--muted);"></span>
+          </div>
+          <div class="hint" style="margin-top:6px;">Sube las fotos aquí (se alojan con link público, listas para usar también en la planilla de publicación masiva de Mercado Libre) o pega URLs de fotos ya alojadas en otro sitio, arriba.</div>
+          <div id="previsualizacion-fotos" style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;"></div>
         </div>
         <button class="add" id="btn-guardar-producto" onclick="crearProducto()">Agregar y calcular</button>
         <button class="add" id="btn-cancelar-edicion" onclick="cancelarEdicion()" style="display:none; background:var(--surface-2); color:var(--paper); border:1px solid var(--line);">Cancelar edición</button>
@@ -578,6 +585,7 @@
   const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
   let tasaBCV = null, tasaBinance = null;
+  let tenantIdActual = null; // necesario para armar la ruta de subida de fotos (ver revisarSubidaImagenes)
 
   window.switchView = function(view, btn) {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -595,6 +603,10 @@
       return null;
     }
     who.textContent = session.user.email;
+
+    const { data: perfil } = await supabase.from('profiles').select('tenant_id').eq('id', session.user.id).single();
+    tenantIdActual = perfil?.tenant_id || null;
+
     return session.user;
   }
 
@@ -1116,6 +1128,7 @@
     document.getElementById('prod-pago').value = pub.condiciones_pago || '';
     document.getElementById('prod-horario').value = pub.horario_atencion || '';
     document.getElementById('prod-imagenes').value = (pub.imagenes || []).join(', ');
+    actualizarPrevisualizacionFotos();
 
     document.getElementById('btn-guardar-producto').textContent = 'Guardar cambios';
     document.getElementById('btn-cancelar-edicion').style.display = 'inline-block';
@@ -1132,6 +1145,81 @@
     document.getElementById('prod-valor-ganancia').value = 30;
     document.getElementById('prod-comision').value = 9;
     sincronizarGanancia('prod', 'usd');
+    actualizarPrevisualizacionFotos();
+  };
+
+  // --- Fotos de producto: se alojan en Supabase Storage (bucket público "productos-fotos",
+  // separado por carpeta de tenant) para que cada foto tenga un link público fijo — necesario
+  // porque la planilla de "Publicación masiva" de Mercado Libre solo acepta un link de imagen,
+  // no el archivo. Las URLs resultantes se agregan al mismo campo de texto de siempre, así que
+  // pegar URLs de fotos alojadas en otro sitio sigue funcionando igual que antes. ---
+
+  window.subirFotosProducto = async function(files) {
+    const msg = document.getElementById('msg-subida-fotos');
+    if (!files || files.length === 0) return;
+    if (!tenantIdActual) {
+      msg.style.color = 'var(--rust)';
+      msg.textContent = 'No se pudo identificar tu cuenta todavía — recarga la página e intenta de nuevo.';
+      return;
+    }
+
+    const campoImagenes = document.getElementById('prod-imagenes');
+    const urlsActuales = campoImagenes.value.split(',').map(s => s.trim()).filter(Boolean);
+    const listaArchivos = Array.from(files);
+    let subidas = 0;
+
+    for (let i = 0; i < listaArchivos.length; i++) {
+      const file = listaArchivos[i];
+      msg.style.color = 'var(--muted)';
+      msg.textContent = `Subiendo ${i + 1}/${listaArchivos.length}...`;
+
+      const extension = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+      const nombreArchivo = `${tenantIdActual}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${extension}`;
+
+      const { error } = await supabase.storage.from('productos-fotos').upload(nombreArchivo, file, {
+        cacheControl: '31536000',
+        upsert: false,
+        contentType: file.type || 'image/jpeg'
+      });
+
+      if (error) {
+        msg.style.color = 'var(--rust)';
+        msg.textContent = `Error subiendo "${file.name}": ${error.message}`;
+        continue;
+      }
+
+      const { data: pub } = supabase.storage.from('productos-fotos').getPublicUrl(nombreArchivo);
+      urlsActuales.push(pub.publicUrl);
+      subidas++;
+    }
+
+    campoImagenes.value = urlsActuales.join(', ');
+    actualizarPrevisualizacionFotos();
+    document.getElementById('input-subir-fotos').value = '';
+
+    if (subidas > 0) {
+      msg.style.color = 'var(--teal)';
+      msg.textContent = `${subidas} foto(s) subida(s) correctamente.`;
+    }
+  };
+
+  window.actualizarPrevisualizacionFotos = function() {
+    const cont = document.getElementById('previsualizacion-fotos');
+    if (!cont) return;
+    const urls = document.getElementById('prod-imagenes').value.split(',').map(s => s.trim()).filter(Boolean);
+    cont.innerHTML = urls.map((url, i) => `
+      <div style="position:relative;">
+        <img src="${escapeHtml(url)}" style="width:64px; height:64px; object-fit:cover; border:1px solid var(--line); display:block;" onerror="this.style.opacity='0.2';">
+        <button type="button" onclick="quitarImagenProducto(${i})" title="Quitar esta foto" style="position:absolute; top:-7px; right:-7px; width:18px; height:18px; border-radius:50%; background:var(--rust); color:var(--paper); border:none; font-size:11px; line-height:1; cursor:pointer;">×</button>
+      </div>`).join('');
+  };
+
+  window.quitarImagenProducto = function(index) {
+    const campo = document.getElementById('prod-imagenes');
+    const urls = campo.value.split(',').map(s => s.trim()).filter(Boolean);
+    urls.splice(index, 1);
+    campo.value = urls.join(', ');
+    actualizarPrevisualizacionFotos();
   };
 
   // Mantiene sincronizados los campos de ganancia en $ y en %, en ambas direcciones,
