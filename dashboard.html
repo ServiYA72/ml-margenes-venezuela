@@ -170,6 +170,11 @@
   }
   td.num, th.num { font-family: 'IBM Plex Mono', monospace; text-align: right; }
   tr:last-child td { border-bottom: none; }
+  #tabla-productos thead th {
+    position: sticky;
+    z-index: 24;
+    background: var(--surface);
+  }
   .fila-resaltada {
     background: rgba(201, 162, 39, 0.14) !important;
     box-shadow: inset 3px 0 0 var(--gold);
@@ -384,7 +389,8 @@
       <div class="msg" id="msg-producto"></div>
     </div>
 
-    <div class="panel">
+    <div class="panel" style="padding-top:0;">
+      <div id="bloque-sticky-productos" style="position:sticky; z-index:25; background:var(--surface); padding-top:22px; padding-bottom:4px;">
       <h2>Productos con margen calculado</h2>
 
       <div style="display:flex; gap:12px; align-items:end; flex-wrap:wrap; margin-bottom:16px; padding-bottom:16px; border-bottom:1px solid var(--line);">
@@ -447,6 +453,7 @@
         </div>
         <div id="contador-resultados" style="font-size:12px; color:var(--muted); padding-bottom:10px;"></div>
         <button class="add" style="padding:9px 14px; font-size:12.5px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line);" onclick="limpiarFiltrosProductos()">Limpiar filtros</button>
+      </div>
       </div>
 
       <div style="overflow-x:auto;">
@@ -1856,6 +1863,34 @@ RESULTADOS DEL CÁLCULO DE PRECIO
   window.addEventListener('scroll', actualizar, { passive: true });
   window.addEventListener('resize', actualizar);
   actualizar();
+})();
+</script>
+<script>
+// Mide en vivo la altura real del encabezado de arriba (logo + menú, que ya queda fijo al
+// hacer scroll) y la del bloque "Productos con margen calculado" (título + acciones + filtros),
+// para que ese bloque se quede pegado justo debajo del encabezado, y la fila de títulos de la
+// tabla (Producto, Proveedor, Stock...) se quede pegada justo debajo de ese bloque — así nunca
+// se pierde de vista con qué columna corresponde cada dato al bajar por la lista larga.
+// Se recalcula en cada carga y cambio de tamaño porque el encabezado y los filtros pueden
+// ocupar una o dos líneas según el ancho de pantalla.
+(function() {
+  function actualizarStickyProductos() {
+    var header = document.querySelector('header');
+    var bloque = document.getElementById('bloque-sticky-productos');
+    if (!header || !bloque) return;
+    var altoHeader = header.getBoundingClientRect().height;
+    bloque.style.top = altoHeader + 'px';
+    var altoBloque = bloque.getBoundingClientRect().height;
+    var thead = document.querySelectorAll('#tabla-productos thead th');
+    thead.forEach(function(th) { th.style.top = (altoHeader + altoBloque) + 'px'; });
+  }
+  window.addEventListener('load', actualizarStickyProductos);
+  window.addEventListener('resize', actualizarStickyProductos);
+  actualizarStickyProductos();
+  // Los filtros son <select>/<input> que cambian de contenido dinámicamente (proveedores,
+  // categorías) sin cambiar de tamaño — pero por si acaso el layout se reajusta, se vuelve a
+  // medir un momento después de cargar los datos iniciales.
+  setTimeout(actualizarStickyProductos, 800);
 })();
 </script>
 </body>
