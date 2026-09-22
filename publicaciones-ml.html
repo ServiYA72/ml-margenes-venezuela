@@ -154,7 +154,7 @@
 
   <div class="panel">
     <h2>3. Preparar publicaciones nuevas para subir</h2>
-    <div class="hint" style="margin-top:0;">Sube la planilla en blanco de la categoría (la misma que descargas en Mercado Libre desde Publicar → Masivamente, o desde Fichas técnicas). El sistema le agrega filas nuevas ya con el SKU y el título de los productos que elijas, listas para que completes el resto: precio, stock, fotos (usa los links que subiste en la ficha del producto) y las características propias de la categoría que Mercado Libre pide — esos datos no los completa el sistema porque no vienen en tu catálogo o porque Mercado Libre los controla con listas propias.</div>
+    <div class="hint" style="margin-top:0;">Sube la planilla en blanco que descargaste de Mercado Libre (Publicar → Masivamente → elige la categoría → Descargar planilla). El sistema agrega una fila por cada producto que elijas y la completa con: título (recortado a 60 caracteres, revísalo), SKU, fotos (los links públicos que subiste en la ficha del producto), stock, precio y descripción. Lo que NO se completa —código universal, color/variante, marca, modelo y el resto de las características propias de la categoría— lo dejamos para que tú lo confirmes, porque Mercado Libre las controla con sus propias listas desplegables y una lista mal escrita hace que rechace la fila entera.</div>
 
     <label for="input-plantilla-preparar" class="subir-archivo" style="margin-top:16px;">📄 Elegir planilla en blanco</label>
     <input type="file" id="input-plantilla-preparar" accept=".xlsx,.xls" style="display:none;" onchange="cargarPlantillaPreparar(this.files[0])">
@@ -550,6 +550,62 @@
   let workbookPreparar = null;
   let seleccionadosPreparar = []; // productos elegidos para esta tanda
 
+  // La planilla real de Mercado Libre ("Publicar masivamente") NO trae códigos de campo tipo
+  // SKU/TITLE en la fila 1 como sí trae el export de "Fichas técnicas" — trae encabezados en
+  // español (fila 3), una fila de "Obligatorio" (fila 4), pistas (fila 5), links (fila 6) y los
+  // datos empiezan en la fila 7. Esa estructura se repite igual en todas las categorías, así que
+  // en vez de asumir una posición de columna fija, se busca cada columna por su texto.
+  function normalizarEncabezado(v) {
+    return String(v || '')
+      .toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/\[[^\]]*\]/g, ' ')   // quita anotaciones tipo "[US$]"
+      .replace(/[^a-z0-9\s]/g, ' ')  // quita signos sueltos
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function detectarEncabezadosPlantilla(matriz) {
+    // Busca, dentro de las primeras filas, la fila de encabezados: la que trae una celda que
+    // empieza con "titulo" y otra celda exactamente "sku".
+    for (let f = 0; f < Math.min(matriz.length, 10); f++) {
+      const fila = matriz[f] || [];
+      const normFila = fila.map(normalizarEncabezado);
+      const colTitulo = normFila.findIndex(v => v.startsWith('titulo'));
+      const colSku = normFila.findIndex(v => v === 'sku');
+      if (colTitulo === -1 || colSku === -1) continue;
+
+      const buscar = (pred) => normFila.findIndex(pred);
+      return {
+        filaEncabezado: f,
+        filaDatosInicio: f + 4, // así vienen todas las planillas de Mercado Libre: encabezado + 4
+        col: {
+          titulo: colTitulo,
+          sku: colSku,
+          fotos: buscar(v => v === 'fotos'),
+          stock: buscar(v => v === 'stock'),
+          precio: buscar(v => v === 'precio'),
+          descripcion: buscar(v => v === 'descripcion'),
+          marca: buscar(v => v === 'marca'),
+          modelo: buscar(v => v === 'modelo')
+        }
+      };
+    }
+    return null;
+  }
+
+  // Recorta el título a 60 caracteres (límite de Mercado Libre) sin cortar una palabra a la
+  // mitad, y le quita el "[SKU]" que solemos guardar al inicio del nombre en el catálogo.
+  function truncarTitulo(nombre, maxLen = 60) {
+    // Quita el "[SKU]" que solemos guardar dentro del nombre (en cualquier posición, no solo
+    // al inicio) — el SKU ya va en su propia columna, no hace falta repetirlo y gastar caracteres.
+    const limpio = String(nombre || '').replace(/\[[^\]]*\]\s*/, '').replace(/\s+/g, ' ').trim();
+    if (limpio.length <= maxLen) return limpio;
+    const corte = limpio.slice(0, maxLen);
+    const ultimoEspacio = corte.lastIndexOf(' ');
+    return (ultimoEspacio > 30 ? corte.slice(0, ultimoEspacio) : corte).trim();
+  }
+
   window.cargarPlantillaPreparar = async function(file) {
     const msg = document.getElementById('msg-plantilla-preparar');
     const bloque = document.getElementById('bloque-preparar');
@@ -568,16 +624,16 @@
       return;
     }
 
-    const HOJAS_IGNORAR = new Set(['Ayuda', 'hidden']);
+    const HOJAS_IGNORAR = new Set(['Ayuda', 'ayuda', 'extra info', 'hidden']);
     const hojasValidas = workbookPreparar.SheetNames.filter(n => {
       if (HOJAS_IGNORAR.has(n)) return false;
       const matriz = XLSX.utils.sheet_to_json(workbookPreparar.Sheets[n], { header: 1, defval: '' });
-      return matriz.length > 0 && matriz[0].includes('SKU') && matriz[0].includes('TITLE');
+      return !!detectarEncabezadosPlantilla(matriz);
     });
 
     if (hojasValidas.length === 0) {
       msg.style.color = 'var(--rust)';
-      msg.textContent = 'No se encontró ninguna hoja de categoría con columnas SKU/TITLE reconocibles en este archivo.';
+      msg.textContent = 'No se encontró ninguna hoja de categoría con columnas de Título/SKU reconocibles en este archivo.';
       workbookPreparar = null;
       return;
     }
@@ -629,37 +685,61 @@
       </span>`).join('');
   }
 
-  window.generarPlantillaPreparar = function() {
+  window.generarPlantillaPreparar = async function() {
     const msg = document.getElementById('msg-generar-preparar');
     if (!workbookPreparar) { msg.style.color = 'var(--rust)'; msg.textContent = 'Sube primero la planilla.'; return; }
     if (seleccionadosPreparar.length === 0) { msg.style.color = 'var(--rust)'; msg.textContent = 'Agrega al menos un producto.'; return; }
 
+    msg.style.color = 'var(--muted)';
+    msg.textContent = 'Buscando precio, stock, fotos y descripción de cada producto...';
+
     const nombreHoja = document.getElementById('select-hoja-preparar').value;
     const ws = workbookPreparar.Sheets[nombreHoja];
     const matriz = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
-    const codigos = matriz[0] || [];
-    const idx = {};
-    codigos.forEach((c, i) => { if (c) idx[String(c).trim()] = i; });
+    const enc = detectarEncabezadosPlantilla(matriz);
 
-    if (idx.SKU === undefined || idx.TITLE === undefined) {
-      msg.style.color = 'var(--rust)'; msg.textContent = 'Esta hoja no tiene columnas SKU/TITLE reconocibles.'; return;
+    if (!enc) {
+      msg.style.color = 'var(--rust)'; msg.textContent = 'Esta hoja no tiene columnas de Título/SKU reconocibles.'; return;
     }
 
-    // Encontrar la última fila con datos (desde la fila 5 = índice 4) para agregar después de ella
-    let ultimaFila = 3;
-    for (let r = 4; r < matriz.length; r++) {
-      const fila = matriz[r] || [];
-      const tieneAlgo = fila.some(v => v !== '' && v !== undefined && v !== null);
-      if (tieneAlgo) ultimaFila = r;
+    // Trae del catálogo lo que no está en productosCache (precio, stock, fotos, descripción) —
+    // solo para los productos de esta tanda, no hace falta cargarlo para los miles del catálogo.
+    const ids = seleccionadosPreparar.map(p => p.id);
+    const { data: pubs, error: errPubs } = await supabase
+      .from('publicaciones')
+      .select('producto_id, precio_efectivo_usd, stock, imagenes, descripcion')
+      .in('producto_id', ids);
+    if (errPubs) {
+      msg.style.color = 'var(--rust)';
+      msg.textContent = 'No se pudo consultar precio/stock/fotos: ' + errPubs.message;
+      return;
     }
-    let filaDestino = ultimaFila + 1;
-    if (filaDestino < 4) filaDestino = 4;
+    const pubPorProducto = {};
+    (pubs || []).forEach(pub => { pubPorProducto[pub.producto_id] = pub; });
+
+    // El primer renglón libre es el primero (desde donde empiezan los datos) cuya celda de
+    // Título esté vacía — en esta planilla TODAS las filas ya traen valores por defecto en
+    // varias columnas (Condición, Stock, Tipo de publicación), así que no sirve buscar "la
+    // última fila con algo": hay que fijarse puntualmente en la columna Título.
+    let filaDestino = enc.filaDatosInicio;
+    while (matriz[filaDestino] && matriz[filaDestino][enc.col.titulo]) filaDestino++;
+
+    const escribir = (fila, col, valor) => {
+      if (col === undefined || col === -1 || valor === undefined || valor === '') return;
+      const celda = XLSX.utils.encode_cell({ r: fila, c: col });
+      ws[celda] = typeof valor === 'number' ? { t: 'n', v: valor } : { t: 's', v: String(valor) };
+    };
 
     seleccionadosPreparar.forEach(p => {
-      const celdaSku = XLSX.utils.encode_cell({ r: filaDestino, c: idx.SKU });
-      const celdaTitulo = XLSX.utils.encode_cell({ r: filaDestino, c: idx.TITLE });
-      ws[celdaSku] = { t: 's', v: p.sku || '' };
-      ws[celdaTitulo] = { t: 's', v: p.nombre || '' };
+      const pub = pubPorProducto[p.id];
+      escribir(filaDestino, enc.col.titulo, truncarTitulo(p.nombre));
+      escribir(filaDestino, enc.col.sku, p.sku || '');
+      escribir(filaDestino, enc.col.descripcion, p.nombre || '');
+      if (pub) {
+        escribir(filaDestino, enc.col.fotos, (pub.imagenes || []).join(', '));
+        escribir(filaDestino, enc.col.stock, Number.isFinite(pub.stock) ? pub.stock : undefined);
+        escribir(filaDestino, enc.col.precio, pub.precio_efectivo_usd != null ? Number(pub.precio_efectivo_usd) : undefined);
+      }
       filaDestino++;
     });
 
@@ -672,7 +752,7 @@
     XLSX.writeFile(workbookPreparar, nombreArchivo);
 
     msg.style.color = 'var(--teal)';
-    msg.textContent = `Listo — se agregaron ${seleccionadosPreparar.length} producto(s) con SKU y título, y se descargó "${nombreArchivo}". Completa precio, stock, fotos y la ficha técnica de la categoría antes de subirla a Mercado Libre.`;
+    msg.textContent = `Listo — se agregaron ${seleccionadosPreparar.length} producto(s) con título, SKU, descripción, y precio/stock/fotos cuando estaban disponibles en el catálogo. Se descargó "${nombreArchivo}". Revisa el título (quedó recortado a 60 caracteres) y completa código universal, color/variante, marca, modelo y el resto de la ficha técnica antes de subirla a Mercado Libre.`;
   };
 
   // Cerrar sugerencias al hacer clic afuera
