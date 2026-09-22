@@ -488,15 +488,19 @@
 
   async function obtenerLogoBase64() {
     if (logoBase64Cache !== undefined) return logoBase64Cache;
+    // El PDF se imprime sobre fondo blanco, así que usa una variante propia del logo (texto
+    // en negro) en vez de logo-nicom.png — ese archivo tiene el texto en beige claro pensado
+    // para el fondo oscuro del sitio, y casi no se ve sobre una página blanca.
+    const ARCHIVO_LOGO_PDF = 'logo-nicom-pdf.png';
     try {
-      const resp = await fetch('logo-nicom.png');
-      if (!resp.ok) throw new Error('logo-nicom.png respondió ' + resp.status);
+      const resp = await fetch(ARCHIVO_LOGO_PDF);
+      if (!resp.ok) throw new Error(ARCHIVO_LOGO_PDF + ' respondió ' + resp.status);
       const blob = await resp.blob();
       const urlObjeto = URL.createObjectURL(blob);
       const imagen = await new Promise((resolve, reject) => {
         const img = new Image();
         img.onload = () => resolve(img);
-        img.onerror = () => reject(new Error('No se pudo decodificar logo-nicom.png'));
+        img.onerror = () => reject(new Error('No se pudo decodificar ' + ARCHIVO_LOGO_PDF));
         img.src = urlObjeto;
       });
       // Se vuelve a dibujar en un <canvas> y se re-codifica desde ahí, en vez de usar los
@@ -1211,14 +1215,32 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
   // esto la generación del PDF ya no depende de ese segundo script.
   function dibujarTablaItemsPDF(doc, filas, startY, margenX) {
     const bordeDerecho = 555;
+    // Orden y columnas inspirados en el modelo de "Propuesta Económica" en Excel de Nicom
+    // (ITEM | MARCA | CODIGO | CANT. | DESCRIPCION | PRECIO...): se agregan Ítem/Marca/Código
+    // — Marca y Código salen del producto vinculado (productosCache), sin tocar el cálculo de
+    // precios, que sigue siendo el mismo de siempre ($ efectivo / Bs pagando en bolívares).
     const columnas = [
-      { titulo: 'Descripción', ancho: 195, align: 'left' },
-      { titulo: 'Cant.', ancho: 40, align: 'right' },
-      { titulo: '$ Efectivo', ancho: 65, align: 'right' },
-      { titulo: 'Bs (pago Bs)', ancho: 90, align: 'right' },
-      { titulo: 'Subt. $', ancho: 60, align: 'right' },
-      { titulo: 'Subt. Bs', ancho: 65, align: 'right' }
+      { titulo: 'Ítem', ancho: 16, align: 'center' },
+      { titulo: 'Marca', ancho: 46, align: 'left', angosta: true },
+      { titulo: 'Código', ancho: 44, align: 'left', angosta: true },
+      { titulo: 'Cant.', ancho: 24, align: 'center' },
+      { titulo: 'Descripción', ancho: 152, align: 'left', wrap: true },
+      { titulo: '$ Efectivo', ancho: 55, align: 'right' },
+      { titulo: 'Bs (pago Bs)', ancho: 76, align: 'right' },
+      { titulo: 'Subt. $', ancho: 47, align: 'right' },
+      { titulo: 'Subt. Bs', ancho: 55, align: 'right' }
     ];
+    const idxDescripcion = columnas.findIndex(c => c.wrap);
+
+    // Recorta con "…" el texto de una columna angosta (Marca / Código) para que nunca se
+    // encime con la columna siguiente, en vez de dejarlo desbordar.
+    function truncarTexto(texto, anchoMax) {
+      texto = String(texto ?? '');
+      if (!texto || doc.getTextWidth(texto) <= anchoMax) return texto;
+      let t = texto;
+      while (t.length > 1 && doc.getTextWidth(t + '…') > anchoMax) t = t.slice(0, -1);
+      return t + '…';
+    }
     const padding = 5;
     const altoLinea = 11;
     const altoFilaMin = altoLinea + padding * 2;
@@ -1229,14 +1251,18 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
       doc.setFillColor(22, 36, 31);
       doc.rect(margenX, y, bordeDerecho - margenX, altoFilaMin, 'F');
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(9);
+      doc.setFontSize(7.5);
       doc.setTextColor(237, 232, 222);
       let x = margenX;
       columnas.forEach(col => {
-        const tx = col.align === 'right' ? x + col.ancho - padding : x + padding;
+        let tx;
+        if (col.align === 'right') tx = x + col.ancho - padding;
+        else if (col.align === 'center') tx = x + col.ancho / 2;
+        else tx = x + padding;
         doc.text(col.titulo, tx, y + altoFilaMin - padding - 2, { align: col.align });
         x += col.ancho;
       });
+      doc.setFontSize(9);
       doc.setTextColor(20, 30, 26);
       return y + altoFilaMin;
     }
@@ -1246,8 +1272,9 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
     doc.setFontSize(9);
 
     filas.forEach((fila, idx) => {
-      const [descripcion, cantidad, precioUsd, precioBs, subtotalUsd, subtotalBs] = fila;
-      const anchoTextoDesc = columnas[0].ancho - padding * 2;
+      // [item, marca, codigo, cantidad, descripcion, precioUsd, precioBs, subtotalUsd, subtotalBs]
+      const descripcion = fila[idxDescripcion];
+      const anchoTextoDesc = columnas[idxDescripcion].ancho - padding * 2;
       const lineasDesc = doc.splitTextToSize(String(descripcion ?? ''), anchoTextoDesc);
       const altoFila = Math.max(altoFilaMin, lineasDesc.length * altoLinea + padding * 2);
 
@@ -1261,16 +1288,19 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
         doc.rect(margenX, y, bordeDerecho - margenX, altoFila, 'F');
       }
 
-      const valores = [lineasDesc, cantidad, precioUsd, precioBs, subtotalUsd, subtotalBs];
+      const valores = fila.map((v, i) => {
+        if (i === idxDescripcion) return lineasDesc;
+        if (columnas[i].angosta) return truncarTexto(v, columnas[i].ancho - padding * 2);
+        return String(v ?? '');
+      });
       let x = margenX;
       columnas.forEach((col, i) => {
-        const tx = col.align === 'right' ? x + col.ancho - padding : x + padding;
+        let tx;
+        if (col.align === 'right') tx = x + col.ancho - padding;
+        else if (col.align === 'center') tx = x + col.ancho / 2;
+        else tx = x + padding;
         const yTexto = y + padding + 8;
-        if (i === 0) {
-          doc.text(valores[i], tx, yTexto);
-        } else {
-          doc.text(String(valores[i]), tx, yTexto, { align: col.align });
-        }
+        doc.text(valores[i], tx, yTexto, i === idxDescripcion ? undefined : { align: col.align });
         x += col.ancho;
       });
 
@@ -1293,7 +1323,7 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
     let y = 50;
 
     if (logo) {
-      // Mismo archivo logo-nicom.png que usa el catálogo (dashboard.html), con su proporción
+      // logo-nicom-pdf.png (variante en negro para fondo blanco), con su proporción
       // real (ancho/alto tal como se cargó) en vez de forzarlo a un tamaño fijo que lo deforma.
       const altoLogo = 38;
       const anchoLogo = logo.alto ? (logo.ancho / logo.alto) * altoLogo : 118;
@@ -1336,12 +1366,22 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
 
     const fmtBsPdf = (n) => 'Bs ' + Number(n || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-    const filas = (cot.items || []).map(it => {
+    // Marca y Código salen del producto vinculado (si el ítem viene del catálogo) — no son un
+    // dato nuevo que haya que pedir ni guardar aparte, ya vivían en productos.sku y
+    // productos.especificaciones.marca desde que se importó. Un ítem libre / mano de obra
+    // simplemente no tiene producto vinculado y esas dos columnas quedan en blanco.
+    const filas = (cot.items || []).map((it, idx) => {
       const precioUnit = Number(it.precioUnitario ?? it.precio_unitario ?? 0);
       const precioUnitBs = Number(it.precioUnitarioBs ?? it.precio_unitario_bs ?? 0);
+      const p = it.producto_id ? productosCache[it.producto_id] : null;
+      const codigo = p?.sku || '';
+      const marca = p?.especificaciones?.marca || '';
       return [
-        it.descripcion,
+        String(idx + 1),
+        marca,
+        codigo,
         String(it.cantidad),
+        it.descripcion,
         '$' + precioUnit.toFixed(2),
         fmtBsPdf(precioUnitBs),
         '$' + (it.cantidad * precioUnit).toFixed(2),
