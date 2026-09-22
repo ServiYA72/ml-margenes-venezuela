@@ -226,11 +226,11 @@
           <input type="number" id="pe-cantidad" value="1" min="1">
         </div>
         <div>
-          <label for="pe-precio">Precio unitario en $ (sin comisión ML)</label>
+          <label for="pe-precio">Precio en $ efectivo (sin comisión ML, sin brecha)</label>
           <input type="number" step="0.01" id="pe-precio" oninput="actualizarPrevioBs()">
         </div>
         <div>
-          <label>Equivalente en Bs (tasa BCV de hoy)</label>
+          <label>Precio en Bs si paga en bolívares (tasa Binance de hoy)</label>
           <input type="text" id="pe-precio-bs" readonly style="background:var(--surface); color:var(--teal);">
         </div>
       </div>
@@ -279,9 +279,9 @@
         <tr>
           <th style="min-width:200px;">Descripción</th>
           <th class="num" style="width:70px;">Cant.</th>
-          <th class="num" style="width:110px;">Precio $ unit.</th>
-          <th class="num bs" style="width:130px;">Precio Bs unit.</th>
-          <th class="num" style="width:100px;">Subtotal $</th>
+          <th class="num" style="width:110px;">$ efectivo unit.</th>
+          <th class="num bs" style="width:130px;">Bs (pago Bs) unit.</th>
+          <th class="num" style="width:100px;">Subtotal $ efectivo</th>
           <th class="num bs" style="width:120px;">Subtotal Bs</th>
           <th style="width:140px;"></th>
         </tr>
@@ -293,10 +293,10 @@
 
     <div class="totales-box">
       <table>
-        <tr><td>Subtotal</td><td class="num" id="txt-subtotal">$0.00</td></tr>
-        <tr><td>Subtotal (Bs)</td><td class="num bs" id="txt-subtotal-bs">Bs 0,00</td></tr>
-        <tr class="total"><td>Total</td><td class="num" id="txt-total">$0.00</td></tr>
-        <tr><td>Total (Bs)</td><td class="num bs" id="txt-total-bs">Bs 0,00</td></tr>
+        <tr><td>Subtotal — si paga efectivo $</td><td class="num" id="txt-subtotal">$0.00</td></tr>
+        <tr><td>Subtotal — si paga en Bs</td><td class="num bs" id="txt-subtotal-bs">Bs 0,00</td></tr>
+        <tr class="total"><td>Total — si paga efectivo $</td><td class="num" id="txt-total">$0.00</td></tr>
+        <tr><td>Total — si paga en Bs</td><td class="num bs" id="txt-total-bs">Bs 0,00</td></tr>
       </table>
     </div>
 
@@ -413,29 +413,32 @@
     }
   }
 
-  // Replica el cálculo de precios de dashboard.html (costo + margen deseado, con la
-  // brecha cambiaria Binance→BCV) pero SIEMPRE con comisión de Mercado Libre = 0%,
-  // sin importar la comisión guardada para ese producto en publicaciones.
+  // Cotizaciones SIEMPRE se cobran sin comisión de Mercado Libre (es venta directa, fuera
+  // de ML), pero se ofrecen 2 formas de pago con 2 precios distintos — igual que se maneja
+  // el negocio en la práctica:
+  //  • Efectivo en $ (dólares en mano): precio = costo + margen, tal cual, SIN brecha.
+  //  • Pago en Bs (bolívares): hay que cobrar más, porque esos bolívares luego se compran
+  //    en USDT vía Binance a una tasa peor que la BCV — así que el precio en Bs se calcula
+  //    con la tasa BINANCE de hoy (no la BCV) para que el margen en $ se preserve igual.
   function calcularPrecioSinComision(costoUsd, margenUsd) {
     if (!tasaBCV || !tasaBinance) return null;
     const costo = parseFloat(costoUsd) || 0;
     const margen = parseFloat(margenUsd) || 0;
-    const precioEfectivo = costo + margen; // sin comisión, "neta" y "fijo" dan el mismo resultado
-    const factorBrecha = tasaBinance / tasaBCV;
+    const precioEfectivo = costo + margen; // precio en $ efectivo — sin comisión, sin brecha
     return {
-      costo, margenUsd: margen, precioEfectivo, factorBrecha,
-      precioUsd: precioEfectivo * factorBrecha, // lo que se le cobra al cliente en $ (ref. BCV)
-      precioBs: precioEfectivo * tasaBinance      // lo mismo, en bolívares
+      costo, margenUsd: margen, precioEfectivo,
+      precioUsd: precioEfectivo,               // lo que se cobra al cliente si paga en $ efectivo
+      precioBs: precioEfectivo * tasaBinance    // lo que se cobra en Bs si paga en bolívares
     };
   }
 
-  // Reconstruye costo/margen implícitos a partir de un precio en $ ya definido (por si el
-  // usuario editó el precio a mano) — se usa para mostrar el desglose interno.
+  // Reconstruye el margen implícito a partir del precio en $ EFECTIVO ya definido (por si el
+  // usuario editó el precio a mano) — se usa para mostrar el desglose interno. Ya no hay que
+  // deshacer ninguna brecha cambiaria: el precio en $ de un ítem de catálogo es directamente
+  // costo + margen, igual que en un ítem libre.
   function desgloseDesdePrecioUsd(precioUsd, costoUsd) {
-    if (!tasaBCV || !tasaBinance || costoUsd == null) return null;
-    const factorBrecha = tasaBinance / tasaBCV;
-    const precioEfectivo = precioUsd / factorBrecha;
-    return { costo: costoUsd, margenUsd: precioEfectivo - costoUsd, precioEfectivo, factorBrecha };
+    if (costoUsd == null) return null;
+    return { costo: costoUsd, margenUsd: precioUsd - costoUsd, precioEfectivo: precioUsd };
   }
 
   // ---------- Datos de la empresa para el PDF (guardados en este navegador) ----------
@@ -640,7 +643,7 @@
   window.actualizarPrevioBs = function() {
     const precio = parseFloat(document.getElementById('pe-precio').value) || 0;
     const campoBs = document.getElementById('pe-precio-bs');
-    campoBs.value = tasaBCV ? 'Bs ' + (precio * tasaBCV).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'Sin tasa cargada';
+    campoBs.value = tasaBinance ? 'Bs ' + (precio * tasaBinance).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'Sin tasa cargada';
   };
 
   window.actualizarUiItemLibre = function() {
@@ -675,7 +678,7 @@
     actualizarPrevioBs();
 
     document.getElementById('pe-costo-ref').textContent = calc
-      ? `Costo de referencia: $${costo.toFixed(2)} · Margen usado: $${margenUsd.toFixed(2)}${margenGuardado == null ? ' (30% por defecto — este producto no tiene margen configurado en el catálogo)' : ' (tomado del margen configurado en el catálogo)'} · Precio sugerido sin comisión de Mercado Libre — puedes editarlo.`
+      ? `Costo de referencia: $${costo.toFixed(2)} · Margen usado: $${margenUsd.toFixed(2)}${margenGuardado == null ? ' (30% por defecto — este producto no tiene margen configurado en el catálogo)' : ' (tomado del margen configurado en el catálogo)'} · Precio sugerido en efectivo, sin comisión de Mercado Libre — puedes editarlo (el precio en Bs se ajusta solo).`
       : `Costo de referencia: $${costo.toFixed(2)}. No hay tasas de cambio cargadas todavía, así que no se puede sugerir un precio en Bs.`;
 
     const avisos = [];
@@ -698,7 +701,7 @@
       producto_id: p.id,
       descripcion: p.nombre,
       cantidad, precioUnitario,
-      precioUnitarioBs: tasaBCV ? precioUnitario * tasaBCV : 0,
+      precioUnitarioBs: tasaBinance ? precioUnitario * tasaBinance : 0,
       costoOriginal: parseFloat(p.costo_usd || 0),
       tipoItem: 'producto',
       avisos: []
@@ -729,7 +732,7 @@
     }
     itemsCotizacion.push({
       producto_id: null, descripcion, cantidad, precioUnitario,
-      precioUnitarioBs: tasaBCV ? precioUnitario * tasaBCV : 0,
+      precioUnitarioBs: tasaBinance ? precioUnitario * tasaBinance : 0,
       costoOriginal: costo, tipoItem, avisos: []
     });
     renderizarTablaItems();
@@ -757,7 +760,7 @@
     if (campo === 'cantidad') item.cantidad = parseFloat(valor) || 0;
     if (campo === 'precioUnitario') {
       item.precioUnitario = parseFloat(valor) || 0;
-      item.precioUnitarioBs = tasaBCV ? item.precioUnitario * tasaBCV : item.precioUnitarioBs;
+      item.precioUnitarioBs = tasaBinance ? item.precioUnitario * tasaBinance : item.precioUnitarioBs;
     }
     actualizarFilaCalculada(idx);
     actualizarTotalesEnPantalla();
@@ -799,25 +802,45 @@
     return it.precioUnitario - costo;
   }
 
-  // Texto del desglose interno por ítem (nunca aparece en el PDF del cliente).
+  // Texto del desglose interno por ítem (nunca aparece en el PDF del cliente). Para productos
+  // de catálogo sigue el mismo formato de verificación que usa el dashboard al analizar un
+  // producto, adaptado a que aquí NO hay comisión de Mercado Libre (es venta directa) y a que
+  // se cotizan 2 formas de pago con 2 precios distintos.
   function textoDesgloseItem(it) {
     const costo = it.costoOriginal || 0;
     if (it.producto_id) {
       const d = desgloseDesdePrecioUsd(it.precioUnitario, costo);
       if (!d) return '';
       const margenPct = d.costo > 0 ? (d.margenUsd / d.costo * 100) : 0;
-      return `Costo del proveedor: $${d.costo.toFixed(2)}
-Margen de ganancia: $${d.margenUsd.toFixed(2)}  (${margenPct.toFixed(1)}% sobre el costo)
-Precio "efectivo" (costo + margen), antes de la brecha cambiaria: $${d.precioEfectivo.toFixed(2)}
-Ajuste por brecha Binance→BCV (x${d.factorBrecha.toFixed(4)}): precio a cobrar $${it.precioUnitario.toFixed(2)} (${fmtBs(it.precioUnitarioBs)})
-Comisión de Mercado Libre: no se aplica en cotizaciones (0%).`;
+      const precioBs = it.precioUnitarioBs || 0;
+      let texto = `PRECIO A COBRAR AL CLIENTE (elige el cliente):
+• Efectivo en $ (dólares en mano, sin brecha): $${it.precioUnitario.toFixed(2)}
+• Pago en Bs (bolívares, a la tasa Binance de hoy): ${fmtBs(precioBs)}
+
+DESGLOSE:
+• Costo del proveedor: $${d.costo.toFixed(2)}
+• Margen de ganancia: $${d.margenUsd.toFixed(2)}  (${margenPct.toFixed(1)}% sobre el costo)
+• Comisión de Mercado Libre: no se aplica (0%) — venta directa, fuera de Mercado Libre.`;
+      if (tasaBCV && tasaBinance) {
+        texto += `\n\nVERIFICACIÓN SI EL CLIENTE PAGA EN BOLÍVARES:
+• Cobras: ${fmtBs(precioBs)}
+• Compras USDT en Binance a ${tasaBinance.toFixed(2)}: obtienes exactamente $${d.precioEfectivo.toFixed(2)}
+• Margen preservado: $${d.margenUsd.toFixed(2)} (igual que si te hubiera pagado en efectivo)
+• Referencia BCV del día (${tasaBCV.toFixed(2)}): este mismo precio equivale a $${(precioBs / tasaBCV).toFixed(2)} — solo informativo, no es lo que se cobra.`;
+      }
+      return texto;
     }
-    // Ítem libre / mano de obra técnica: ganancia directa, sin brecha cambiaria — el costo
-    // es lo que le pagas a un técnico subcontratado o a un proveedor externo, si aplica.
+    // Ítem libre / mano de obra técnica: el precio en $ que se escribe a mano YA es el
+    // precio "efectivo"; el precio en Bs (si el cliente paga en bolívares) se calcula igual
+    // que en catálogo, a la tasa Binance de hoy, para que la ganancia en $ se preserve.
     const ganancia = it.precioUnitario - costo;
     const margenPct = it.precioUnitario > 0 ? (ganancia / it.precioUnitario * 100) : 0;
     const esManoDeObra = it.tipoItem === 'mano_obra';
     return `${esManoDeObra ? 'Mano de obra técnica' : 'Ítem libre'}
+PRECIO A COBRAR AL CLIENTE (elige el cliente):
+• Efectivo en $: $${it.precioUnitario.toFixed(2)}
+• Pago en Bs (a la tasa Binance de hoy): ${fmtBs(it.precioUnitarioBs || 0)}
+
 ${costo > 0 ? `Costo (pagado a técnico/proveedor externo): $${costo.toFixed(2)}` : 'Costo: $0.00 — ' + (esManoDeObra ? 'mano de obra propia, sin subcontratar (100% de ganancia)' : 'sin costo registrado')}
 Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
   }
@@ -1130,9 +1153,10 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
         descripcion: it.descripcion,
         cantidad: parseFloat(it.cantidad),
         precioUnitario: parseFloat(it.precio_unitario),
-        // El precio en $ ya cotizado se respeta; solo se recalcula su equivalente en Bs
-        // a la tasa BCV de HOY (por eso puede diferir del que se guardó originalmente).
-        precioUnitarioBs: tasaBCV ? parseFloat(it.precio_unitario) * tasaBCV : parseFloat(it.precio_unitario_bs || 0),
+        // El precio en $ efectivo ya cotizado se respeta; el precio en Bs (pago en bolívares)
+        // se recalcula con la tasa BINANCE de HOY, por eso puede diferir del que se guardó
+        // originalmente — es justamente lo que protege el margen si la tasa se movió.
+        precioUnitarioBs: tasaBinance ? parseFloat(it.precio_unitario) * tasaBinance : parseFloat(it.precio_unitario_bs || 0),
         costoOriginal: it.costo_original_usd != null ? parseFloat(it.costo_original_usd) : null,
         // Cotizaciones guardadas antes de esta columna no tienen tipo_item: se infiere
         // 'producto' si viene del catálogo, o 'libre' por defecto (nunca se pierde el ítem).
@@ -1179,10 +1203,10 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
     const columnas = [
       { titulo: 'Descripción', ancho: 195, align: 'left' },
       { titulo: 'Cant.', ancho: 40, align: 'right' },
-      { titulo: 'Precio $', ancho: 65, align: 'right' },
-      { titulo: 'Precio Bs', ancho: 90, align: 'right' },
-      { titulo: 'Subtotal $', ancho: 60, align: 'right' },
-      { titulo: 'Subtotal Bs', ancho: 65, align: 'right' }
+      { titulo: '$ Efectivo', ancho: 65, align: 'right' },
+      { titulo: 'Bs (pago Bs)', ancho: 90, align: 'right' },
+      { titulo: 'Subt. $', ancho: 60, align: 'right' },
+      { titulo: 'Subt. Bs', ancho: 65, align: 'right' }
     ];
     const padding = 5;
     const altoLinea = 11;
@@ -1325,45 +1349,43 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
     const subtotalBs = Number(cot.subtotal_bs || 0);
     const totalBs = Number(cot.total_bs || 0);
 
-    // Caja de resumen: el $ y el Bs de cada renglón van en LÍNEAS separadas (no en un solo
-    // texto largo "$... Bs...") para que nunca se encimen con la etiqueta ni entre ellos,
-    // sin importar cuántos dígitos tenga el monto — antes se encimaban porque "$1350.00
-    // Bs 1.146.911,40" en negrita no cabía en el espacio entre la etiqueta y el borde.
-    const cajaAncho = 220, cajaX = 555 - cajaAncho, cajaPad = 12, cajaAlto = 84;
+    // Caja de resumen: NO son el mismo monto en 2 monedas — son 2 formas de pago distintas,
+    // cada una con su propio total, así que van en bloques separados y bien rotulados (nunca
+    // un solo texto largo "$... Bs..." que además se encimaba con la etiqueta al no caber
+    // en el espacio entre "Total" y el borde).
+    const cajaAncho = 230, cajaX = 555 - cajaAncho, cajaPad = 12, cajaAlto = 88;
     doc.setFillColor(244, 242, 236);
     doc.roundedRect(cajaX, yFinal, cajaAncho, cajaAlto, 4, 4, 'F');
 
-    let yCaja = yFinal + 18;
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
+    let yCaja = yFinal + 16;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
     doc.setTextColor(110, 120, 114);
-    doc.text('Subtotal', cajaX + cajaPad, yCaja);
-    doc.setFontSize(10.5);
-    doc.setTextColor(50, 60, 55);
-    doc.text('$' + subtotal.toFixed(2), 555 - cajaPad, yCaja, { align: 'right' });
-    yCaja += 12;
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8.5);
-    doc.setTextColor(140, 140, 140);
-    doc.text(fmtBsPdf(subtotalBs), 555 - cajaPad, yCaja, { align: 'right' });
+    doc.text('TOTAL — EL CLIENTE ELIGE CÓMO PAGAR', cajaX + cajaPad, yCaja);
+    yCaja += 17;
 
-    yCaja += 12;
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9.5);
+    doc.setTextColor(90, 100, 95);
+    doc.text('Pagando en efectivo ($)', cajaX + cajaPad, yCaja);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(15);
+    doc.setTextColor(20, 30, 26);
+    doc.text('$' + total.toFixed(2), 555 - cajaPad, yCaja + 1, { align: 'right' });
+    yCaja += 22;
+
     doc.setDrawColor(205, 198, 178);
     doc.line(cajaX + cajaPad, yCaja, 555 - cajaPad, yCaja);
     yCaja += 17;
 
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9.5);
+    doc.setTextColor(90, 100, 95);
+    doc.text('Pagando en bolívares (Bs)', cajaX + cajaPad, yCaja);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(11);
-    doc.setTextColor(20, 30, 26);
-    doc.text('TOTAL', cajaX + cajaPad, yCaja);
     doc.setFontSize(15);
     doc.setTextColor(160, 128, 26);
-    doc.text('$' + total.toFixed(2), 555 - cajaPad, yCaja, { align: 'right' });
-    yCaja += 14;
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
-    doc.setTextColor(120, 120, 120);
-    doc.text(fmtBsPdf(totalBs), 555 - cajaPad, yCaja, { align: 'right' });
+    doc.text(fmtBsPdf(totalBs), 555 - cajaPad, yCaja + 1, { align: 'right' });
     doc.setTextColor(20, 30, 26);
 
     yFinal += cajaAlto + 18;
@@ -1371,7 +1393,7 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9);
     doc.setTextColor(120, 120, 120);
-    if (cot.tasa_bcv_usada) { doc.text(`Tasa BCV usada para el equivalente en Bs: Bs ${Number(cot.tasa_bcv_usada).toFixed(2)} por USD.`, margenX, yFinal); yFinal += 16; }
+    if (cot.tasa_binance_usada) { doc.text(`El precio en bolívares se calculó con la tasa Binance del día: Bs ${Number(cot.tasa_binance_usada).toFixed(2)} por USD.`, margenX, yFinal); yFinal += 16; }
     doc.setTextColor(20, 30, 26);
 
     doc.setFontSize(10);
