@@ -153,6 +153,30 @@
   </div>
 
   <div class="panel">
+    <h2>3. Preparar publicaciones nuevas para subir</h2>
+    <div class="hint" style="margin-top:0;">Sube la planilla en blanco de la categoría (la misma que descargas en Mercado Libre desde Publicar → Masivamente, o desde Fichas técnicas). El sistema le agrega filas nuevas ya con el SKU y el título de los productos que elijas, listas para que completes el resto: precio, stock, fotos (usa los links que subiste en la ficha del producto) y las características propias de la categoría que Mercado Libre pide — esos datos no los completa el sistema porque no vienen en tu catálogo o porque Mercado Libre los controla con listas propias.</div>
+
+    <label for="input-plantilla-preparar" class="subir-archivo" style="margin-top:16px;">📄 Elegir planilla en blanco</label>
+    <input type="file" id="input-plantilla-preparar" accept=".xlsx,.xls" style="display:none;" onchange="cargarPlantillaPreparar(this.files[0])">
+    <div class="hint" id="msg-plantilla-preparar"></div>
+
+    <div id="bloque-preparar" style="display:none; margin-top:18px;">
+      <label for="select-hoja-preparar">Categoría (hoja de la planilla) donde se van a agregar</label>
+      <select id="select-hoja-preparar" style="width:100%; background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:10px 12px; font-size:14px; margin-bottom:16px;"></select>
+
+      <label for="buscar-preparar">Busca y agrega los productos que vas a incluir en esta tanda</label>
+      <div style="position:relative;">
+        <input type="text" id="buscar-preparar" placeholder="Buscar por nombre o SKU..." oninput="buscarParaPreparar(this.value)" autocomplete="off">
+        <div class="rv-sugerencias" id="sugerencias-preparar"></div>
+      </div>
+      <div id="chips-seleccionados" style="display:flex; flex-wrap:wrap; gap:8px; margin-top:12px;"></div>
+
+      <button class="primary" onclick="generarPlantillaPreparar()">Generar planilla con estos productos</button>
+      <div class="hint" id="msg-generar-preparar"></div>
+    </div>
+  </div>
+
+  <div class="panel">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
       <h2 style="margin:0;">Publicaciones vinculadas (<span id="conteo-publicados">0</span>)</h2>
     </div>
@@ -517,9 +541,143 @@
     await cargarPublicados();
   };
 
+  // --- Preparar publicaciones nuevas: rellena SKU + título en la planilla que el usuario
+  // descarga de Mercado Libre para una categoría, con los productos que elija. El resto
+  // (precio, stock, fotos, ficha técnica propia de la categoría) lo completa el usuario a mano,
+  // porque Mercado Libre no expone esas columnas en la ficha técnica o las controla con sus
+  // propias listas de valores — solo se rellena lo que se puede tomar del catálogo con certeza.
+
+  let workbookPreparar = null;
+  let seleccionadosPreparar = []; // productos elegidos para esta tanda
+
+  window.cargarPlantillaPreparar = async function(file) {
+    const msg = document.getElementById('msg-plantilla-preparar');
+    const bloque = document.getElementById('bloque-preparar');
+    if (!file) return;
+    msg.style.color = 'var(--muted)';
+    msg.textContent = 'Leyendo la planilla...';
+    bloque.style.display = 'none';
+
+    try {
+      const buffer = await file.arrayBuffer();
+      workbookPreparar = XLSX.read(buffer, { type: 'array' });
+    } catch (e) {
+      msg.style.color = 'var(--rust)';
+      msg.textContent = 'No se pudo leer el archivo.';
+      workbookPreparar = null;
+      return;
+    }
+
+    const HOJAS_IGNORAR = new Set(['Ayuda', 'hidden']);
+    const hojasValidas = workbookPreparar.SheetNames.filter(n => {
+      if (HOJAS_IGNORAR.has(n)) return false;
+      const matriz = XLSX.utils.sheet_to_json(workbookPreparar.Sheets[n], { header: 1, defval: '' });
+      return matriz.length > 0 && matriz[0].includes('SKU') && matriz[0].includes('TITLE');
+    });
+
+    if (hojasValidas.length === 0) {
+      msg.style.color = 'var(--rust)';
+      msg.textContent = 'No se encontró ninguna hoja de categoría con columnas SKU/TITLE reconocibles en este archivo.';
+      workbookPreparar = null;
+      return;
+    }
+
+    const select = document.getElementById('select-hoja-preparar');
+    select.innerHTML = hojasValidas.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+
+    msg.style.color = 'var(--teal)';
+    msg.textContent = `Listo — ${hojasValidas.length} categoría(s) detectada(s) en el archivo.`;
+    bloque.style.display = 'block';
+  };
+
+  window.buscarParaPreparar = function(texto) {
+    const cont = document.getElementById('sugerencias-preparar');
+    const norm = normalizarTexto(texto);
+    if (norm.length < 2) { cont.classList.remove('visible'); cont.innerHTML = ''; return; }
+    const yaElegidos = new Set(seleccionadosPreparar.map(p => p.id));
+    const resultados = productosCache
+      .filter(p => !yaElegidos.has(p.id) && (normalizarTexto(p.nombre).includes(norm) || (p.sku && normalizarTexto(p.sku).includes(norm))))
+      .slice(0, 8);
+    if (resultados.length === 0) { cont.innerHTML = '<div class="rv-sug-item">Sin coincidencias</div>'; cont.classList.add('visible'); return; }
+    cont.innerHTML = resultados.map(p => `
+      <div class="rv-sug-item" onclick="agregarParaPreparar('${p.id}')">
+        ${escapeHtml(p.nombre)}${p.sku ? ` <span class="sku">(${escapeHtml(p.sku)})</span>` : ''}
+      </div>`).join('');
+    cont.classList.add('visible');
+  };
+
+  window.agregarParaPreparar = function(productoId) {
+    const p = productosCache.find(x => x.id === productoId);
+    if (!p) return;
+    if (!seleccionadosPreparar.some(x => x.id === productoId)) seleccionadosPreparar.push(p);
+    document.getElementById('buscar-preparar').value = '';
+    document.getElementById('sugerencias-preparar').classList.remove('visible');
+    renderizarChipsPreparar();
+  };
+
+  window.quitarDePreparar = function(productoId) {
+    seleccionadosPreparar = seleccionadosPreparar.filter(x => x.id !== productoId);
+    renderizarChipsPreparar();
+  };
+
+  function renderizarChipsPreparar() {
+    const cont = document.getElementById('chips-seleccionados');
+    cont.innerHTML = seleccionadosPreparar.map(p => `
+      <span style="display:inline-flex; align-items:center; gap:6px; background:var(--surface-2); border:1px solid var(--line); padding:6px 10px; font-size:12.5px;">
+        ${escapeHtml(p.nombre)}
+        <button type="button" onclick="quitarDePreparar('${p.id}')" style="background:none; border:none; color:var(--muted); cursor:pointer; font-size:14px; line-height:1; padding:0;">×</button>
+      </span>`).join('');
+  }
+
+  window.generarPlantillaPreparar = function() {
+    const msg = document.getElementById('msg-generar-preparar');
+    if (!workbookPreparar) { msg.style.color = 'var(--rust)'; msg.textContent = 'Sube primero la planilla.'; return; }
+    if (seleccionadosPreparar.length === 0) { msg.style.color = 'var(--rust)'; msg.textContent = 'Agrega al menos un producto.'; return; }
+
+    const nombreHoja = document.getElementById('select-hoja-preparar').value;
+    const ws = workbookPreparar.Sheets[nombreHoja];
+    const matriz = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+    const codigos = matriz[0] || [];
+    const idx = {};
+    codigos.forEach((c, i) => { if (c) idx[String(c).trim()] = i; });
+
+    if (idx.SKU === undefined || idx.TITLE === undefined) {
+      msg.style.color = 'var(--rust)'; msg.textContent = 'Esta hoja no tiene columnas SKU/TITLE reconocibles.'; return;
+    }
+
+    // Encontrar la última fila con datos (desde la fila 5 = índice 4) para agregar después de ella
+    let ultimaFila = 3;
+    for (let r = 4; r < matriz.length; r++) {
+      const fila = matriz[r] || [];
+      const tieneAlgo = fila.some(v => v !== '' && v !== undefined && v !== null);
+      if (tieneAlgo) ultimaFila = r;
+    }
+    let filaDestino = ultimaFila + 1;
+    if (filaDestino < 4) filaDestino = 4;
+
+    seleccionadosPreparar.forEach(p => {
+      const celdaSku = XLSX.utils.encode_cell({ r: filaDestino, c: idx.SKU });
+      const celdaTitulo = XLSX.utils.encode_cell({ r: filaDestino, c: idx.TITLE });
+      ws[celdaSku] = { t: 's', v: p.sku || '' };
+      ws[celdaTitulo] = { t: 's', v: p.nombre || '' };
+      filaDestino++;
+    });
+
+    // Actualizar el rango de la hoja para que las filas nuevas queden incluidas al exportar
+    const rangoActual = XLSX.utils.decode_range(ws['!ref']);
+    rangoActual.e.r = Math.max(rangoActual.e.r, filaDestino - 1);
+    ws['!ref'] = XLSX.utils.encode_range(rangoActual);
+
+    const nombreArchivo = `planilla-${nombreHoja.replace(/[^a-zA-Z0-9]+/g, '-')}-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    XLSX.writeFile(workbookPreparar, nombreArchivo);
+
+    msg.style.color = 'var(--teal)';
+    msg.textContent = `Listo — se agregaron ${seleccionadosPreparar.length} producto(s) con SKU y título, y se descargó "${nombreArchivo}". Completa precio, stock, fotos y la ficha técnica de la categoría antes de subirla a Mercado Libre.`;
+  };
+
   // Cerrar sugerencias al hacer clic afuera
   document.addEventListener('click', (e) => {
-    if (!e.target.closest('.rv-match')) {
+    if (!e.target.closest('.rv-match') && !e.target.closest('#buscar-preparar')) {
       document.querySelectorAll('.rv-sugerencias.visible').forEach(el => { el.classList.remove('visible'); el.innerHTML = ''; });
     }
   });
