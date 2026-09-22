@@ -24,8 +24,16 @@
   .who { font-size: 13px; color: var(--muted); }
   a.nav-link { color: var(--muted); font-size: 13px; text-decoration: none; border-bottom: 1px solid var(--line); }
   a.nav-link:hover { color: var(--paper); }
+  .nav-bar { display: flex; gap: 8px; flex-wrap: wrap; }
+  .nav-pill {
+    color: var(--muted); font-size: 12.5px; text-decoration: none; white-space: nowrap;
+    padding: 8px 14px; border: 1px solid var(--line); background: var(--surface-2);
+    transition: border-color .15s ease, color .15s ease, background .15s ease;
+  }
+  .nav-pill:hover { color: var(--paper); border-color: var(--gold); }
+  .nav-pill.activo { color: var(--ink); background: var(--gold); border-color: var(--gold); font-weight: 600; }
 
-  main { max-width: 1300px; margin: 0 auto; padding: 32px; }
+  main { max-width: 1700px; margin: 0 auto; padding: 32px clamp(20px, 3vw, 48px); }
   h1 { font-family: 'Fraunces', serif; font-weight: 400; font-size: 26px; margin: 0 0 6px 0; }
   .sub { color: var(--muted); font-size: 14px; margin: 0 0 28px 0; }
 
@@ -79,7 +87,13 @@
 
 <header>
   <div class="brand-mark"><img src="logo-nicom.png" alt="Nicom Tech Solutions" class="brand-logo"></div>
-  <a class="nav-link" href="dashboard.html?tab=productos">← Volver a productos</a>
+  <nav class="nav-bar">
+    <a class="nav-pill" href="dashboard.html?tab=productos">Productos</a>
+    <a class="nav-pill activo" href="importar-precios.html">Importar precios</a>
+    <a class="nav-pill" href="analizar-competencia.html">Análisis de competencia</a>
+    <a class="nav-pill" href="ventas.html">Ventas</a>
+    <a class="nav-pill" href="cotizaciones.html">Cotizaciones</a>
+  </nav>
   <div class="who" id="who">Cargando sesión…</div>
 </header>
 
@@ -155,7 +169,8 @@
       </div>
       <div>
         <label for="map-categoria">Columna de categoría (opcional)</label>
-        <select id="map-categoria"></select>
+        <select id="map-categoria" onchange="advertirSiCategoriaNumerica()"></select>
+        <div class="hint" id="aviso-categoria-numerica" style="margin-top:6px; color:var(--rust); display:none;"></div>
       </div>
       <div>
         <label for="map-codigo">Columna de código / SKU (opcional)</label>
@@ -243,7 +258,17 @@
 
   const PISTAS_NOMBRE = ['nombre', 'producto', 'descripcion', 'articulo', 'item', 'detalle'];
   const PISTAS_COSTO = ['costo', 'preciounitariousd', 'preciounitario', 'preciousd', 'valorusd', 'mayorista', 'precio', 'valor', 'usd'];
-  const PISTAS_CATEGORIA = ['categoria', 'rubro', 'tipo', 'familia'];
+  // Sin "tipo": esa pista era demasiado genérica y a veces enganchaba columnas que no eran
+  // de categoría (ej. "Tipo de cambio"), dejando valores numéricos sueltos como categoría.
+  const PISTAS_CATEGORIA = ['categoria', 'rubro', 'familia', 'grupo'];
+
+  // Una categoría real nunca es solo un número — si la columna detectada (o elegida a mano)
+  // trae valores así, es señal de que se mapeó la columna equivocada; en ese caso se descarta
+  // y se deja que el clasificador automático (o la edición manual en la vista previa) decida.
+  function pareceCategoriaNumerica(valor) {
+    const limpio = String(valor).trim().replace(',', '.');
+    return limpio !== '' && !isNaN(Number(limpio));
+  }
   const PISTAS_CODIGO = ['codigo', 'sku', 'referencia', 'cod'];
   const PISTAS_MARCA = ['marca', 'brand'];
   const PISTAS_DESCRIPCION = ['descripcion', 'detalle', 'especificacion', 'caracteristica', 'informacion'];
@@ -587,7 +612,27 @@
 
     document.getElementById('panel-mapeo').style.display = 'block';
     document.getElementById('panel-preview').style.display = 'none';
+    advertirSiCategoriaNumerica();
   }
+
+  // Muestra un aviso si la columna elegida como "categoría" trae, en su mayoría, valores
+  // numéricos — señal casi segura de que se mapeó la columna equivocada (ej. un precio,
+  // un código de línea, etc.), que es justo lo que venía ensuciando el catálogo.
+  window.advertirSiCategoriaNumerica = function() {
+    const aviso = document.getElementById('aviso-categoria-numerica');
+    const col = document.getElementById('map-categoria').value;
+    if (!col || filasCrudas.length === 0) { aviso.style.display = 'none'; return; }
+
+    const muestra = filasCrudas.slice(0, 30).map(r => String(r[col] || '').trim()).filter(Boolean);
+    if (muestra.length === 0) { aviso.style.display = 'none'; return; }
+    const numericos = muestra.filter(pareceCategoriaNumerica).length;
+    if (numericos / muestra.length > 0.5) {
+      aviso.style.display = 'block';
+      aviso.textContent = `Ojo: la columna "${col}" trae mayormente números (ej. "${muestra.find(pareceCategoriaNumerica)}") — no parece ser la categoría real. Elige otra columna, o déjala en "(ninguna)" para que el sistema clasifique el producto automáticamente por su nombre.`;
+    } else {
+      aviso.style.display = 'none';
+    }
+  };
 
   window.aplicarTipoPublicacionImport = function() {
     const tipo = document.getElementById('tipo-publicacion').value;
@@ -685,7 +730,8 @@
     let omitidosSinPrecioPreview = 0;
     for (const row of filasCrudas) {
       const nombre = row[colNombre];
-      const categoriaArchivo = colCategoria ? String(row[colCategoria] || '').trim() : '';
+      const categoriaArchivoCruda = colCategoria ? String(row[colCategoria] || '').trim() : '';
+      const categoriaArchivo = pareceCategoriaNumerica(categoriaArchivoCruda) ? '' : categoriaArchivoCruda;
       const codigo = colCodigo ? row[colCodigo] : '';
       const marca = colMarca ? row[colMarca] : '';
       const descripcion = colDescripcion ? String(row[colDescripcion] || '').trim() : '';

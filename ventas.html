@@ -22,6 +22,14 @@
   a.nav-link { color: var(--muted); font-size: 13px; text-decoration: none; border-bottom: 1px solid var(--line); }
   a.nav-link:hover { color: var(--paper); }
   .who { font-size: 13px; color: var(--muted); }
+  .nav-bar { display: flex; gap: 8px; flex-wrap: wrap; }
+  .nav-pill {
+    color: var(--muted); font-size: 12.5px; text-decoration: none; white-space: nowrap;
+    padding: 8px 14px; border: 1px solid var(--line); background: var(--surface-2);
+    transition: border-color .15s ease, color .15s ease, background .15s ease;
+  }
+  .nav-pill:hover { color: var(--paper); border-color: var(--gold); }
+  .nav-pill.activo { color: var(--ink); background: var(--gold); border-color: var(--gold); font-weight: 600; }
 
   main { max-width: 1200px; margin: 0 auto; padding: 32px; }
   h1 { font-family: 'Fraunces', serif; font-weight: 400; font-size: 26px; margin: 0 0 6px 0; }
@@ -86,7 +94,13 @@
 
 <header>
   <div class="brand-mark"><img src="logo-nicom.png" alt="Nicom Tech Solutions" class="brand-logo"></div>
-  <a class="nav-link" href="dashboard.html?tab=productos">← Volver a productos</a>
+  <nav class="nav-bar">
+    <a class="nav-pill" href="dashboard.html?tab=productos">Productos</a>
+    <a class="nav-pill" href="importar-precios.html">Importar precios</a>
+    <a class="nav-pill" href="analizar-competencia.html">Análisis de competencia</a>
+    <a class="nav-pill activo" href="ventas.html">Ventas</a>
+    <a class="nav-pill" href="cotizaciones.html">Cotizaciones</a>
+  </nav>
   <div class="who" id="who">Cargando sesión…</div>
 </header>
 

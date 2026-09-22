@@ -48,6 +48,14 @@
     font-size: 13px;
     color: var(--muted);
   }
+  .nav-bar { display: flex; gap: 8px; flex-wrap: wrap; }
+  .nav-pill {
+    color: var(--muted); font-size: 12.5px; text-decoration: none; white-space: nowrap;
+    padding: 8px 14px; border: 1px solid var(--line); background: var(--surface-2);
+    transition: border-color .15s ease, color .15s ease, background .15s ease;
+  }
+  .nav-pill:hover { color: var(--paper); border-color: var(--gold); }
+  .nav-pill.activo { color: var(--ink); background: var(--gold); border-color: var(--gold); font-weight: 600; }
   .rate-strip {
     display: flex;
     gap: 24px;
@@ -60,9 +68,9 @@
   .rate-strip b.teal { color: var(--teal); font-weight: 500; }
 
   main {
-    max-width: 1300px;
+    max-width: 2000px;
     margin: 0 auto;
-    padding: 32px;
+    padding: 32px clamp(20px, 3vw, 48px);
   }
   .tabs {
     display: flex;
@@ -159,6 +167,14 @@
     50% { background: rgba(201, 162, 39, 0.30); }
   }
   .empty { color: var(--muted); font-size: 14px; padding: 20px 0; }
+  .fila-producto {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 10px 14px; border-bottom: 1px solid var(--line); font-size: 13px;
+  }
+  .fila-producto:last-child { border-bottom: none; }
+  .fila-producto:hover { background: var(--surface-2); }
+  .fila-producto .fp-nombre { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fila-producto .fp-info { display: flex; gap: 12px; white-space: nowrap; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--muted); }
   .pill {
     display: inline-block;
     padding: 3px 9px;
@@ -185,10 +201,13 @@
 
 <header>
   <div class="brand-mark"><img src="logo-nicom.png" alt="Nicom Tech Solutions" class="brand-logo"></div>
-  <a href="importar-precios.html" style="color: var(--muted); font-size: 13px; text-decoration: none; border-bottom: 1px solid var(--line);">Importar lista de precios →</a>
-  <a href="analizar-competencia.html" style="color: var(--muted); font-size: 13px; text-decoration: none; border-bottom: 1px solid var(--line);">Análisis de competencia →</a>
-  <a href="ventas.html" style="color: var(--muted); font-size: 13px; text-decoration: none; border-bottom: 1px solid var(--line);">Registrar venta →</a>
-  <a href="cotizaciones.html" style="color: var(--muted); font-size: 13px; text-decoration: none; border-bottom: 1px solid var(--line);">Cotizaciones →</a>
+  <nav class="nav-bar">
+    <a class="nav-pill activo" href="dashboard.html?tab=productos">Productos</a>
+    <a class="nav-pill" href="importar-precios.html">Importar precios</a>
+    <a class="nav-pill" href="analizar-competencia.html">Análisis de competencia</a>
+    <a class="nav-pill" href="ventas.html">Ventas</a>
+    <a class="nav-pill" href="cotizaciones.html">Cotizaciones</a>
+  </nav>
   <div class="rate-strip">
     <span>BCV <b class="gold" id="rate-bcv">—</b></span>
     <span>Binance <b class="teal" id="rate-binance">—</b></span>
@@ -459,6 +478,26 @@
       </div>
       <div class="msg" id="msg-limpieza"></div>
       <div id="historial-limpieza" style="display:none; margin-top:14px; font-size:12.5px; color:var(--muted); line-height:1.8;"></div>
+      </div>
+    </div>
+
+    <div class="panel" style="padding: 12px 22px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;" onclick="toggleGestionCategorias()">
+        <span style="font-size:12.5px; color:var(--muted);">🏷 Gestionar categorías</span>
+        <span id="icono-categorias" style="font-size:12px; color:var(--muted);">Mostrar ▾</span>
+      </div>
+      <div id="contenido-categorias" style="display:none; margin-top:14px;">
+        <div class="hint" style="margin-top:0;">Categorías que hay hoy en el catálogo (por ejemplo, valores numéricos sueltos que quedaron de una importación con la columna mal detectada). Selecciona las que no te interesan y vacíalas — los productos NO se borran, solo quedan sin categoría — o renómbralas todas de una vez a un nombre correcto.</div>
+        <div id="lista-gestion-categorias" style="max-height: 260px; overflow-y: auto; border: 1px solid var(--line); margin-top: 12px;"></div>
+        <div style="display:flex; gap:10px; align-items:end; flex-wrap:wrap; margin-top:14px;">
+          <button class="add" style="padding:9px 16px; font-size:13px; background:var(--rust); color:var(--paper);" onclick="vaciarCategoriasSeleccionadas()">Vaciar seleccionadas (quitar categoría)</button>
+          <div>
+            <label for="categoria-nuevo-nombre" style="display:block; font-size:12px; color:var(--muted); margin-bottom:6px;">Renombrar seleccionadas a</label>
+            <input type="text" id="categoria-nuevo-nombre" placeholder="Ej: Redes" style="background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:9px 10px; font-size:14px; min-width:200px;">
+          </div>
+          <button class="add" style="padding:9px 16px; font-size:13px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line);" onclick="renombrarCategoriasSeleccionadas()">Renombrar seleccionadas</button>
+        </div>
+        <div class="msg" id="msg-categorias"></div>
       </div>
     </div>
   </section>
@@ -909,9 +948,16 @@
       costo: document.getElementById('filtro-costo').value,
       proveedor: document.getElementById('filtro-proveedor').value,
       categoria: document.getElementById('filtro-categoria').value,
-      pagina: paginaActualProductos
+      pagina: paginaActualProductos,
+      scroll: window.scrollY
     }));
   }
+
+  // Guarda también la posición del scroll justo antes de salir de la página (por ejemplo,
+  // al hacer clic en "Comparar en Mercado Libre" o en cualquier enlace del menú) para que
+  // al volver a "Productos" quedes exactamente donde estabas, no arriba del todo.
+  window.addEventListener('beforeunload', guardarEstadoTablaProductos);
+  window.addEventListener('pagehide', guardarEstadoTablaProductos);
 
 
   function escapeHtml(str) {
@@ -1224,16 +1270,47 @@ RESULTADOS DEL CÁLCULO DE PRECIO
     cargarProductos();
   };
 
+  // Borra en lotes en vez de mandar TODOS los IDs en un solo .in(...): con miles de
+  // productos esa URL se vuelve demasiado larga y el servidor la rechaza con
+  // "Bad Request". Aquí se trocea en tandas chicas y, si una tanda falla, se detiene
+  // y se informa hasta dónde llegó (nunca queda "a medias" en silencio).
+  async function eliminarEnLotes(tabla, columna, ids, tamanoLote, onProgreso) {
+    for (let i = 0; i < ids.length; i += tamanoLote) {
+      const lote = ids.slice(i, i + tamanoLote);
+      const { error } = await supabase.from(tabla).delete().in(columna, lote);
+      if (error) return { error, eliminados: i };
+      if (onProgreso) onProgreso(Math.min(i + tamanoLote, ids.length), ids.length);
+    }
+    return { error: null, eliminados: ids.length };
+  }
+
+  async function borrarProductosPorId(ids, msgEl, textoBase) {
+    const TAMANO_LOTE = 150;
+    if (msgEl) { msgEl.style.color = 'var(--muted)'; msgEl.textContent = `${textoBase} 0/${ids.length}...`; }
+
+    const resultPub = await eliminarEnLotes('publicaciones', 'producto_id', ids, TAMANO_LOTE);
+    if (resultPub.error) return { error: resultPub.error, eliminados: 0, etapa: 'publicaciones' };
+
+    const resultProd = await eliminarEnLotes('productos', 'id', ids, TAMANO_LOTE, (hechos, totalIds) => {
+      if (msgEl) { msgEl.style.color = 'var(--muted)'; msgEl.textContent = `${textoBase} ${hechos}/${totalIds}...`; }
+    });
+    return { error: resultProd.error, eliminados: resultProd.eliminados, etapa: 'productos' };
+  }
+
   window.eliminarSeleccionados = async function() {
     const msg = document.getElementById('msg-bulk');
     const seleccionados = obtenerSeleccionados();
     if (seleccionados.length === 0) { msg.style.color = 'var(--rust)'; msg.textContent = 'Selecciona al menos un producto.'; return; }
     if (!confirm(`¿Eliminar ${seleccionados.length} producto(s) seleccionado(s)? Esta acción no se puede deshacer.`)) return;
 
-    await supabase.from('publicaciones').delete().in('producto_id', seleccionados);
-    const { error } = await supabase.from('productos').delete().in('id', seleccionados);
+    const { error, eliminados, etapa } = await borrarProductosPorId(seleccionados, msg, 'Eliminando');
 
-    if (error) { msg.style.color = 'var(--rust)'; msg.textContent = 'Error al eliminar: ' + error.message; return; }
+    if (error) {
+      msg.style.color = 'var(--rust)';
+      msg.textContent = `Error al eliminar (fallo en "${etapa || ''}" tras ${eliminados} producto(s)): ` + error.message;
+      cargarProductos();
+      return;
+    }
     msg.style.color = 'var(--teal)';
     msg.textContent = `${seleccionados.length} producto(s) eliminado(s).`;
     cargarProductos();
@@ -1247,10 +1324,14 @@ RESULTADOS DEL CÁLCULO DE PRECIO
     if (!confirm('Confirma de nuevo: esto borrará todos los productos y sus publicaciones para todos los usuarios. ¿Continuar?')) return;
 
     const todosLosIds = Object.keys(productosCache);
-    await supabase.from('publicaciones').delete().in('producto_id', todosLosIds);
-    const { error } = await supabase.from('productos').delete().in('id', todosLosIds);
+    const { error, eliminados, etapa } = await borrarProductosPorId(todosLosIds, msg, 'Eliminando todos');
 
-    if (error) { msg.style.color = 'var(--rust)'; msg.textContent = 'Error al eliminar: ' + error.message; return; }
+    if (error) {
+      msg.style.color = 'var(--rust)';
+      msg.textContent = `Error al eliminar (se alcanzaron a borrar ${eliminados} de ${total} antes de fallar en "${etapa || ''}"): ` + error.message;
+      cargarProductos();
+      return;
+    }
     msg.style.color = 'var(--teal)';
     msg.textContent = 'Todos los productos fueron eliminados.';
     cargarProductos();
@@ -1314,16 +1395,13 @@ RESULTADOS DEL CÁLCULO DE PRECIO
     const nombreProveedorArchivo = proveedorId ? proveedorNombre.replace(/[^a-z0-9]+/gi, '-') : 'todos';
     descargarJSON(`respaldo-productos-${nombreProveedorArchivo}-${fecha}.json`, respaldo);
 
-    msg.style.color = 'var(--muted)';
-    msg.textContent = `Eliminando ${objetivo.length} producto(s)...`;
-
     const ids = objetivo.map(p => p.id);
-    await supabase.from('publicaciones').delete().in('producto_id', ids);
-    const { error } = await supabase.from('productos').delete().in('id', ids);
+    const { error, eliminados, etapa } = await borrarProductosPorId(ids, msg, `Eliminando ${objetivo.length} producto(s)...`);
 
     if (error) {
       msg.style.color = 'var(--rust)';
-      msg.textContent = 'Error al eliminar: ' + error.message + ' (ya se descargó el respaldo, no se perdió nada).';
+      msg.textContent = `Error al eliminar en "${etapa || ''}" (se alcanzaron a borrar ${eliminados} de ${objetivo.length}): ${error.message} (ya se descargó el respaldo, no se perdió nada).`;
+      cargarProductos();
       return;
     }
 
@@ -1362,6 +1440,107 @@ RESULTADOS DEL CÁLCULO DE PRECIO
       return `${escapeHtml(fecha)} — ${escapeHtml(r.creado_por_email || 'usuario desconocido')} eliminó ${r.cantidad_productos} producto(s) de "${escapeHtml(r.proveedor_nombre)}"`;
     }).join('<br>');
     cont.style.display = 'block';
+  };
+
+  // --- Gestionar categorías: limpiar valores basura (ej. numéricos, de una columna mal
+  // detectada al importar) que quedaron guardados en productos.categoria ---
+
+  window.toggleGestionCategorias = function() {
+    const cont = document.getElementById('contenido-categorias');
+    const icono = document.getElementById('icono-categorias');
+    const abierta = cont.style.display === 'block';
+    cont.style.display = abierta ? 'none' : 'block';
+    icono.textContent = abierta ? 'Mostrar ▾' : 'Ocultar ▴';
+    if (!abierta) renderizarListaGestionCategorias();
+  };
+
+  function pareceCategoriaNumerica(valor) {
+    const limpio = String(valor).trim().replace(',', '.');
+    return limpio !== '' && !isNaN(Number(limpio));
+  }
+
+  function renderizarListaGestionCategorias() {
+    const cont = document.getElementById('lista-gestion-categorias');
+    const conteo = {};
+    Object.values(productosCache).forEach(p => {
+      const cat = (p.categoria || '').trim();
+      if (!cat) return;
+      conteo[cat] = (conteo[cat] || 0) + 1;
+    });
+    const categorias = Object.keys(conteo).sort((a, b) => a.localeCompare(b, 'es'));
+    if (categorias.length === 0) {
+      cont.innerHTML = '<div class="empty">No hay categorías asignadas todavía.</div>';
+      return;
+    }
+    cont.innerHTML = categorias.map(cat => {
+      const sospechosa = pareceCategoriaNumerica(cat);
+      return `
+        <label class="fila-producto" style="cursor:pointer;">
+          <span style="display:flex; align-items:center; gap:10px; flex:1; min-width:0;">
+            <input type="checkbox" class="chk-categoria-gestion" value="${escapeHtml(cat)}">
+            <span class="fp-nombre">${escapeHtml(cat)}${sospechosa ? ' <span style="color:var(--rust); font-size:11px;">(parece no ser una categoría real)</span>' : ''}</span>
+          </span>
+          <span class="fp-info">${conteo[cat]} producto(s)</span>
+        </label>`;
+    }).join('');
+  }
+
+  function categoriasSeleccionadasGestion() {
+    return Array.from(document.querySelectorAll('.chk-categoria-gestion:checked')).map(chk => chk.value);
+  }
+
+  // Actualiza en lotes en vez de un solo .in(...) con todos los IDs — con categorías que
+  // agrupan cientos/miles de productos, esa URL sería demasiado larga (mismo problema que
+  // el borrado masivo) y el servidor la rechazaría con Bad Request.
+  async function actualizarEnLotes(tabla, columna, ids, valores, tamanoLote, onProgreso) {
+    for (let i = 0; i < ids.length; i += tamanoLote) {
+      const lote = ids.slice(i, i + tamanoLote);
+      const { error } = await supabase.from(tabla).update(valores).in(columna, lote);
+      if (error) return { error, hechos: i };
+      if (onProgreso) onProgreso(Math.min(i + tamanoLote, ids.length), ids.length);
+    }
+    return { error: null, hechos: ids.length };
+  }
+
+  function idsDeCategorias(categorias) {
+    const set = new Set(categorias);
+    return Object.values(productosCache).filter(p => set.has((p.categoria || '').trim())).map(p => p.id);
+  }
+
+  window.vaciarCategoriasSeleccionadas = async function() {
+    const msg = document.getElementById('msg-categorias');
+    const categorias = categoriasSeleccionadasGestion();
+    if (categorias.length === 0) { msg.style.color = 'var(--rust)'; msg.textContent = 'Selecciona al menos una categoría.'; return; }
+    const ids = idsDeCategorias(categorias);
+    if (!confirm(`¿Vaciar la categoría de ${ids.length} producto(s) en ${categorias.length} categoría(s) seleccionada(s)? Los productos NO se borran, solo quedan sin categoría.`)) return;
+
+    msg.style.color = 'var(--muted)'; msg.textContent = `Actualizando 0/${ids.length}...`;
+    const { error, hechos } = await actualizarEnLotes('productos', 'id', ids, { categoria: null }, 150, (h, t) => {
+      msg.style.color = 'var(--muted)'; msg.textContent = `Actualizando ${h}/${t}...`;
+    });
+    if (error) { msg.style.color = 'var(--rust)'; msg.textContent = `Error (se alcanzaron a actualizar ${hechos} de ${ids.length}): ` + error.message; }
+    else { msg.style.color = 'var(--teal)'; msg.textContent = `${ids.length} producto(s) quedaron sin categoría.`; }
+    await cargarProductos();
+    renderizarListaGestionCategorias();
+  };
+
+  window.renombrarCategoriasSeleccionadas = async function() {
+    const msg = document.getElementById('msg-categorias');
+    const categorias = categoriasSeleccionadasGestion();
+    const nuevoNombre = document.getElementById('categoria-nuevo-nombre').value.trim();
+    if (categorias.length === 0) { msg.style.color = 'var(--rust)'; msg.textContent = 'Selecciona al menos una categoría.'; return; }
+    if (!nuevoNombre) { msg.style.color = 'var(--rust)'; msg.textContent = 'Escribe el nombre nuevo de categoría.'; return; }
+    const ids = idsDeCategorias(categorias);
+    if (!confirm(`¿Renombrar ${ids.length} producto(s) de ${categorias.length} categoría(s) a "${nuevoNombre}"?`)) return;
+
+    msg.style.color = 'var(--muted)'; msg.textContent = `Actualizando 0/${ids.length}...`;
+    const { error, hechos } = await actualizarEnLotes('productos', 'id', ids, { categoria: nuevoNombre }, 150, (h, t) => {
+      msg.style.color = 'var(--muted)'; msg.textContent = `Actualizando ${h}/${t}...`;
+    });
+    if (error) { msg.style.color = 'var(--rust)'; msg.textContent = `Error (se alcanzaron a actualizar ${hechos} de ${ids.length}): ` + error.message; }
+    else { msg.style.color = 'var(--teal)'; msg.textContent = `${ids.length} producto(s) ahora están en "${nuevoNombre}".`; document.getElementById('categoria-nuevo-nombre').value = ''; }
+    await cargarProductos();
+    renderizarListaGestionCategorias();
   };
 
   let secuenciaComparacion = 0;
@@ -1578,11 +1757,14 @@ RESULTADOS DEL CÁLCULO DE PRECIO
     await cargarProveedores();
     await cargarMargenesCategoria();
 
-    // Restaurar los filtros y la página en que estaba la tabla de productos antes de salir
+    // Restaurar los filtros, la página y el scroll en que estaba la tabla de productos
+    // antes de salir (por ejemplo, al ir a analizar un producto en Mercado Libre y volver).
     let categoriaGuardada = '';
+    let estadoGuardadoGlobal = null;
     try {
       const estadoGuardado = JSON.parse(localStorage.getItem('dashboard-productos-estado') || 'null');
       if (estadoGuardado) {
+        estadoGuardadoGlobal = estadoGuardado;
         if (estadoGuardado.busqueda) document.getElementById('filtro-busqueda').value = estadoGuardado.busqueda;
         if (estadoGuardado.precio) document.getElementById('filtro-precio').value = estadoGuardado.precio;
         if (estadoGuardado.costo) document.getElementById('filtro-costo').value = estadoGuardado.costo;
@@ -1633,6 +1815,10 @@ RESULTADOS DEL CÁLCULO DE PRECIO
       await intentarAbrirEdicion(0);
       // Limpiar el parámetro de la URL para que un refresh no vuelva a abrir la edición
       window.history.replaceState({}, '', 'dashboard.html');
+    } else if (estadoGuardadoGlobal && typeof estadoGuardadoGlobal.scroll === 'number') {
+      // Sin un producto específico que editar: restaurar el scroll donde estabas
+      // (después de que la tabla ya se dibujó, para que la posición sea la correcta).
+      requestAnimationFrame(() => requestAnimationFrame(() => window.scrollTo(0, estadoGuardadoGlobal.scroll)));
     }
   })();
 </script>
