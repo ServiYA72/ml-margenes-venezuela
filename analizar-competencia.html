@@ -145,9 +145,24 @@
 
   <div class="panel">
     <h2>2. Analizar una publicación de la competencia</h2>
+
+    <div style="margin-bottom:18px; padding-bottom:18px; border-bottom:1px solid var(--line);">
+      <label for="in-link-ml">Link de la publicación en Mercado Libre</label>
+      <div style="display:flex; gap:8px; flex-wrap:wrap;">
+        <input type="text" id="in-link-ml" placeholder="https://articulo.mercadolibre.com.ve/MLV-..." style="flex:1; min-width:260px;">
+        <button class="primary" style="margin-top:0; white-space:nowrap;" onclick="traerDesdeLink()" id="btn-traer-link">Traer datos del link</button>
+      </div>
+      <div class="hint">Trae automáticamente el título, precio, descripción y — cuando Mercado Libre lo permite — las preguntas que hicieron los interesados con la respuesta del vendedor, que suele ser donde más claro dice si el precio es a tasa BCV o solo en efectivo/Zelle/Binance.</div>
+      <div class="hint" id="hint-link-ml"></div>
+      <div id="preguntas-ml-wrap" style="display:none; margin-top:12px;">
+        <div style="font-size:12px; color:var(--muted); margin-bottom:6px;">Preguntas y respuestas encontradas en la publicación (🔎 = mencionan forma de pago):</div>
+        <div id="preguntas-ml-lista" style="font-size:12.5px; color:var(--muted); line-height:1.7; max-height:220px; overflow-y:auto; border:1px solid var(--line); padding:10px 12px;"></div>
+      </div>
+    </div>
+
     <label for="in-texto">Título + descripción completa de la publicación (incluye el precio tal como aparece)</label>
-    <textarea id="in-texto" placeholder="Pega aquí el texto tal cual aparece en Mercado Libre, incluyendo el precio..." oninput="actualizarVistaPrevia()"></textarea>
-    <div class="hint">Al pegar, el texto se ordena solo (sin espacios ni saltos de línea de más) — entre más texto pegues, más precisa es la detección.</div>
+    <textarea id="in-texto" placeholder="Se llena solo al traer el link de arriba — o pega aquí el texto a mano si prefieres." oninput="actualizarVistaPrevia()"></textarea>
+    <div class="hint">Al pegar, el texto se ordena solo (sin espacios ni saltos de línea de más) — entre más texto pegues (incluida cualquier respuesta del vendedor que hayas visto sobre la forma de pago), más precisa es la detección.</div>
 
     <div id="vista-previa-deteccion" style="display:none; margin-top:14px; padding:12px 14px; background:var(--surface-2); border:1px solid var(--line);">
       <div style="font-size:12px; color:var(--muted); margin-bottom:8px;">Vista previa de lo detectado:</div>
@@ -400,6 +415,17 @@
     enlace.href = 'https://listado.mercadolibre.com.ve/' + encodeURIComponent(p.nombre.trim().replace(/\s+/g, '-'));
   };
 
+  // Detecta si un fragmento de texto suelto (ej. la respuesta del vendedor a una pregunta)
+  // menciona algo relacionado a la forma de pago — se usa solo para resaltar en pantalla cuál
+  // pregunta/respuesta fue la que dio la pista, no para la clasificación final (esa sigue
+  // corriendo sobre el texto completo, igual que siempre).
+  function detectarPistaEnTexto(texto) {
+    const norm = normalizar(texto || '');
+    return contarCoincidencias(norm, PISTAS_EFECTIVO).length > 0
+        || contarCoincidencias(norm, PISTAS_BINANCE).length > 0
+        || contarCoincidencias(norm, PISTAS_BCV).length > 0;
+  }
+
   function clasificarPublicacion(texto) {
     const textoNorm = normalizar(texto);
     const hitsEfectivo = contarCoincidencias(textoNorm, PISTAS_EFECTIVO);
@@ -444,6 +470,71 @@
       .split('\n').map(l => l.trim()).join('\n')
       .trim();
   }
+
+  // --- Traer datos automáticamente desde el link de la publicación en Mercado Libre ---
+  // Usa la función analizar-publicacion-ml (Edge Function) que consulta la API pública de
+  // Mercado Libre: título, precio, descripción y — cuando Mercado Libre lo permite sin
+  // autenticación — las preguntas de los interesados con la respuesta del vendedor. Todo se
+  // vuelca al mismo cuadro de texto de siempre, para que el detector de "efectivo / BCV /
+  // Binance" (que ya lee cualquier texto pegado ahí) lo analice sin duplicar lógica.
+  window.traerDesdeLink = async function() {
+    const url = document.getElementById('in-link-ml').value.trim();
+    const hint = document.getElementById('hint-link-ml');
+    const btn = document.getElementById('btn-traer-link');
+    const wrapPreg = document.getElementById('preguntas-ml-wrap');
+
+    if (!url) { hint.style.color = 'var(--rust)'; hint.textContent = 'Pega primero el link de la publicación.'; return; }
+
+    hint.style.color = 'var(--muted)';
+    hint.textContent = 'Buscando la publicación en Mercado Libre...';
+    wrapPreg.style.display = 'none';
+    btn.disabled = true;
+
+    let data, error;
+    try {
+      ({ data, error } = await supabase.functions.invoke('analizar-publicacion-ml', { body: { url } }));
+    } catch (e) {
+      error = e;
+    }
+    btn.disabled = false;
+
+    if (error || !data || !data.ok) {
+      hint.style.color = 'var(--rust)';
+      hint.textContent = (data && data.error) || (error && error.message) ||
+        'No se pudo leer la publicación automáticamente. Verifica el link, o pega el texto a mano abajo.';
+      return;
+    }
+
+    let bloque = `${data.titulo || ''}\n\nPrecio publicado: ${data.moneda === 'USD' ? '$' : 'Bs '}${data.precio}\n\n${data.descripcion || ''}`;
+    if (data.preguntas && data.preguntas.length > 0) {
+      bloque += '\n\nPREGUNTAS Y RESPUESTAS DEL VENDEDOR:\n';
+      data.preguntas.forEach(q => { bloque += `P: ${q.pregunta}\nR: ${q.respuesta}\n\n`; });
+    }
+    bloque += `\nLink: ${data.permalink || url}`;
+
+    document.getElementById('in-texto').value = limpiarTextoPegado(bloque);
+    actualizarVistaPrevia();
+
+    const listaPreg = document.getElementById('preguntas-ml-lista');
+    if (data.preguntas_disponibles && data.preguntas.length > 0) {
+      listaPreg.innerHTML = data.preguntas.map(q => {
+        const relevante = detectarPistaEnTexto(q.respuesta);
+        return `<div style="margin-bottom:10px; ${relevante ? 'color:var(--gold);' : ''}">
+          ${relevante ? '🔎 ' : ''}<b>P:</b> ${escapeHtml(q.pregunta)}<br><b>R:</b> ${escapeHtml(q.respuesta)}
+        </div>`;
+      }).join('');
+      wrapPreg.style.display = 'block';
+    } else if (data.preguntas_disponibles) {
+      listaPreg.innerHTML = '<div>Esta publicación no tiene preguntas respondidas públicamente todavía.</div>';
+      wrapPreg.style.display = 'block';
+    }
+
+    hint.style.color = 'var(--teal)';
+    const totalPreg = data.preguntas ? data.preguntas.length : 0;
+    hint.textContent = data.preguntas_disponibles
+      ? `Listo — se trajo el título, precio, descripción y ${totalPreg} respuesta(s) del vendedor. Revisa el texto de abajo antes de analizar y guardar.`
+      : 'Listo — se trajo el título, precio y descripción. Las preguntas y respuestas no se pudieron leer automáticamente esta vez (Mercado Libre a veces las protege) — si el vendedor respondió algo sobre la forma de pago, agrégalo a mano en el texto de abajo.';
+  };
 
   window.actualizarVistaPrevia = function() {
     const campo = document.getElementById('in-texto');
@@ -506,6 +597,10 @@
     document.getElementById('in-texto').value = '';
     document.getElementById('vista-previa-deteccion').style.display = 'none';
     document.getElementById('msg-analisis').textContent = '';
+    document.getElementById('in-link-ml').value = '';
+    document.getElementById('hint-link-ml').textContent = '';
+    document.getElementById('preguntas-ml-wrap').style.display = 'none';
+    document.getElementById('preguntas-ml-lista').innerHTML = '';
   };
 
   window.borrarHistorial = async function() {
