@@ -301,14 +301,22 @@
       </table>
     </div>
 
-    <div class="panel-ganancia-general">
-      <div>
-        <div class="titulo">Ganancia general de esta cotización — interno, nunca aparece en el PDF</div>
-        <div class="dato-costo">Costo total (productos + mano de obra subcontratada): <b id="txt-costo-total">$0.00</b></div>
+    <div class="panel-ganancia-general" style="flex-direction:column; align-items:stretch;">
+      <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px;">
+        <div>
+          <div class="titulo">Ganancia general de esta cotización — interno, nunca aparece en el PDF</div>
+          <div class="dato-costo">Costo total (productos + mano de obra subcontratada): <b id="txt-costo-total">$0.00</b></div>
+        </div>
+        <div style="text-align:right;">
+          <div class="monto" id="txt-ganancia-total">$0.00</div>
+          <div class="dato-costo" id="txt-ganancia-pct">0% de margen sobre el precio</div>
+        </div>
       </div>
-      <div style="text-align:right;">
-        <div class="monto" id="txt-ganancia-total">$0.00</div>
-        <div class="dato-costo" id="txt-ganancia-pct">0% de margen sobre el precio</div>
+      <div id="desglose-proveedores-wrap" style="display:none; margin-top:14px; padding-top:14px; border-top:1px dashed var(--gold);">
+        <div class="titulo" style="margin-bottom:8px;">Qué le debes pagar a cada proveedor / técnico, según el costo de esta cotización</div>
+        <table style="width:100%; border-collapse:collapse; font-size:12.5px;">
+          <tbody id="tbody-desglose-proveedores"></tbody>
+        </table>
       </div>
     </div>
   </div>
@@ -814,6 +822,31 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
     return { costoTotal, gananciaTotal, ingresoTotal, margenPct };
   }
 
+  // Cuánto hay que pagarle a cada proveedor o técnico, agrupando por proveedor real de
+  // cada producto de catálogo, y en un grupo aparte lo pagado a mano de obra subcontratada
+  // o a proveedores externos en ítems libres. Ítems sin costo (costo $0) no generan pago,
+  // así que no aparecen en este desglose.
+  function calcularDesgloseProveedores() {
+    const grupos = {};
+    itemsCotizacion.forEach(it => {
+      const costo = (it.costoOriginal || 0) * it.cantidad;
+      if (costo <= 0) return;
+      let nombre;
+      if (it.producto_id) {
+        const p = productosCache[it.producto_id];
+        nombre = p?.proveedorNombre || 'Proveedor sin nombre registrado';
+      } else if (it.tipoItem === 'mano_obra') {
+        nombre = 'Técnicos subcontratados (mano de obra)';
+      } else {
+        nombre = 'Proveedores externos (ítems libres)';
+      }
+      grupos[nombre] = (grupos[nombre] || 0) + costo;
+    });
+    return Object.entries(grupos)
+      .map(([nombre, monto]) => ({ nombre, monto }))
+      .sort((a, b) => b.monto - a.monto);
+  }
+
   function actualizarTotalesEnPantalla() {
     const { subtotal, total, subtotalBs, totalBs } = calcularTotales();
     document.getElementById('txt-subtotal').textContent = '$' + subtotal.toFixed(2);
@@ -825,6 +858,20 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
     document.getElementById('txt-costo-total').textContent = '$' + g.costoTotal.toFixed(2);
     document.getElementById('txt-ganancia-total').textContent = '$' + g.gananciaTotal.toFixed(2);
     document.getElementById('txt-ganancia-pct').textContent = g.margenPct.toFixed(1) + '% de margen sobre el precio';
+
+    const desglose = calcularDesgloseProveedores();
+    const wrapDesglose = document.getElementById('desglose-proveedores-wrap');
+    if (desglose.length === 0) {
+      wrapDesglose.style.display = 'none';
+    } else {
+      wrapDesglose.style.display = 'block';
+      document.getElementById('tbody-desglose-proveedores').innerHTML = desglose.map(d => `
+        <tr>
+          <td style="padding:4px 0; color:var(--paper); border-top:1px solid var(--line);">${escapeHtml(d.nombre)}</td>
+          <td style="padding:4px 0; text-align:right; font-family:'IBM Plex Mono',monospace; color:var(--gold); border-top:1px solid var(--line);">$${d.monto.toFixed(2)}</td>
+        </tr>
+      `).join('');
+    }
   }
 
   function calcularTotales() {
