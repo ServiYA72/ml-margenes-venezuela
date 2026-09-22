@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nicom System — Catálogo de Productos</title>
+<meta name="description" content="Catálogo de productos de Nicom Tech Solutions, con precios actualizados en efectivo ($) y en bolívares.">
+<meta property="og:title" content="Nicom Tech Solutions — Catálogo de Productos">
+<meta property="og:description" content="Precios actualizados en efectivo ($) y en bolívares.">
+<meta property="og:image" content="logo-nicom.png">
+<link rel="icon" href="logo-nicom.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #0F1B17; --surface: #16241F; --surface-2: #1D2E27; --line: #2C3F37;
+    --paper: #EDE8DE; --muted: #8FA69B; --gold: #C9A227; --teal: #3FA796; --rust: #C1553B;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; background: var(--ink); font-family: 'IBM Plex Sans', sans-serif; color: var(--paper); }
+
+  header {
+    border-bottom: 1px solid var(--line); padding: 22px 32px;
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;
+    position: sticky; top: 0; background: var(--ink); z-index: 20;
+  }
+  .brand-mark { display: flex; align-items: center; gap: 14px; }
+  .brand-logo { height: 42px; width: auto; filter: drop-shadow(0 3px 10px rgba(0,0,0,0.5)); }
+  .brand-titulo { font-family: 'Fraunces', serif; font-weight: 400; font-size: 19px; }
+  .brand-sub { font-size: 12.5px; color: var(--muted); margin-top: 1px; }
+  .rate-strip { display: flex; gap: 16px; font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; color: var(--muted); }
+  .rate-strip b { color: var(--paper); font-weight: 500; }
+  .rate-strip .gold { color: var(--gold); }
+  .rate-strip .teal { color: var(--teal); }
+  button.compartir {
+    background: var(--surface-2); color: var(--paper); border: 1px solid var(--line);
+    padding: 9px 16px; font-size: 12.5px; cursor: pointer; white-space: nowrap;
+  }
+  button.compartir:hover { border-color: var(--gold); color: var(--gold); }
+
+  main { max-width: 1360px; margin: 0 auto; padding: 28px 32px 60px; }
+  h1 { font-family: 'Fraunces', serif; font-weight: 400; font-size: 26px; margin: 0 0 6px 0; }
+  .sub { color: var(--muted); font-size: 14px; margin: 0 0 24px 0; line-height: 1.6; }
+
+  .barra-filtros {
+    display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end;
+    background: var(--surface); border: 1px solid var(--line); padding: 16px 18px; margin-bottom: 22px;
+  }
+  .barra-filtros .campo { flex: 1; min-width: 180px; }
+  .barra-filtros .campo.categoria { max-width: 240px; }
+  label { display: block; font-size: 11.5px; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .03em; }
+  input, select {
+    width: 100%; background: var(--surface-2); border: 1px solid var(--line); color: var(--paper);
+    padding: 10px 12px; font-size: 14px; font-family: 'IBM Plex Sans', sans-serif;
+  }
+  input:focus, select:focus { outline: none; border-color: var(--gold); }
+  .contador-resultados { font-size: 12.5px; color: var(--muted); white-space: nowrap; padding-bottom: 11px; }
+
+  .grid-productos {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 18px;
+  }
+  .tarjeta {
+    background: var(--surface); border: 1px solid var(--line); display: flex; flex-direction: column;
+    transition: border-color .15s ease, transform .15s ease;
+  }
+  .tarjeta:hover { border-color: var(--gold); transform: translateY(-2px); }
+  .tp-imagen {
+    aspect-ratio: 4 / 3; background: var(--surface-2); display: flex; align-items: center; justify-content: center;
+    border-bottom: 1px solid var(--line); overflow: hidden;
+  }
+  .tp-imagen img { width: 100%; height: 100%; object-fit: cover; }
+  .tp-imagen svg { width: 40%; height: 40%; opacity: .35; }
+  .tp-cuerpo { padding: 14px 16px 16px; display: flex; flex-direction: column; gap: 6px; flex: 1; }
+  .tp-categoria { font-size: 10.5px; color: var(--teal); text-transform: uppercase; letter-spacing: .04em; }
+  .tp-nombre { font-size: 13.5px; line-height: 1.4; min-height: 2.8em; }
+  .tp-sku { font-size: 11px; color: var(--muted); font-family: 'IBM Plex Mono', monospace; }
+  .tp-precios { margin-top: auto; padding-top: 10px; border-top: 1px dashed var(--line); }
+  .tp-precio-usd { font-family: 'IBM Plex Mono', monospace; font-size: 19px; font-weight: 600; color: var(--gold); }
+  .tp-precio-bs { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .tp-stock { font-size: 11px; margin-top: 8px; display: inline-flex; align-items: center; gap: 5px; width: fit-content; padding: 3px 8px; border: 1px solid var(--line); }
+  .tp-stock.disponible { color: var(--teal); border-color: var(--teal); }
+  .tp-stock.agotado { color: var(--rust); border-color: var(--rust); }
+
+  .estado-carga, .estado-vacio { text-align: center; color: var(--muted); padding: 60px 20px; font-size: 14px; }
+
+  .paginacion { display: flex; justify-content: center; margin-top: 30px; }
+  button.cargar-mas {
+    background: var(--surface); color: var(--paper); border: 1px solid var(--gold); padding: 12px 28px;
+    font-weight: 600; font-size: 13.5px; cursor: pointer;
+  }
+  button.cargar-mas:hover { background: var(--gold); color: var(--ink); }
+  button.cargar-mas:disabled { opacity: .4; cursor: not-allowed; }
+
+  footer { border-top: 1px solid var(--line); padding: 22px 32px; text-align: center; color: var(--muted); font-size: 12px; }
+
+  @media print {
+    body { background: #fff; color: #111; }
+    header, .barra-filtros, .paginacion, button.compartir { display: none; }
+    .tarjeta { break-inside: avoid; border-color: #ccc; }
+    .tp-precio-usd { color: #7a5f0c; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand-mark">
+    <img src="logo-nicom.png" alt="Nicom Tech Solutions" class="brand-logo">
+    <div>
+      <div class="brand-titulo">Catálogo de Productos</div>
+      <div class="brand-sub">Nicom Tech Solutions</div>
+    </div>
+  </div>
+  <div class="rate-strip" id="rate-strip">
+    <span>BCV <b class="gold" id="rate-bcv">—</b></span>
+    <span>Binance <b class="teal" id="rate-binance">—</b></span>
+  </div>
+  <button class="compartir" onclick="compartirCatalogo()">Compartir catálogo</button>
+</header>
+
+<main>
+  <h1>Nuestros productos</h1>
+  <p class="sub">Precios en efectivo ($) o pagando en bolívares. El precio en Bs se actualiza con la tasa del día.</p>
+
+  <div class="barra-filtros">
+    <div class="campo">
+      <label for="buscador">Buscar</label>
+      <input type="text" id="buscador" placeholder="Nombre o código del producto…" oninput="onCambioFiltro()">
+    </div>
+    <div class="campo categoria">
+      <label for="filtro-categoria">Categoría</label>
+      <select id="filtro-categoria" onchange="onCambioFiltro()"><option value="">Todas las categorías</option></select>
+    </div>
+    <div class="contador-resultados" id="contador-resultados"></div>
+  </div>
+
+  <div id="grid-productos" class="grid-productos"></div>
+  <div class="estado-carga" id="estado-carga">Cargando catálogo…</div>
+  <div class="estado-vacio" id="estado-vacio" style="display:none;">No se encontraron productos con ese criterio.</div>
+
+  <div class="paginacion" id="paginacion" style="display:none;">
+    <button class="cargar-mas" id="btn-cargar-mas" onclick="cargarProductos(false)">Ver más productos</button>
+  </div>
+</main>
+
+<footer>
+  Nicom Tech Solutions — catálogo actualizado en tiempo real. Los precios no incluyen envío.
+</footer>
+
+<script type="module">
+  import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+  const SUPABASE_URL = 'https://tkhzuopapvclmcgxyood.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_KQB6B6uLIPr-xKdNDc8iEw_7tcWM5gS';
+  const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  const TAMANO_PAGINA = 48;
+  let paginaActual = 0;
+  let totalResultados = 0;
+  let cargando = false;
+
+  function escapeHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = str == null ? '' : String(str);
+    return d.innerHTML;
+  }
+
+  const fmtBs = (n) => 'Bs ' + Number(n || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const fmtUsd = (n) => '$' + Number(n || 0).toFixed(2);
+
+  const iconoCaja = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--muted);">
+    <path d="M21 8l-9-5-9 5 9 5 9-5z"></path>
+    <path d="M3 8v8l9 5 9-5V8"></path>
+    <path d="M12 13v8"></path>
+  </svg>`;
+
+  async function cargarTasas() {
+    const { data } = await supabase.from('tasas_cambio').select('*').order('fecha', { ascending: false }).limit(1).single();
+    if (data) {
+      document.getElementById('rate-bcv').textContent = 'Bs ' + parseFloat(data.tasa_bcv).toFixed(2);
+      document.getElementById('rate-binance').textContent = 'Bs ' + parseFloat(data.tasa_binance).toFixed(2);
+    }
+  }
+
+  async function cargarCategorias() {
+    const { data } = await supabase.from('vista_catalogo_categorias').select('categoria');
+    const sel = document.getElementById('filtro-categoria');
+    (data || []).forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.categoria;
+      opt.textContent = c.categoria;
+      sel.appendChild(opt);
+    });
+  }
+
+  function tarjetaHtml(p) {
+    const nombre = (p.nombre || '').trim();
+    const agotado = p.stock != null && p.stock <= 0;
+    return `
+      <div class="tarjeta">
+        <div class="tp-imagen">${p.imagen_url ? `<img src="${escapeHtml(p.imagen_url)}" alt="${escapeHtml(nombre)}" loading="lazy">` : iconoCaja}</div>
+        <div class="tp-cuerpo">
+          ${p.categoria ? `<div class="tp-categoria">${escapeHtml(p.categoria)}</div>` : ''}
+          <div class="tp-nombre">${escapeHtml(nombre)}</div>
+          ${p.sku ? `<div class="tp-sku">${escapeHtml(p.sku)}</div>` : ''}
+          <div class="tp-precios">
+            <div class="tp-precio-usd">${fmtUsd(p.precio_efectivo_usd)} <span style="font-size:10px; color:var(--muted); font-weight:400;">efectivo</span></div>
+            <div class="tp-precio-bs">${fmtBs(p.precio_bs)} pagando en bolívares</div>
+          </div>
+          ${p.stock != null ? `<div class="tp-stock ${agotado ? 'agotado' : 'disponible'}">${agotado ? 'Agotado' : 'Disponible'}</div>` : ''}
+        </div>
+      </div>
+    `;
+  }
+
+  window.cargarProductos = async function(reset) {
+    if (cargando) return;
+    cargando = true;
+    if (reset) { paginaActual = 0; document.getElementById('grid-productos').innerHTML = ''; }
+
+    const estadoCarga = document.getElementById('estado-carga');
+    const estadoVacio = document.getElementById('estado-vacio');
+    const btnMas = document.getElementById('btn-cargar-mas');
+    estadoCarga.style.display = 'block';
+    estadoVacio.style.display = 'none';
+    if (btnMas) btnMas.disabled = true;
+
+    // Se quitan , ( ) del texto de búsqueda porque esos caracteres son delimitadores en el
+    // filtro .or() de PostgREST — si el cliente los escribe, romperían el filtro en vez de
+    // buscarse literalmente.
+    const texto = document.getElementById('buscador').value.trim().replace(/[,()]/g, ' ').trim();
+    const categoria = document.getElementById('filtro-categoria').value;
+
+    let query = supabase.from('vista_catalogo_publico').select('*', { count: 'exact' }).order('nombre');
+    if (texto) query = query.or(`nombre.ilike.%${texto}%,sku.ilike.%${texto}%`);
+    if (categoria) query = query.eq('categoria', categoria);
+
+    const desde = paginaActual * TAMANO_PAGINA;
+    const hasta = desde + TAMANO_PAGINA - 1;
+    const { data, count, error } = await query.range(desde, hasta);
+
+    estadoCarga.style.display = 'none';
+    cargando = false;
+
+    if (error) {
+      estadoCarga.textContent = 'No se pudo cargar el catálogo: ' + error.message;
+      estadoCarga.style.display = 'block';
+      return;
+    }
+
+    totalResultados = count || 0;
+    const grid = document.getElementById('grid-productos');
+    grid.insertAdjacentHTML('beforeend', (data || []).map(tarjetaHtml).join(''));
+
+    const mostrados = grid.children.length;
+    document.getElementById('contador-resultados').textContent =
+      totalResultados > 0 ? `Mostrando ${mostrados} de ${totalResultados} productos` : '';
+
+    if (mostrados === 0) {
+      estadoVacio.style.display = 'block';
+    }
+
+    const paginacion = document.getElementById('paginacion');
+    if (mostrados < totalResultados) {
+      paginacion.style.display = 'flex';
+      if (btnMas) btnMas.disabled = false;
+      paginaActual++;
+    } else {
+      paginacion.style.display = 'none';
+    }
+  };
+
+  let timerBusqueda = null;
+  window.onCambioFiltro = function() {
+    clearTimeout(timerBusqueda);
+    timerBusqueda = setTimeout(() => cargarProductos(true), 300);
+  };
+
+  window.compartirCatalogo = async function() {
+    const url = window.location.href.split('?')[0];
+    if (navigator.share) {
+      try { await navigator.share({ title: 'Catálogo Nicom Tech Solutions', url }); return; } catch (e) { /* usuario canceló */ }
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      alert('Link del catálogo copiado — ya lo puedes compartir con tu cliente.');
+    } catch (e) {
+      prompt('Copia el link del catálogo:', url);
+    }
+  };
+
+  cargarTasas();
+  cargarCategorias();
+  cargarProductos(true);
+</script>
+</body>
+</html>
