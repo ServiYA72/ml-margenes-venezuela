@@ -34,7 +34,20 @@
     justify-content: space-between;
     flex-wrap: wrap;
     gap: 16px;
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    background: var(--ink);
   }
+  .btns-scroll { position: fixed; right: 22px; bottom: 22px; display: flex; flex-direction: column; gap: 10px; z-index: 40; }
+  .btn-scroll {
+    width: 42px; height: 42px; border-radius: 50%; background: var(--surface); border: 1px solid var(--line);
+    color: var(--paper); font-size: 17px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 14px rgba(0,0,0,.45); opacity: 0; pointer-events: none;
+    transition: opacity .15s ease, border-color .15s ease, transform .15s ease;
+  }
+  .btn-scroll.visible { opacity: 1; pointer-events: auto; }
+  .btn-scroll:hover { border-color: var(--gold); color: var(--gold); transform: translateY(-2px); }
   .brand-mark {
     display: flex;
     align-items: center;
@@ -1824,5 +1837,26 @@ RESULTADOS DEL CÁLCULO DE PRECIO
   })();
 </script>
 
+<div class="btns-scroll">
+  <button class="btn-scroll" id="btn-ir-inicio" title="Ir al inicio de la página" aria-label="Ir al inicio">↑</button>
+  <button class="btn-scroll" id="btn-ir-fin" title="Ir al final de la página" aria-label="Ir al final">↓</button>
+</div>
+<script>
+(function() {
+  var btnInicio = document.getElementById('btn-ir-inicio');
+  var btnFin = document.getElementById('btn-ir-fin');
+  function actualizar() {
+    var y = window.scrollY;
+    var alturaScrolleable = document.documentElement.scrollHeight - window.innerHeight;
+    btnInicio.classList.toggle('visible', y > 320);
+    btnFin.classList.toggle('visible', alturaScrolleable > 320 && y < alturaScrolleable - 320);
+  }
+  btnInicio.addEventListener('click', function() { window.scrollTo({ top: 0, behavior: 'smooth' }); });
+  btnFin.addEventListener('click', function() { window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' }); });
+  window.addEventListener('scroll', actualizar, { passive: true });
+  window.addEventListener('resize', actualizar);
+  actualizar();
+})();
+</script>
 </body>
 </html>
