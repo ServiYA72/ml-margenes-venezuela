@@ -159,6 +159,11 @@
   let totalResultados = 0;
   let cargando = false;
 
+  // Slug del tenant a mostrar. Se lee de ?t=<slug> en la URL; si no viene,
+  // se asume 'nicom' (el tenant original, para que el link ya compartido
+  // hoy siga funcionando igual sin que nadie tenga que cambiarlo).
+  const TENANT_SLUG = new URLSearchParams(window.location.search).get('t') || 'nicom';
+
   function escapeHtml(str) {
     const d = document.createElement('div');
     d.textContent = str == null ? '' : String(str);
@@ -183,7 +188,7 @@
   }
 
   async function cargarCategorias() {
-    const { data } = await supabase.from('vista_catalogo_categorias').select('categoria');
+    const { data } = await supabase.from('vista_catalogo_categorias').select('categoria').eq('tenant_slug', TENANT_SLUG);
     const sel = document.getElementById('filtro-categoria');
     (data || []).forEach(c => {
       const opt = document.createElement('option');
@@ -231,7 +236,7 @@
     const texto = document.getElementById('buscador').value.trim().replace(/[,()]/g, ' ').trim();
     const categoria = document.getElementById('filtro-categoria').value;
 
-    let query = supabase.from('vista_catalogo_publico').select('*', { count: 'exact' }).order('nombre');
+    let query = supabase.from('vista_catalogo_publico').select('*', { count: 'exact' }).eq('tenant_slug', TENANT_SLUG).order('nombre');
     if (texto) query = query.or(`nombre.ilike.%${texto}%,sku.ilike.%${texto}%`);
     if (categoria) query = query.eq('categoria', categoria);
 
@@ -277,7 +282,10 @@
   };
 
   window.compartirCatalogo = async function() {
-    const url = window.location.href.split('?')[0];
+    // Se conserva el parámetro ?t= (identifica el tenant) al compartir;
+    // solo se descartan otros parámetros que pudieran haber quedado en la URL.
+    const base = window.location.href.split('?')[0];
+    const url = TENANT_SLUG !== 'nicom' ? `${base}?t=${encodeURIComponent(TENANT_SLUG)}` : base;
     if (navigator.share) {
       try { await navigator.share({ title: 'Catálogo Nicom Tech Solutions', url }); return; } catch (e) { /* usuario canceló */ }
     }
