@@ -728,6 +728,7 @@
       if (col === undefined || col === -1 || valor === undefined || valor === '') return;
       const celda = XLSX.utils.encode_cell({ r: fila, c: col });
       ws[celda] = typeof valor === 'number' ? { t: 'n', v: valor } : { t: 's', v: String(valor) };
+      return celda;
     };
 
     seleccionadosPreparar.forEach(p => {
@@ -738,7 +739,9 @@
       if (pub) {
         escribir(filaDestino, enc.col.fotos, (pub.imagenes || []).join(', '));
         escribir(filaDestino, enc.col.stock, Number.isFinite(pub.stock) ? pub.stock : undefined);
-        escribir(filaDestino, enc.col.precio, pub.precio_efectivo_usd != null ? Number(pub.precio_efectivo_usd) : undefined);
+        const celdaPrecio = escribir(filaDestino, enc.col.precio, pub.precio_efectivo_usd != null ? Number(pub.precio_efectivo_usd) : undefined);
+        // Formato moneda ($ con 2 decimales) para que el precio se lea de un vistazo, en vez de un número suelto
+        if (celdaPrecio && ws[celdaPrecio]) ws[celdaPrecio].z = '"$"#,##0.00';
       }
       filaDestino++;
     });
@@ -747,6 +750,24 @@
     const rangoActual = XLSX.utils.decode_range(ws['!ref']);
     rangoActual.e.r = Math.max(rangoActual.e.r, filaDestino - 1);
     ws['!ref'] = XLSX.utils.encode_range(rangoActual);
+
+    // Ensancha solo las columnas que el sistema acaba de llenar, para que el título, la
+    // descripción y los links de fotos se puedan leer sin tener que ajustar el ancho a mano.
+    // Excel solo respeta el ancho de columna si se define para TODAS las columnas de la hoja
+    // (una lista con huecos hace que descarte el ancho por completo al guardar) — por eso se
+    // arma un arreglo completo, usando el ancho por defecto de Excel (8.43) para las columnas
+    // que no se tocan, que son las que Mercado Libre pide llenar a mano.
+    const totalColumnas = rangoActual.e.c + 1;
+    const anchosColumna = { titulo: 45, sku: 16, fotos: 60, stock: 8, precio: 12, descripcion: 55 };
+    const colsExistentes = ws['!cols'] || [];
+    const colsNuevos = [];
+    for (let c = 0; c < totalColumnas; c++) colsNuevos.push(colsExistentes[c] || { wch: 8.43 });
+    Object.entries(anchosColumna).forEach(([campo, wch]) => {
+      const col = enc.col[campo];
+      if (col === undefined || col === -1) return;
+      colsNuevos[col] = Object.assign({}, colsNuevos[col], { wch });
+    });
+    ws['!cols'] = colsNuevos;
 
     const nombreArchivo = `planilla-${nombreHoja.replace(/[^a-zA-Z0-9]+/g, '-')}-${new Date().toISOString().slice(0, 10)}.xlsx`;
     XLSX.writeFile(workbookPreparar, nombreArchivo);
