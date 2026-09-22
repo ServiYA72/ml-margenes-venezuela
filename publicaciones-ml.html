@@ -1,0 +1,528 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nicom System — Publicado en Mercado Libre</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  :root {
+    --ink: #0F1B17; --surface: #16241F; --surface-2: #1D2E27; --line: #2C3F37;
+    --paper: #EDE8DE; --muted: #8FA69B; --gold: #C9A227; --teal: #3FA796; --rust: #C1553B;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; background: var(--ink); font-family: 'IBM Plex Sans', sans-serif; color: var(--paper); }
+  header {
+    border-bottom: 1px solid var(--line); padding: 20px 32px;
+    display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px;
+    position: sticky; top: 0; z-index: 30; background: var(--ink);
+  }
+  .btns-scroll { position: fixed; right: 22px; bottom: 22px; display: flex; flex-direction: column; gap: 10px; z-index: 40; }
+  .btn-scroll {
+    width: 42px; height: 42px; border-radius: 50%; background: var(--surface); border: 1px solid var(--line);
+    color: var(--paper); font-size: 17px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 14px rgba(0,0,0,.45); opacity: 0; pointer-events: none;
+    transition: opacity .15s ease, border-color .15s ease, transform .15s ease;
+  }
+  .btn-scroll.visible { opacity: 1; pointer-events: auto; }
+  .btn-scroll:hover { border-color: var(--gold); color: var(--gold); transform: translateY(-2px); }
+  .brand-mark { display: flex; align-items: center; }
+  .brand-logo { height: 42px; width: auto; filter: drop-shadow(0 3px 10px rgba(0,0,0,0.5)); }
+  .who { font-size: 13px; color: var(--muted); }
+  .nav-bar { display: flex; gap: 8px; flex-wrap: wrap; }
+  .nav-pill {
+    color: var(--muted); font-size: 12.5px; text-decoration: none; white-space: nowrap;
+    padding: 8px 14px; border: 1px solid var(--line); background: var(--surface-2);
+    transition: border-color .15s ease, color .15s ease, background .15s ease;
+  }
+  .nav-pill:hover { color: var(--paper); border-color: var(--gold); }
+  .nav-pill.activo { color: var(--ink); background: var(--gold); border-color: var(--gold); font-weight: 600; }
+
+  main { max-width: 1100px; margin: 0 auto; padding: 32px; }
+  h1 { font-family: 'Fraunces', serif; font-weight: 400; font-size: 26px; margin: 0 0 6px 0; }
+  .sub { color: var(--muted); font-size: 14px; margin: 0 0 28px 0; line-height: 1.6; }
+
+  .panel { background: var(--surface); border: 1px solid var(--line); padding: 22px; margin-bottom: 24px; }
+  .panel h2 { font-family: 'Fraunces', serif; font-weight: 400; font-size: 18px; margin: 0 0 14px 0; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 8px; line-height: 1.6; }
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  input[type="text"] {
+    width: 100%; background: var(--surface-2); border: 1px solid var(--line); color: var(--paper);
+    padding: 10px 12px; font-size: 14px; font-family: 'IBM Plex Sans', sans-serif;
+  }
+  input[type="text"]:focus { outline: none; border-color: var(--gold); }
+
+  button.primary {
+    background: var(--gold); color: var(--ink); border: none; padding: 12px 22px;
+    font-weight: 600; font-size: 14px; cursor: pointer; margin-top: 14px;
+  }
+  button.primary:hover { background: #DAB13A; }
+  button.secondary {
+    background: var(--surface-2); color: var(--paper); border: 1px solid var(--line); padding: 12px 22px;
+    font-weight: 500; font-size: 14px; cursor: pointer; margin-top: 14px; margin-left: 10px;
+  }
+  button.secondary:hover { border-color: var(--rust); color: var(--rust); }
+  label.subir-archivo {
+    display: inline-block; padding: 12px 22px; background: var(--gold); color: var(--ink);
+    font-weight: 600; font-size: 14px; cursor: pointer; margin-top: 0;
+  }
+  label.subir-archivo:hover { background: #DAB13A; }
+
+  .resumen-import { display: flex; gap: 24px; flex-wrap: wrap; margin-top: 16px; }
+  .resumen-item { font-size: 13px; color: var(--muted); }
+  .resumen-item b { display: block; font-family: 'Fraunces', serif; font-size: 24px; color: var(--paper); font-weight: 400; }
+
+  .empty { color: var(--muted); font-size: 14px; text-align: center; padding: 30px 0; }
+
+  .fila-revisar {
+    display: flex; align-items: flex-start; justify-content: space-between; gap: 14px;
+    padding: 16px 4px; border-bottom: 1px solid var(--line); flex-wrap: wrap;
+  }
+  .fila-revisar:last-child { border-bottom: none; }
+  .rv-info { flex: 1 1 260px; min-width: 220px; }
+  .rv-titulo { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+  .rv-meta { font-size: 12px; color: var(--muted); line-height: 1.6; }
+  .rv-match { position: relative; flex: 1 1 240px; min-width: 220px; }
+  .rv-sugerencias {
+    position: absolute; top: calc(100% + 2px); left: 0; right: 0; background: var(--surface-2);
+    border: 1px solid var(--line); z-index: 5; max-height: 220px; overflow-y: auto; display: none;
+  }
+  .rv-sugerencias.visible { display: block; }
+  .rv-sug-item { padding: 8px 10px; font-size: 12.5px; cursor: pointer; border-bottom: 1px solid var(--line); }
+  .rv-sug-item:last-child { border-bottom: none; }
+  .rv-sug-item:hover { background: var(--surface); color: var(--gold); }
+  .rv-sug-item .sku { color: var(--muted); font-family: 'IBM Plex Mono', monospace; font-size: 11px; }
+  .tag-sugerido { font-size: 10.5px; color: var(--teal); margin-top: 6px; }
+  .rv-acciones { display: flex; gap: 8px; align-items: center; flex: 0 0 auto; }
+  .rv-acciones button { margin: 0; padding: 9px 14px; font-size: 12.5px; }
+  .rv-msg { font-size: 11.5px; margin-top: 6px; }
+
+  table.tabla-publicados { width: 100%; border-collapse: collapse; font-size: 13px; }
+  table.tabla-publicados th {
+    text-align: left; font-size: 11px; color: var(--muted); font-weight: 500;
+    padding: 8px 10px; border-bottom: 1px solid var(--line);
+  }
+  table.tabla-publicados td { padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  table.tabla-publicados a { color: var(--teal); }
+  .btn-quitar {
+    background: none; border: 1px solid var(--line); color: var(--muted); padding: 5px 10px;
+    font-size: 11.5px; cursor: pointer; margin: 0;
+  }
+  .btn-quitar:hover { border-color: var(--rust); color: var(--rust); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand-mark"><img src="logo-nicom.png" alt="Nicom Tech Solutions" class="brand-logo"></div>
+  <nav class="nav-bar">
+    <a class="nav-pill" href="dashboard.html?tab=productos">Productos</a>
+    <a class="nav-pill" href="importar-precios.html">Importar precios</a>
+    <a class="nav-pill" href="analizar-competencia.html">Análisis de competencia</a>
+    <a class="nav-pill" href="ventas.html">Ventas</a>
+    <a class="nav-pill" href="cotizaciones.html">Cotizaciones</a>
+    <a class="nav-pill activo" href="publicaciones-ml.html">Publicado en ML</a>
+    <a class="nav-pill" href="catalogo.html" target="_blank" rel="noopener">Catálogo</a>
+  </nav>
+  <div class="who" id="who">Cargando sesión…</div>
+</header>
+
+<main>
+  <h1>Publicado en Mercado Libre</h1>
+  <p class="sub">Como Mercado Libre no permite conectar tu cuenta por API, este control se lleva importando la "Ficha técnica" que tú mismo descargas desde tu panel de vendedor (Publicaciones → Fichas técnicas, o Publicar → Masivamente). Cada vez que la subas aquí, el sistema vincula tus publicaciones activas con tu catálogo interno — así sabes qué tienes publicado, con qué precio y stock, sin tener que revisarlo publicación por publicación en Mercado Libre.</p>
+
+  <div class="panel">
+    <h2>1. Importar tu ficha técnica de Mercado Libre</h2>
+    <label for="input-ficha-ml" class="subir-archivo">📄 Elegir archivo .xlsx</label>
+    <input type="file" id="input-ficha-ml" accept=".xlsx,.xls" style="display:none;" onchange="procesarFichaML(this.files[0])">
+    <div class="hint">Descárgala desde tu cuenta de Mercado Libre: Publicaciones → Fichas técnicas (o Publicar → Masivamente → Editar). El archivo trae una hoja por categoría; se leen todas automáticamente.</div>
+    <div class="hint" id="msg-import" style="color:var(--muted);"></div>
+    <div class="resumen-import" id="resumen-import" style="display:none;">
+      <div class="resumen-item"><b id="res-total">0</b>publicaciones leídas</div>
+      <div class="resumen-item"><b id="res-vinculadas">0</b>ya vinculadas</div>
+      <div class="resumen-item"><b id="res-pendientes">0</b>por revisar</div>
+    </div>
+  </div>
+
+  <div class="panel" id="panel-revisar" style="display:none;">
+    <h2>2. Revisar y vincular con tu catálogo</h2>
+    <div class="hint" style="margin-top:0;">Para cada publicación te sugiero el producto que más se le parece por nombre — revísalo, corrígelo si hace falta buscando otro, y confirma. Si una publicación no corresponde a ningún producto tuyo (por ejemplo, ya no la vendes), márcala como "No es mío" para que no vuelva a aparecer.</div>
+    <div id="lista-revisar" style="margin-top:10px;"></div>
+  </div>
+
+  <div class="panel">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; flex-wrap:wrap; gap:10px;">
+      <h2 style="margin:0;">Publicaciones vinculadas (<span id="conteo-publicados">0</span>)</h2>
+    </div>
+    <div style="overflow-x:auto;">
+    <table class="tabla-publicados">
+      <thead>
+        <tr>
+          <th>Producto</th>
+          <th>SKU</th>
+          <th>Publicación ML</th>
+          <th style="text-align:right;">Precio $</th>
+          <th style="text-align:right;">Stock</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="tbody-publicados"></tbody>
+    </table>
+    </div>
+    <div class="empty" id="empty-publicados">Todavía no tienes publicaciones vinculadas — importa tu ficha técnica arriba.</div>
+  </div>
+</main>
+
+<div class="btns-scroll">
+  <button class="btn-scroll" id="btn-ir-inicio" title="Ir al inicio de la página" aria-label="Ir al inicio">↑</button>
+  <button class="btn-scroll" id="btn-ir-fin" title="Ir al final de la página" aria-label="Ir al final">↓</button>
+</div>
+<script>
+(function() {
+  var btnInicio = document.getElementById('btn-ir-inicio');
+  var btnFin = document.getElementById('btn-ir-fin');
+  function actualizar() {
+    var y = window.scrollY;
+    var alturaScrolleable = document.documentElement.scrollHeight - window.innerHeight;
+    btnInicio.classList.toggle('visible', y > 320);
+    btnFin.classList.toggle('visible', alturaScrolleable > 320 && y < alturaScrolleable - 320);
+  }
+  btnInicio.addEventListener('click', function() { window.scrollTo({ top: 0, behavior: 'smooth' }); });
+  btnFin.addEventListener('click', function() { window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' }); });
+  window.addEventListener('scroll', actualizar, { passive: true });
+  window.addEventListener('resize', actualizar);
+  actualizar();
+})();
+</script>
+
+<script type="module">
+  import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+  const SUPABASE_URL = 'https://tkhzuopapvclmcgxyood.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_KQB6B6uLIPr-xKdNDc8iEw_7tcWM5gS';
+  const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  const CLAVE_OMITIDOS = 'ml-fichas-omitidas'; // ids de publicaciones ML marcadas "no es mío", para no repreguntar
+
+  let productosCache = []; // [{id, nombre, sku}] — catálogo completo, para sugerir/buscar coincidencias
+  let filasRevisar = [];   // filas de la última ficha técnica importada que todavía no están vinculadas
+  let idsYaVinculados = new Set(); // mercadolibre_item_id ya presentes en publicaciones (estado = publicado)
+
+  (async function init() {
+    const { data: { session } } = await supabase.auth.getSession();
+    const who = document.getElementById('who');
+    if (!session) { who.textContent = 'No hay sesión — inicia sesión en login.html'; who.style.color = '#C1553B'; return; }
+    who.textContent = session.user.email;
+
+    await cargarProductosCache();
+    await cargarPublicados();
+  })();
+
+  async function cargarProductosCache() {
+    const TAMANO_BLOQUE = 1000;
+    let desde = 0;
+    productosCache = [];
+    while (true) {
+      const { data, error } = await supabase
+        .from('productos')
+        .select('id, nombre, sku')
+        .order('nombre')
+        .range(desde, desde + TAMANO_BLOQUE - 1);
+      if (error || !data || data.length === 0) break;
+      productosCache = productosCache.concat(data);
+      if (data.length < TAMANO_BLOQUE) break;
+      desde += TAMANO_BLOQUE;
+    }
+  }
+
+  function escapeHtml(str) {
+    return String(str ?? '').replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  }
+
+  function normalizarTexto(s) {
+    return (s || '').toString().toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-z0-9 ]/g, ' ')
+      .replace(/\s+/g, ' ').trim();
+  }
+
+  function tokenizar(s) {
+    return new Set(normalizarTexto(s).split(' ').filter(Boolean));
+  }
+
+  // Sugiere el producto del catálogo que más se parece al título de la publicación de ML,
+  // por superposición de palabras (Jaccard). No es perfecto (dos productos muy parecidos pueden
+  // confundirse, ej. "6ta gen" vs "8va gen"), así que SIEMPRE se muestra como sugerencia editable,
+  // nunca se vincula solo — el usuario confirma o corrige cada una a mano.
+  function sugerirProducto(tituloML) {
+    const tML = tokenizar(tituloML);
+    if (tML.size === 0) return null;
+    let mejor = null, mejorScore = 0;
+    for (const p of productosCache) {
+      const tP = tokenizar(p.nombre);
+      if (tP.size === 0) continue;
+      let inter = 0;
+      for (const tok of tML) if (tP.has(tok)) inter++;
+      const union = tML.size + tP.size - inter;
+      const score = union ? inter / union : 0;
+      if (score > mejorScore) { mejorScore = score; mejor = p; }
+    }
+    return mejor ? { producto: mejor, score: mejorScore } : null;
+  }
+
+  function cargarOmitidos() {
+    try { return new Set(JSON.parse(localStorage.getItem(CLAVE_OMITIDOS) || '[]')); }
+    catch (e) { return new Set(); }
+  }
+  function guardarOmitido(mlId) {
+    const set = cargarOmitidos();
+    set.add(mlId);
+    localStorage.setItem(CLAVE_OMITIDOS, JSON.stringify(Array.from(set)));
+  }
+
+  // --- Leer el archivo .xlsx de "Fichas técnicas" de Mercado Libre ---
+  // Estructura fija de cada hoja de categoría: fila 1 = códigos de campo (FAMILY_ID, ID, SKU,
+  // TITLE, BRAND, MODEL, DOMAIN_ID...), filas 2-4 = tipo/encabezado en español/ayuda,
+  // fila 5 en adelante = datos reales. Las columnas varían de orden y cantidad según la
+  // categoría (cada una trae su propia ficha técnica), así que se ubican por nombre de código
+  // en la fila 1 en vez de por posición fija.
+  function extraerFilasML(workbook) {
+    const HOJAS_IGNORAR = new Set(['Ayuda', 'hidden']);
+    const filas = [];
+    workbook.SheetNames.forEach(nombreHoja => {
+      if (HOJAS_IGNORAR.has(nombreHoja)) return;
+      const ws = workbook.Sheets[nombreHoja];
+      const matriz = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true });
+      if (!matriz || matriz.length < 5) return;
+      const codigos = matriz[0] || [];
+      const idx = {};
+      codigos.forEach((c, i) => { if (c) idx[String(c).trim()] = i; });
+      if (idx.ID === undefined) return;
+
+      for (let r = 4; r < matriz.length; r++) {
+        const fila = matriz[r] || [];
+        const id = fila[idx.ID];
+        if (!id) continue;
+        filas.push({
+          categoria: nombreHoja,
+          id: String(id).trim(),
+          sku: idx.SKU !== undefined ? String(fila[idx.SKU] || '').trim() : '',
+          titulo: idx.TITLE !== undefined ? String(fila[idx.TITLE] || '').trim() : '',
+          marca: idx.BRAND !== undefined ? String(fila[idx.BRAND] || '').trim() : '',
+          modelo: idx.MODEL !== undefined ? String(fila[idx.MODEL] || '').trim() : ''
+        });
+      }
+    });
+    return filas;
+  }
+
+  function construirLinkML(id) {
+    // MLV850251004 -> MLV-850251004 -> link directo del artículo (redirige a la publicación real)
+    const m = String(id).match(/^([A-Z]{3})-?(\d+)$/i);
+    if (!m) return null;
+    return `https://articulo.mercadolibre.com.ve/${m[1].toUpperCase()}-${m[2]}`;
+  }
+
+  window.procesarFichaML = async function(file) {
+    const msg = document.getElementById('msg-import');
+    if (!file) return;
+    msg.style.color = 'var(--muted)';
+    msg.textContent = 'Leyendo el archivo...';
+
+    let workbook;
+    try {
+      const buffer = await file.arrayBuffer();
+      workbook = XLSX.read(buffer, { type: 'array' });
+    } catch (e) {
+      msg.style.color = 'var(--rust)';
+      msg.textContent = 'No se pudo leer el archivo — asegúrate de que sea el .xlsx que descargaste de Mercado Libre sin modificar.';
+      return;
+    }
+
+    const filas = extraerFilasML(workbook);
+    if (filas.length === 0) {
+      msg.style.color = 'var(--rust)';
+      msg.textContent = 'No se encontraron publicaciones en el archivo. Verifica que sea la ficha técnica exportada de Mercado Libre.';
+      return;
+    }
+
+    // Refrescar qué está vinculado ANTES de decidir qué mostrar a revisar
+    await cargarPublicados();
+    const omitidos = cargarOmitidos();
+
+    const vistos = new Set();
+    const pendientes = [];
+    let vinculadasEnArchivo = 0;
+    filas.forEach(f => {
+      if (vistos.has(f.id)) return;
+      vistos.add(f.id);
+      if (idsYaVinculados.has(f.id)) { vinculadasEnArchivo++; return; }
+      if (omitidos.has(f.id)) return;
+      pendientes.push(f);
+    });
+
+    document.getElementById('resumen-import').style.display = 'flex';
+    document.getElementById('res-total').textContent = vistos.size;
+    document.getElementById('res-vinculadas').textContent = vinculadasEnArchivo;
+    document.getElementById('res-pendientes').textContent = pendientes.length;
+
+    msg.style.color = 'var(--teal)';
+    msg.textContent = `Listo — se leyeron ${vistos.size} publicación(es).`;
+
+    filasRevisar = pendientes;
+    renderizarRevision();
+  };
+
+  function renderizarRevision() {
+    const panel = document.getElementById('panel-revisar');
+    const cont = document.getElementById('lista-revisar');
+    if (filasRevisar.length === 0) {
+      panel.style.display = 'none';
+      cont.innerHTML = '';
+      return;
+    }
+    panel.style.display = 'block';
+    cont.innerHTML = filasRevisar.map((f, i) => {
+      const sugerencia = sugerirProducto(f.titulo);
+      const valorInicial = sugerencia ? sugerencia.producto.nombre : '';
+      const idInicial = sugerencia ? sugerencia.producto.id : '';
+      return `
+        <div class="fila-revisar" data-idx="${i}">
+          <div class="rv-info">
+            <div class="rv-titulo">${escapeHtml(f.titulo || '(sin título)')}</div>
+            <div class="rv-meta">${escapeHtml(f.marca)} ${escapeHtml(f.modelo)}${f.marca || f.modelo ? ' · ' : ''}${escapeHtml(f.id)} · ${escapeHtml(f.categoria)}${f.sku ? ' · SKU ML: ' + escapeHtml(f.sku) : ''}</div>
+          </div>
+          <div class="rv-match">
+            <input type="text" class="rv-buscar" data-idx="${i}" placeholder="Buscar tu producto..."
+              value="${escapeHtml(valorInicial)}" oninput="buscarEnRevision(${i}, this.value)" autocomplete="off">
+            <input type="hidden" class="rv-producto-id" data-idx="${i}" value="${escapeHtml(idInicial)}">
+            <div class="rv-sugerencias" id="rv-sug-${i}"></div>
+            ${sugerencia ? `<div class="tag-sugerido">Sugerido por similitud de nombre — revísalo antes de confirmar</div>` : ''}
+            <div class="rv-msg" id="rv-msg-${i}"></div>
+          </div>
+          <div class="rv-acciones">
+            <button class="primary" onclick="vincularRevision(${i})">Vincular</button>
+            <button class="secondary" onclick="omitirRevision(${i})">No es mío</button>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  window.buscarEnRevision = function(idx, texto) {
+    const cont = document.getElementById(`rv-sug-${idx}`);
+    const norm = normalizarTexto(texto);
+    if (norm.length < 2) { cont.classList.remove('visible'); cont.innerHTML = ''; return; }
+    const resultados = productosCache
+      .filter(p => normalizarTexto(p.nombre).includes(norm) || (p.sku && normalizarTexto(p.sku).includes(norm)))
+      .slice(0, 8);
+    if (resultados.length === 0) { cont.classList.remove('visible'); cont.innerHTML = '<div class="rv-sug-item">Sin coincidencias</div>'; cont.classList.add('visible'); return; }
+    cont.innerHTML = resultados.map(p => `
+      <div class="rv-sug-item" onclick="elegirSugerencia(${idx}, '${p.id}', ${JSON.stringify(p.nombre)})">
+        ${escapeHtml(p.nombre)}${p.sku ? ` <span class="sku">(${escapeHtml(p.sku)})</span>` : ''}
+      </div>`).join('');
+    cont.classList.add('visible');
+  };
+
+  window.elegirSugerencia = function(idx, productoId, nombre) {
+    document.querySelector(`.rv-buscar[data-idx="${idx}"]`).value = nombre;
+    document.querySelector(`.rv-producto-id[data-idx="${idx}"]`).value = productoId;
+    const cont = document.getElementById(`rv-sug-${idx}`);
+    cont.classList.remove('visible');
+    cont.innerHTML = '';
+  };
+
+  window.vincularRevision = async function(idx) {
+    const f = filasRevisar[idx];
+    const productoId = document.querySelector(`.rv-producto-id[data-idx="${idx}"]`).value;
+    const msg = document.getElementById(`rv-msg-${idx}`);
+    if (!f || !productoId) {
+      msg.style.color = 'var(--rust)';
+      msg.textContent = 'Busca y elige el producto correcto antes de vincular.';
+      return;
+    }
+    msg.style.color = 'var(--muted)';
+    msg.textContent = 'Vinculando...';
+
+    const link = construirLinkML(f.id);
+    const { data: pubExistente } = await supabase
+      .from('publicaciones').select('id').eq('producto_id', productoId).maybeSingle();
+
+    let error;
+    if (pubExistente) {
+      ({ error } = await supabase.from('publicaciones')
+        .update({ mercadolibre_item_id: f.id, mercadolibre_link: link, estado: 'publicado' })
+        .eq('id', pubExistente.id));
+    } else {
+      ({ error } = await supabase.from('publicaciones')
+        .insert({ producto_id: productoId, mercadolibre_item_id: f.id, mercadolibre_link: link, estado: 'publicado' }));
+    }
+
+    if (error) {
+      msg.style.color = 'var(--rust)';
+      msg.textContent = 'Error al vincular: ' + error.message;
+      return;
+    }
+
+    filasRevisar.splice(idx, 1);
+    renderizarRevision();
+    await cargarPublicados();
+  };
+
+  window.omitirRevision = function(idx) {
+    const f = filasRevisar[idx];
+    if (!f) return;
+    guardarOmitido(f.id);
+    filasRevisar.splice(idx, 1);
+    renderizarRevision();
+  };
+
+  async function cargarPublicados() {
+    const { data, error } = await supabase
+      .from('publicaciones')
+      .select('id, producto_id, mercadolibre_item_id, mercadolibre_link, precio_efectivo_usd, stock, productos(nombre, sku)')
+      .eq('estado', 'publicado')
+      .order('updated_at', { ascending: false });
+
+    idsYaVinculados = new Set((data || []).map(p => p.mercadolibre_item_id).filter(Boolean));
+
+    const tbody = document.getElementById('tbody-publicados');
+    const vacio = document.getElementById('empty-publicados');
+    document.getElementById('conteo-publicados').textContent = (data || []).length;
+
+    if (error || !data || data.length === 0) {
+      tbody.innerHTML = '';
+      vacio.style.display = 'block';
+      return;
+    }
+    vacio.style.display = 'none';
+    tbody.innerHTML = data.map(p => `
+      <tr>
+        <td>${escapeHtml(p.productos?.nombre || '(producto eliminado)')}</td>
+        <td style="font-family:'IBM Plex Mono',monospace; font-size:12px;">${escapeHtml(p.productos?.sku || '—')}</td>
+        <td>${p.mercadolibre_link ? `<a href="${escapeHtml(p.mercadolibre_link)}" target="_blank" rel="noopener">${escapeHtml(p.mercadolibre_item_id)} ↗</a>` : escapeHtml(p.mercadolibre_item_id || '—')}</td>
+        <td style="text-align:right;">${p.precio_efectivo_usd != null ? '$' + Number(p.precio_efectivo_usd).toFixed(2) : '—'}</td>
+        <td style="text-align:right;">${p.stock ?? '—'}</td>
+        <td><button class="btn-quitar" onclick="quitarPublicado('${p.id}')">Quitar</button></td>
+      </tr>`).join('');
+  }
+
+  window.quitarPublicado = async function(publicacionId) {
+    if (!confirm('¿Quitar esta publicación del control? No borra el producto, solo deja de marcarlo como publicado en Mercado Libre.')) return;
+    const { error } = await supabase.from('publicaciones')
+      .update({ estado: 'borrador', mercadolibre_item_id: null, mercadolibre_link: null })
+      .eq('id', publicacionId);
+    if (error) { alert('Error al quitar: ' + error.message); return; }
+    await cargarPublicados();
+  };
+
+  // Cerrar sugerencias al hacer clic afuera
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.rv-match')) {
+      document.querySelectorAll('.rv-sugerencias.visible').forEach(el => { el.classList.remove('visible'); el.innerHTML = ''; });
+    }
+  });
+</script>
+</body>
+</html>
