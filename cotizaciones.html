@@ -99,6 +99,20 @@
   details.datos-empresa { margin-bottom: 24px; }
   details.datos-empresa summary { cursor: pointer; font-size: 12.5px; color: var(--muted); padding: 6px 0; }
   details.datos-empresa summary:hover { color: var(--paper); }
+
+  .filtro-row { display: flex; gap: 10px; margin-top: 10px; flex-wrap: wrap; }
+  .filtro-row select { max-width: 220px; }
+  td.num.bs, th.num.bs { color: var(--teal); }
+  .badge-aviso {
+    display: inline-block; font-size: 10.5px; padding: 2px 8px; margin-top: 4px; margin-right: 4px;
+    border: 1px solid var(--rust); color: var(--rust);
+  }
+  .desglose-panel {
+    background: var(--ink); border: 1px solid var(--line); padding: 10px 12px; margin: 4px 0;
+    font-size: 12px; color: var(--muted); font-family: 'IBM Plex Mono', monospace; white-space: pre-wrap;
+  }
+  .banner-retomar { background: rgba(201,162,39,0.12); border: 1px solid var(--gold); padding: 12px 16px; margin-bottom: 24px; font-size: 13px; }
+  #indicador-tasas { margin: -14px 0 26px 0; }
 </style>
 </head>
 <body>
@@ -112,6 +126,9 @@
 <main>
   <h1>Cotizaciones</h1>
   <p class="sub">Arma una cotización con precios propios — independiente de las comisiones de Mercado Libre — y compártela en PDF por correo o WhatsApp.</p>
+  <div class="hint" id="indicador-tasas">Cargando tasas del día…</div>
+
+  <div class="banner-retomar" id="banner-retomar" style="display:none;"></div>
 
   <details class="datos-empresa">
     <summary>Datos de tu empresa para el PDF (dirección, teléfono, RIF) — se guardan en este navegador</summary>
@@ -172,7 +189,11 @@
 
   <div class="panel">
     <h2>2. Agrega productos del catálogo</h2>
-    <input type="text" id="buscador-productos" placeholder="Busca por nombre, código, categoría o marca..." oninput="filtrarListaProductos()">
+    <input type="text" id="buscador-productos" placeholder="Busca por nombre, modelo, descripción o SKU..." oninput="filtrarListaProductos()">
+    <div class="filtro-row">
+      <select id="filtro-proveedor" onchange="filtrarListaProductos()"><option value="">Todos los proveedores</option></select>
+      <select id="filtro-categoria" onchange="filtrarListaProductos()"><option value="">Todas las categorías</option></select>
+    </div>
     <div id="lista-productos-buscador" style="max-height: 240px; overflow-y: auto; border: 1px solid var(--line); margin-top: 12px;"></div>
     <div class="hint" id="contador-lista-productos"></div>
 
@@ -184,11 +205,16 @@
           <input type="number" id="pe-cantidad" value="1" min="1">
         </div>
         <div>
-          <label for="pe-precio">Precio unitario (sin comisión ML)</label>
-          <input type="number" step="0.01" id="pe-precio">
+          <label for="pe-precio">Precio unitario en $ (sin comisión ML)</label>
+          <input type="number" step="0.01" id="pe-precio" oninput="actualizarPrevioBs()">
+        </div>
+        <div>
+          <label>Equivalente en Bs (tasa BCV de hoy)</label>
+          <input type="text" id="pe-precio-bs" readonly style="background:var(--surface); color:var(--teal);">
         </div>
       </div>
-      <div class="hint" id="pe-costo-ref" style="margin-top:0;"></div>
+      <div class="hint" id="pe-costo-ref" style="margin-top:8px;"></div>
+      <div class="hint" id="pe-aviso" style="margin-top:0; color:var(--rust);"></div>
       <button class="primary" onclick="agregarItemDesdeProducto()">Agregar a la cotización</button>
     </div>
   </div>
@@ -218,11 +244,13 @@
     <table id="tabla-items">
       <thead>
         <tr>
-          <th style="min-width:240px;">Descripción</th>
-          <th class="num" style="width:90px;">Cant.</th>
-          <th class="num" style="width:120px;">Precio unit.</th>
-          <th class="num" style="width:120px;">Subtotal</th>
-          <th></th>
+          <th style="min-width:200px;">Descripción</th>
+          <th class="num" style="width:70px;">Cant.</th>
+          <th class="num" style="width:110px;">Precio $ unit.</th>
+          <th class="num bs" style="width:130px;">Precio Bs unit.</th>
+          <th class="num" style="width:100px;">Subtotal $</th>
+          <th class="num bs" style="width:120px;">Subtotal Bs</th>
+          <th style="width:140px;"></th>
         </tr>
       </thead>
       <tbody id="tbody-items"></tbody>
@@ -233,7 +261,9 @@
     <div class="totales-box">
       <table>
         <tr><td>Subtotal</td><td class="num" id="txt-subtotal">$0.00</td></tr>
+        <tr><td>Subtotal (Bs)</td><td class="num bs" id="txt-subtotal-bs">Bs 0,00</td></tr>
         <tr class="total"><td>Total</td><td class="num" id="txt-total">$0.00</td></tr>
+        <tr><td>Total (Bs)</td><td class="num bs" id="txt-total-bs">Bs 0,00</td></tr>
       </table>
     </div>
   </div>
@@ -258,7 +288,7 @@
     <div class="msg" id="msg-cotizacion"></div>
 
     <div id="acciones-post-guardado" style="display:none; margin-top:16px; padding-top:16px; border-top:1px solid var(--line);">
-      <div class="hint" style="margin-top:0;">Cotización guardada — ahora puedes descargarla o compartirla. Como este sistema no envía correos ni mensajes automáticamente, el PDF se descarga primero y luego se abre WhatsApp o tu correo con el mensaje listo para que adjuntes ese archivo.</div>
+      <div class="hint" style="margin-top:0;">Cotización guardada — ahora puedes descargarla o compartirla. Esta es una aplicación sin servidor de correo propio, así que no es técnicamente posible adjuntar el PDF de forma 100% automática dentro de WhatsApp o el correo: al hacer clic el PDF se descarga y a la vez se abre WhatsApp o tu correo con el mensaje ya escrito — solo falta que selecciones el archivo recién descargado y lo adjuntes antes de enviar.</div>
       <button class="secondary" style="margin-left:0;" onclick="descargarPDF()">Descargar PDF</button>
       <button class="secondary" onclick="enviarPorWhatsApp()">Enviar por WhatsApp</button>
       <button class="secondary" onclick="enviarPorCorreo()">Enviar por correo</button>
@@ -271,7 +301,7 @@
     <table id="tabla-historial">
       <thead>
         <tr>
-          <th>N°</th><th>Cliente</th><th>Fecha</th><th class="num">Total</th><th>Estado</th><th></th>
+          <th>N°</th><th>Cliente</th><th>Fecha</th><th class="num">Total $</th><th class="num bs">Total Bs</th><th>Estado</th><th></th>
         </tr>
       </thead>
       <tbody></tbody>
@@ -292,9 +322,13 @@
   let clienteElegidoId = null;
   let productosCache = {};
   let productoElegidoId = null;
-  let itemsCotizacion = []; // { producto_id, descripcion, cantidad, precioUnitario }
+  let proveedoresCache = [];
+  let itemsCotizacion = []; // { producto_id, descripcion, cantidad, precioUnitario, precioUnitarioBs, costoOriginal, avisos }
   let cotizacionGuardada = null; // { id, numero, cliente_nombre, cliente_telefono, cliente_email, ...totales }
+  let cotizacionEnEdicionId = null; // id de la cotización que se está retomando/actualizando (null = cotización nueva)
   let logoBase64Cache = null;
+  let tasaBCV = null;
+  let tasaBinance = null;
 
   function escapeHtml(str) {
     const d = document.createElement('div');
@@ -311,6 +345,45 @@
     const who = document.getElementById('who');
     if (!session) { who.textContent = 'No hay sesión — inicia sesión en login.html'; who.style.color = '#C1553B'; }
     else who.textContent = session.user.email;
+  }
+
+  // ---------- Tasas de cambio del día ----------
+  async function cargarTasas() {
+    const { data } = await supabase.from('tasas_cambio').select('*').order('fecha', { ascending: false }).limit(1).single();
+    const indicador = document.getElementById('indicador-tasas');
+    if (data) {
+      tasaBCV = parseFloat(data.tasa_bcv);
+      tasaBinance = parseFloat(data.tasa_binance);
+      indicador.textContent = `Tasas del día (${data.fecha}) — BCV: Bs ${tasaBCV.toFixed(2)} · Binance: Bs ${tasaBinance.toFixed(2)} por USD.`;
+    } else {
+      indicador.textContent = 'No hay tasas de cambio cargadas todavía — los precios en Bs no se pueden calcular hasta que registres una tasa en el dashboard.';
+      indicador.style.color = 'var(--rust)';
+    }
+  }
+
+  // Replica el cálculo de precios de dashboard.html (costo + margen deseado, con la
+  // brecha cambiaria Binance→BCV) pero SIEMPRE con comisión de Mercado Libre = 0%,
+  // sin importar la comisión guardada para ese producto en publicaciones.
+  function calcularPrecioSinComision(costoUsd, margenUsd) {
+    if (!tasaBCV || !tasaBinance) return null;
+    const costo = parseFloat(costoUsd) || 0;
+    const margen = parseFloat(margenUsd) || 0;
+    const precioEfectivo = costo + margen; // sin comisión, "neta" y "fijo" dan el mismo resultado
+    const factorBrecha = tasaBinance / tasaBCV;
+    return {
+      costo, margenUsd: margen, precioEfectivo, factorBrecha,
+      precioUsd: precioEfectivo * factorBrecha, // lo que se le cobra al cliente en $ (ref. BCV)
+      precioBs: precioEfectivo * tasaBinance      // lo mismo, en bolívares
+    };
+  }
+
+  // Reconstruye costo/margen implícitos a partir de un precio en $ ya definido (por si el
+  // usuario editó el precio a mano) — se usa para mostrar el desglose interno.
+  function desgloseDesdePrecioUsd(precioUsd, costoUsd) {
+    if (!tasaBCV || !tasaBinance || costoUsd == null) return null;
+    const factorBrecha = tasaBinance / tasaBCV;
+    const precioEfectivo = precioUsd / factorBrecha;
+    return { costo: costoUsd, margenUsd: precioEfectivo - costoUsd, precioEfectivo, factorBrecha };
   }
 
   // ---------- Datos de la empresa para el PDF (guardados en este navegador) ----------
@@ -420,7 +493,7 @@
     while (true) {
       const { data, error } = await supabase
         .from('productos')
-        .select('id, nombre, sku, categoria, especificaciones, costo_usd')
+        .select('id, nombre, sku, categoria, especificaciones, costo_usd, activo, proveedor_id, proveedores(nombre), publicaciones(ganancia_real_usd, modo_ganancia, stock, estado)')
         .order('nombre')
         .range(desde, desde + TAMANO_BLOQUE - 1);
       if (error || !data || data.length === 0) break;
@@ -429,26 +502,56 @@
       desde += TAMANO_BLOQUE;
     }
     productosCache = {};
-    todos.forEach(p => { productosCache[p.id] = p; });
+    todos.forEach(p => {
+      p.pub = Array.isArray(p.publicaciones) ? p.publicaciones[0] : p.publicaciones;
+      p.proveedorNombre = p.proveedores?.nombre || '';
+      productosCache[p.id] = p;
+    });
+    poblarFiltroCategoria();
+  }
+
+  async function cargarProveedores() {
+    const { data } = await supabase.from('proveedores').select('id, nombre').order('nombre');
+    proveedoresCache = data || [];
+    const sel = document.getElementById('filtro-proveedor');
+    sel.innerHTML = '<option value="">Todos los proveedores</option>' +
+      proveedoresCache.map(pv => `<option value="${pv.id}">${escapeHtml(pv.nombre)}</option>`).join('');
+  }
+
+  function poblarFiltroCategoria() {
+    const categorias = [...new Set(Object.values(productosCache).map(p => p.categoria).filter(Boolean))].sort();
+    const sel = document.getElementById('filtro-categoria');
+    const valorActual = sel.value;
+    sel.innerHTML = '<option value="">Todas las categorías</option>' +
+      categorias.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+    sel.value = valorActual;
   }
 
   window.filtrarListaProductos = function() {
     const qCompleto = normalizarTexto(document.getElementById('buscador-productos').value);
+    const provFiltro = document.getElementById('filtro-proveedor').value;
+    const catFiltro = document.getElementById('filtro-categoria').value;
     const cont = document.getElementById('lista-productos-buscador');
     const contador = document.getElementById('contador-lista-productos');
-    if (!qCompleto) { cont.innerHTML = ''; contador.textContent = ''; return; }
+
+    if (!qCompleto && !provFiltro && !catFiltro) { cont.innerHTML = ''; contador.textContent = ''; return; }
 
     const palabras = qCompleto.split(/\s+/).filter(p => p.length >= 2);
     const filtrados = Object.values(productosCache).filter(p => {
-      const marca = p.especificaciones?.marca || '';
-      const haystack = normalizarTexto([p.nombre, p.sku, p.categoria, marca].filter(Boolean).join(' '));
-      return palabras.every(palabra => haystack.includes(palabra));
+      if (provFiltro && p.proveedor_id !== provFiltro) return false;
+      if (catFiltro && p.categoria !== catFiltro) return false;
+      if (palabras.length) {
+        const marca = p.especificaciones?.marca || '';
+        const haystack = normalizarTexto([p.nombre, p.sku, p.categoria, marca, p.proveedorNombre].filter(Boolean).join(' '));
+        if (!palabras.every(palabra => haystack.includes(palabra))) return false;
+      }
+      return true;
     }).slice(0, 60);
 
     contador.textContent = `${filtrados.length} producto(s)${filtrados.length === 60 ? ' (afina la búsqueda para ver más)' : ''}`;
     cont.innerHTML = '';
     if (filtrados.length === 0) {
-      cont.innerHTML = '<div class="empty">Ningún producto coincide con la búsqueda.</div>';
+      cont.innerHTML = '<div class="empty">Ningún producto coincide con los filtros.</div>';
       return;
     }
     filtrados.forEach(p => {
@@ -458,6 +561,7 @@
         <span class="fp-nombre">${escapeHtml(p.nombre)}</span>
         <span class="fp-info">
           <span style="color:var(--muted)">${escapeHtml(p.categoria || '')}</span>
+          <span style="color:var(--muted)">${escapeHtml(p.proveedorNombre || '')}</span>
           <span style="color:var(--gold)">costo $${parseFloat(p.costo_usd || 0).toFixed(2)}</span>
         </span>
       `;
@@ -466,18 +570,39 @@
     });
   };
 
+  window.actualizarPrevioBs = function() {
+    const precio = parseFloat(document.getElementById('pe-precio').value) || 0;
+    const campoBs = document.getElementById('pe-precio-bs');
+    campoBs.value = tasaBCV ? 'Bs ' + (precio * tasaBCV).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'Sin tasa cargada';
+  };
+
   window.elegirProducto = function(id) {
     productoElegidoId = id;
     const p = productosCache[id];
     if (!p) return;
     filtrarListaProductos();
 
+    const costo = parseFloat(p.costo_usd || 0);
+    const margenGuardado = p.pub?.ganancia_real_usd;
+    const margenUsd = (margenGuardado != null && !isNaN(parseFloat(margenGuardado))) ? parseFloat(margenGuardado) : costo * 0.30;
+    const calc = calcularPrecioSinComision(costo, margenUsd);
+
     const panel = document.getElementById('producto-elegido-panel');
     panel.style.display = 'block';
-    document.getElementById('pe-nombre').textContent = p.nombre;
-    document.getElementById('pe-costo-ref').textContent = `Costo de referencia (proveedor): $${parseFloat(p.costo_usd || 0).toFixed(2)} — el precio unitario es el que le vas a cobrar al cliente, sin comisión de Mercado Libre.`;
+    document.getElementById('pe-nombre').textContent = p.nombre + (p.proveedorNombre ? ' — ' + p.proveedorNombre : '');
     document.getElementById('pe-cantidad').value = 1;
-    document.getElementById('pe-precio').value = parseFloat(p.costo_usd || 0).toFixed(2);
+    document.getElementById('pe-precio').value = calc ? calc.precioUsd.toFixed(2) : costo.toFixed(2);
+    actualizarPrevioBs();
+
+    document.getElementById('pe-costo-ref').textContent = calc
+      ? `Costo de referencia: $${costo.toFixed(2)} · Margen usado: $${margenUsd.toFixed(2)}${margenGuardado == null ? ' (30% por defecto — este producto no tiene margen configurado en el catálogo)' : ' (tomado del margen configurado en el catálogo)'} · Precio sugerido sin comisión de Mercado Libre — puedes editarlo.`
+      : `Costo de referencia: $${costo.toFixed(2)}. No hay tasas de cambio cargadas todavía, así que no se puede sugerir un precio en Bs.`;
+
+    const avisos = [];
+    if (p.activo === false) avisos.push('Este producto está marcado como inactivo en el catálogo.');
+    const stock = p.pub?.stock;
+    if (stock != null && stock <= 0) avisos.push('No hay existencia registrada para este producto.');
+    document.getElementById('pe-aviso').textContent = avisos.join('  ');
   };
 
   window.agregarItemDesdeProducto = function() {
@@ -489,7 +614,14 @@
       alert('Revisa la cantidad y el precio unitario.');
       return;
     }
-    itemsCotizacion.push({ producto_id: p.id, descripcion: p.nombre, cantidad, precioUnitario });
+    itemsCotizacion.push({
+      producto_id: p.id,
+      descripcion: p.nombre,
+      cantidad, precioUnitario,
+      precioUnitarioBs: tasaBCV ? precioUnitario * tasaBCV : 0,
+      costoOriginal: parseFloat(p.costo_usd || 0),
+      avisos: []
+    });
     renderizarTablaItems();
 
     productoElegidoId = null;
@@ -508,7 +640,11 @@
       alert('Revisa la cantidad y el precio unitario.');
       return;
     }
-    itemsCotizacion.push({ producto_id: null, descripcion, cantidad, precioUnitario });
+    itemsCotizacion.push({
+      producto_id: null, descripcion, cantidad, precioUnitario,
+      precioUnitarioBs: tasaBCV ? precioUnitario * tasaBCV : 0,
+      costoOriginal: null, avisos: []
+    });
     renderizarTablaItems();
 
     document.getElementById('libre-desc').value = '';
@@ -525,14 +661,25 @@
     const item = itemsCotizacion[idx];
     if (!item) return;
     if (campo === 'cantidad') item.cantidad = parseFloat(valor) || 0;
-    if (campo === 'precioUnitario') item.precioUnitario = parseFloat(valor) || 0;
+    if (campo === 'precioUnitario') {
+      item.precioUnitario = parseFloat(valor) || 0;
+      item.precioUnitarioBs = tasaBCV ? item.precioUnitario * tasaBCV : item.precioUnitarioBs;
+    }
     renderizarTablaItems(true);
   };
 
   function calcularTotales() {
     const subtotal = itemsCotizacion.reduce((acc, it) => acc + (it.cantidad * it.precioUnitario), 0);
-    return { subtotal, total: subtotal };
+    const subtotalBs = itemsCotizacion.reduce((acc, it) => acc + (it.cantidad * (it.precioUnitarioBs || 0)), 0);
+    return { subtotal, total: subtotal, subtotalBs, totalBs: subtotalBs };
   }
+
+  window.toggleDesglose = function(idx) {
+    const fila = document.getElementById('desglose-fila-' + idx);
+    if (fila) fila.style.display = fila.style.display === 'none' ? 'table-row' : 'none';
+  };
+
+  const fmtBs = (n) => 'Bs ' + (n || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   function renderizarTablaItems(conservarFoco) {
     const tbody = document.getElementById('tbody-items');
@@ -545,22 +692,57 @@
       empty.style.display = 'none';
       itemsCotizacion.forEach((it, idx) => {
         const subtotal = it.cantidad * it.precioUnitario;
+        const subtotalBs = it.cantidad * (it.precioUnitarioBs || 0);
+
+        let desgloseTexto = '';
+        if (it.producto_id && it.costoOriginal != null) {
+          const d = desgloseDesdePrecioUsd(it.precioUnitario, it.costoOriginal);
+          if (d) {
+            const margenPct = d.costo > 0 ? (d.margenUsd / d.costo * 100) : 0;
+            desgloseTexto =
+`Costo del proveedor: $${d.costo.toFixed(2)}
+Margen de ganancia: $${d.margenUsd.toFixed(2)}  (${margenPct.toFixed(1)}% sobre el costo)
+Precio "efectivo" (costo + margen), antes de la brecha cambiaria: $${d.precioEfectivo.toFixed(2)}
+Ajuste por brecha Binance→BCV (x${d.factorBrecha.toFixed(4)}): precio a cobrar $${it.precioUnitario.toFixed(2)} (${fmtBs(it.precioUnitarioBs)})
+Comisión de Mercado Libre: no se aplica en cotizaciones (0%).`;
+          }
+        }
+
+        const avisosHtml = (it.avisos && it.avisos.length)
+          ? it.avisos.map(a => `<div class="badge-aviso">${escapeHtml(a)}</div>`).join('')
+          : '';
+
         const tr = document.createElement('tr');
         tr.className = 'fila-item';
         tr.innerHTML = `
-          <td>${escapeHtml(it.descripcion)}${it.producto_id ? ' <span style="color:var(--muted); font-size:11px;">(catálogo)</span>' : ''}</td>
+          <td>${escapeHtml(it.descripcion)}${it.producto_id ? ' <span style="color:var(--muted); font-size:11px;">(catálogo)</span>' : ''}${avisosHtml}</td>
           <td class="num"><input type="number" value="${it.cantidad}" min="0" oninput="actualizarItem(${idx}, 'cantidad', this.value)"></td>
           <td class="num"><input type="number" step="0.01" value="${it.precioUnitario}" min="0" oninput="actualizarItem(${idx}, 'precioUnitario', this.value)"></td>
+          <td class="num bs">${fmtBs(it.precioUnitarioBs)}</td>
           <td class="num">$${subtotal.toFixed(2)}</td>
-          <td><button class="secondary" style="margin:0; padding:5px 10px; font-size:11px;" onclick="quitarItem(${idx})">Quitar</button></td>
+          <td class="num bs">${fmtBs(subtotalBs)}</td>
+          <td>
+            ${desgloseTexto ? `<button class="secondary" style="margin:0 6px 6px 0; padding:5px 10px; font-size:11px;" onclick="toggleDesglose(${idx})">Desglose</button>` : ''}
+            <button class="secondary" style="margin:0; padding:5px 10px; font-size:11px;" onclick="quitarItem(${idx})">Quitar</button>
+          </td>
         `;
         tbody.appendChild(tr);
+
+        if (desgloseTexto) {
+          const trDesglose = document.createElement('tr');
+          trDesglose.id = 'desglose-fila-' + idx;
+          trDesglose.style.display = 'none';
+          trDesglose.innerHTML = `<td colspan="7"><div class="desglose-panel">${escapeHtml(desgloseTexto)}</div></td>`;
+          tbody.appendChild(trDesglose);
+        }
       });
     }
 
-    const { subtotal, total } = calcularTotales();
+    const { subtotal, total, subtotalBs, totalBs } = calcularTotales();
     document.getElementById('txt-subtotal').textContent = '$' + subtotal.toFixed(2);
+    document.getElementById('txt-subtotal-bs').textContent = fmtBs(subtotalBs);
     document.getElementById('txt-total').textContent = '$' + total.toFixed(2);
+    document.getElementById('txt-total-bs').textContent = fmtBs(totalBs);
 
     // Si se edita un ítem después de guardar la cotización, hay que guardar de nuevo
     // para que el PDF y el historial reflejen el cambio.
@@ -583,7 +765,7 @@
     btn.textContent = 'Guardando...';
 
     const { data: { session } } = await supabase.auth.getSession();
-    const { subtotal, total } = calcularTotales();
+    const { subtotal, total, subtotalBs, totalBs } = calcularTotales();
 
     const cabecera = {
       cliente_id: clienteElegidoId || null,
@@ -596,10 +778,28 @@
       notas: document.getElementById('cot-notas').value.trim() || null,
       subtotal: subtotal.toFixed(2),
       total: total.toFixed(2),
-      creado_por: session?.user?.id
+      subtotal_bs: subtotalBs.toFixed(2),
+      total_bs: totalBs.toFixed(2),
+      tasa_bcv_usada: tasaBCV || null,
+      tasa_binance_usada: tasaBinance || null
     };
 
-    const { data: cotizacion, error: errCab } = await supabase.from('cotizaciones').insert(cabecera).select().single();
+    let cotizacion, errCab;
+    if (cotizacionEnEdicionId) {
+      ({ data: cotizacion, error: errCab } = await supabase
+        .from('cotizaciones')
+        .update({ ...cabecera, updated_at: new Date().toISOString() })
+        .eq('id', cotizacionEnEdicionId)
+        .select()
+        .single());
+    } else {
+      ({ data: cotizacion, error: errCab } = await supabase
+        .from('cotizaciones')
+        .insert({ ...cabecera, creado_por: session?.user?.id })
+        .select()
+        .single());
+    }
+
     if (errCab) {
       btn.disabled = false;
       btn.textContent = 'Guardar cotización';
@@ -608,13 +808,22 @@
       return;
     }
 
+    // Si estamos actualizando, se reemplazan los ítems previos por los actuales
+    // (más simple y confiable que intentar hacer un upsert fila por fila).
+    if (cotizacionEnEdicionId) {
+      await supabase.from('cotizacion_items').delete().eq('cotizacion_id', cotizacion.id);
+    }
+
     const filasItems = itemsCotizacion.map((it, idx) => ({
       cotizacion_id: cotizacion.id,
       producto_id: it.producto_id,
       descripcion: it.descripcion,
       cantidad: it.cantidad,
       precio_unitario: it.precioUnitario.toFixed(2),
+      precio_unitario_bs: (it.precioUnitarioBs || 0).toFixed(2),
       subtotal: (it.cantidad * it.precioUnitario).toFixed(2),
+      subtotal_bs: (it.cantidad * (it.precioUnitarioBs || 0)).toFixed(2),
+      costo_original_usd: it.costoOriginal != null ? it.costoOriginal : null,
       orden: idx
     }));
     const { error: errItems } = await supabase.from('cotizacion_items').insert(filasItems);
@@ -624,12 +833,17 @@
 
     if (errItems) {
       msg.className = 'msg err';
-      msg.textContent = 'La cotización se creó pero hubo un error guardando los ítems: ' + errItems.message;
+      msg.textContent = 'La cotización se guardó pero hubo un error guardando los ítems: ' + errItems.message;
       return;
     }
 
     msg.className = 'msg ok';
-    msg.textContent = `Cotización N° ${cotizacion.numero} guardada.`;
+    msg.textContent = cotizacionEnEdicionId
+      ? `Cotización N° ${cotizacion.numero} actualizada con las tasas de hoy.`
+      : `Cotización N° ${cotizacion.numero} guardada.`;
+
+    cotizacionEnEdicionId = null;
+    document.getElementById('banner-retomar').style.display = 'none';
 
     cotizacionGuardada = { ...cabecera, id: cotizacion.id, numero: cotizacion.numero, fecha: cotizacion.fecha, items: itemsCotizacion.map(it => ({ ...it })) };
     document.getElementById('acciones-post-guardado').style.display = 'block';
@@ -642,6 +856,8 @@
     productoElegidoId = null;
     itemsCotizacion = [];
     cotizacionGuardada = null;
+    cotizacionEnEdicionId = null;
+    document.getElementById('banner-retomar').style.display = 'none';
     document.getElementById('cliente-elegido-panel').style.display = 'none';
     document.getElementById('buscador-clientes').value = '';
     document.getElementById('cot-cliente-nombre').value = '';
@@ -657,6 +873,85 @@
     document.getElementById('acciones-post-guardado').style.display = 'none';
     document.getElementById('msg-cotizacion').textContent = '';
     renderizarTablaItems();
+  };
+
+  function mostrarBannerRetomar(numero) {
+    const b = document.getElementById('banner-retomar');
+    b.style.display = 'block';
+    b.innerHTML = `Estás retomando la cotización N° ${String(numero).padStart(4, '0')}. Al guardar se actualizará esta misma cotización — no se creará una duplicada. ` +
+      `<button class="secondary" style="margin:0; padding:4px 10px; font-size:11px;" onclick="limpiarFormularioCotizacion()">Cancelar y empezar una nueva</button>`;
+  }
+
+  // ---------- Retomar cotización (cuando el cliente aprueba) ----------
+  window.retomarCotizacion = async function(id) {
+    const msg = document.getElementById('msg-cotizacion');
+    msg.className = 'msg';
+    msg.textContent = 'Cargando cotización y actualizando tasas de cambio y catálogo…';
+
+    await Promise.all([cargarTasas(), cargarProductos()]);
+
+    const [{ data: cot, error: errCot }, { data: itemsDb, error: errItems }] = await Promise.all([
+      supabase.from('cotizaciones').select('*').eq('id', id).single(),
+      supabase.from('cotizacion_items').select('*').eq('cotizacion_id', id).order('orden')
+    ]);
+
+    if (errCot || !cot) {
+      msg.className = 'msg err';
+      msg.textContent = 'No se pudo cargar la cotización: ' + (errCot?.message || 'no encontrada');
+      return;
+    }
+
+    limpiarFormularioCotizacion();
+    cotizacionEnEdicionId = cot.id;
+
+    clienteElegidoId = cot.cliente_id;
+    document.getElementById('cot-cliente-nombre').value = cot.cliente_nombre || '';
+    document.getElementById('cot-cliente-empresa').value = cot.cliente_empresa || '';
+    document.getElementById('cot-cliente-telefono').value = cot.cliente_telefono || '';
+    document.getElementById('cot-cliente-email').value = cot.cliente_email || '';
+    document.getElementById('cot-validez').value = cot.validez_dias || 7;
+    document.getElementById('cot-condiciones-pago').value = cot.condiciones_pago || '';
+    document.getElementById('cot-notas').value = cot.notas || '';
+
+    itemsCotizacion = (itemsDb || []).map(it => {
+      const item = {
+        producto_id: it.producto_id,
+        descripcion: it.descripcion,
+        cantidad: parseFloat(it.cantidad),
+        precioUnitario: parseFloat(it.precio_unitario),
+        // El precio en $ ya cotizado se respeta; solo se recalcula su equivalente en Bs
+        // a la tasa BCV de HOY (por eso puede diferir del que se guardó originalmente).
+        precioUnitarioBs: tasaBCV ? parseFloat(it.precio_unitario) * tasaBCV : parseFloat(it.precio_unitario_bs || 0),
+        costoOriginal: it.costo_original_usd != null ? parseFloat(it.costo_original_usd) : null,
+        avisos: []
+      };
+      if (it.producto_id) {
+        const p = productosCache[it.producto_id];
+        if (!p) {
+          item.avisos.push('Este producto ya no existe en el catálogo.');
+        } else {
+          const costoActual = parseFloat(p.costo_usd || 0);
+          if (item.costoOriginal != null && Math.abs(costoActual - item.costoOriginal) > 0.001) {
+            item.avisos.push(`Costo cambió: era $${item.costoOriginal.toFixed(2)}, ahora $${costoActual.toFixed(2)}.`);
+          }
+          if (p.activo === false) item.avisos.push('Producto inactivo en el catálogo.');
+          const stockActual = p.pub?.stock;
+          if (stockActual != null && stockActual <= 0) item.avisos.push('Sin existencia registrada.');
+        }
+      }
+      return item;
+    });
+
+    document.getElementById('acciones-post-guardado').style.display = 'none';
+    cotizacionGuardada = null;
+    renderizarTablaItems();
+    mostrarBannerRetomar(cot.numero);
+
+    const huboAvisos = itemsCotizacion.some(it => it.avisos.length > 0);
+    msg.className = 'msg ok';
+    msg.textContent = `Retomando cotización N° ${cot.numero} — el subtotal y total en Bs se recalcularon a la tasa de hoy (BCV ${tasaBCV?.toFixed(2) ?? '—'} · Binance ${tasaBinance?.toFixed(2) ?? '—'}).` +
+      (huboAvisos ? ' Hay avisos de catálogo en algunos ítems — revísalos en la tabla de arriba.' : '');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   // ---------- PDF ----------
@@ -705,37 +1000,52 @@
 
     y = Math.max(yEmpresa, yCliente) + 16;
 
-    const filas = (cot.items || []).map(it => [
-      it.descripcion,
-      String(it.cantidad),
-      '$' + Number(it.precioUnitario ?? it.precio_unitario).toFixed(2),
-      '$' + (it.cantidad * (it.precioUnitario ?? it.precio_unitario)).toFixed(2)
-    ]);
+    const fmtBsPdf = (n) => 'Bs ' + Number(n || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    const filas = (cot.items || []).map(it => {
+      const precioUnit = Number(it.precioUnitario ?? it.precio_unitario ?? 0);
+      const precioUnitBs = Number(it.precioUnitarioBs ?? it.precio_unitario_bs ?? 0);
+      return [
+        it.descripcion,
+        String(it.cantidad),
+        '$' + precioUnit.toFixed(2),
+        fmtBsPdf(precioUnitBs),
+        '$' + (it.cantidad * precioUnit).toFixed(2),
+        fmtBsPdf(it.cantidad * precioUnitBs)
+      ];
+    });
 
     doc.autoTable({
       startY: y,
       margin: { left: margenX, right: 40 },
-      head: [['Descripción', 'Cant.', 'Precio unit.', 'Subtotal']],
+      head: [['Descripción', 'Cant.', 'Precio $', 'Precio Bs', 'Subtotal $', 'Subtotal Bs']],
       body: filas,
-      styles: { font: 'helvetica', fontSize: 10, cellPadding: 6 },
+      styles: { font: 'helvetica', fontSize: 9, cellPadding: 5 },
       headStyles: { fillColor: [22, 36, 31], textColor: [237, 232, 222] },
-      columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' } }
+      columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'right' } }
     });
 
     let yFinal = doc.lastAutoTable.finalY + 20;
     const subtotal = Number(cot.subtotal || 0);
     const total = Number(cot.total || 0);
+    const subtotalBs = Number(cot.subtotal_bs || 0);
+    const totalBs = Number(cot.total_bs || 0);
     doc.setFont('helvetica', 'normal');
-    doc.text('Subtotal', 420, yFinal);
-    doc.text('$' + subtotal.toFixed(2), 555, yFinal, { align: 'right' });
+    doc.text('Subtotal', 400, yFinal);
+    doc.text('$' + subtotal.toFixed(2) + '   ' + fmtBsPdf(subtotalBs), 555, yFinal, { align: 'right' });
     yFinal += 16;
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(12);
-    doc.text('Total', 420, yFinal);
-    doc.text('$' + total.toFixed(2), 555, yFinal, { align: 'right' });
-    yFinal += 26;
+    doc.text('Total', 400, yFinal);
+    doc.text('$' + total.toFixed(2) + '   ' + fmtBsPdf(totalBs), 555, yFinal, { align: 'right' });
+    yFinal += 22;
 
     doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.setTextColor(120, 120, 120);
+    if (cot.tasa_bcv_usada) { doc.text(`Tasa BCV usada para el equivalente en Bs: Bs ${Number(cot.tasa_bcv_usada).toFixed(2)} por USD.`, margenX, yFinal); yFinal += 16; }
+    doc.setTextColor(20, 30, 26);
+
     doc.setFontSize(10);
     if (cot.condiciones_pago) { doc.text('Condiciones de pago: ' + cot.condiciones_pago, margenX, yFinal); yFinal += 16; }
     if (cot.notas) {
@@ -753,8 +1063,13 @@
 
   window.descargarPDF = async function() {
     if (!cotizacionGuardada) return;
-    const doc = await construirPDF(cotizacionGuardada);
-    doc.save(nombreArchivoPDF(cotizacionGuardada));
+    try {
+      const doc = await construirPDF(cotizacionGuardada);
+      doc.save(nombreArchivoPDF(cotizacionGuardada));
+    } catch (err) {
+      console.error('Error generando el PDF', err);
+      alert('No se pudo generar el PDF: ' + err.message);
+    }
   };
 
   function normalizarTelefonoVE(tel) {
@@ -765,32 +1080,44 @@
     return digitos;
   }
 
-  window.enviarPorWhatsApp = async function() {
+  function totalConBsTexto(cot) {
+    return '$' + Number(cot.total).toFixed(2) + (cot.total_bs ? ' (' + fmtBs(Number(cot.total_bs)) + ')' : '');
+  }
+
+  // IMPORTANTE: la ventana de WhatsApp se abre de forma SÍNCRONA, antes de cualquier
+  // "await" — si se abre después de esperar la construcción del PDF (que depende de un
+  // fetch del logo), el navegador pierde el gesto del clic y bloquea el popup. Esa era
+  // la causa de que "no imprimiera ni enviara": el PDF se generaba pero WhatsApp nunca
+  // llegaba a abrirse.
+  window.enviarPorWhatsApp = function() {
     if (!cotizacionGuardada) return;
     if (!cotizacionGuardada.cliente_telefono) {
       alert('Este cliente no tiene teléfono guardado en la cotización. Agrégalo en el paso 1 y vuelve a guardar.');
       return;
     }
-    const doc = await construirPDF(cotizacionGuardada);
-    doc.save(nombreArchivoPDF(cotizacionGuardada));
-
     const numero = normalizarTelefonoVE(cotizacionGuardada.cliente_telefono);
-    const mensaje = `Hola ${cotizacionGuardada.cliente_nombre}, te comparto la cotización N° ${cotizacionGuardada.numero} de Nicom Tech Solutions por $${Number(cotizacionGuardada.total).toFixed(2)}. Adjunto el PDF que se acaba de descargar.`;
-    window.open(`https://wa.me/${numero}?text=${encodeURIComponent(mensaje)}`, '_blank');
+    const mensaje = `Hola ${cotizacionGuardada.cliente_nombre}, te comparto la cotización N° ${cotizacionGuardada.numero} de Nicom Tech Solutions por ${totalConBsTexto(cotizacionGuardada)}. Te acabo de descargar el PDF — solo debo adjuntarlo aquí antes de enviar.`;
+    const ventana = window.open(`https://wa.me/${numero}?text=${encodeURIComponent(mensaje)}`, '_blank');
+    if (!ventana) {
+      alert('Tu navegador bloqueó la ventana de WhatsApp. Permite ventanas emergentes para este sitio e inténtalo de nuevo.');
+    }
+    construirPDF(cotizacionGuardada)
+      .then(doc => doc.save(nombreArchivoPDF(cotizacionGuardada)))
+      .catch(err => { console.error('Error generando el PDF', err); alert('Se abrió WhatsApp, pero hubo un error generando el PDF: ' + err.message); });
   };
 
-  window.enviarPorCorreo = async function() {
+  window.enviarPorCorreo = function() {
     if (!cotizacionGuardada) return;
     if (!cotizacionGuardada.cliente_email) {
       alert('Este cliente no tiene correo guardado en la cotización. Agrégalo en el paso 1 y vuelve a guardar.');
       return;
     }
-    const doc = await construirPDF(cotizacionGuardada);
-    doc.save(nombreArchivoPDF(cotizacionGuardada));
-
     const asunto = `Cotización N° ${cotizacionGuardada.numero} — Nicom Tech Solutions`;
-    const cuerpo = `Hola ${cotizacionGuardada.cliente_nombre},\n\nAdjunto la cotización N° ${cotizacionGuardada.numero} por $${Number(cotizacionGuardada.total).toFixed(2)} (el PDF se acaba de descargar en tu equipo — adjúntalo aquí antes de enviar).\n\nSaludos,\nNicom Tech Solutions`;
+    const cuerpo = `Hola ${cotizacionGuardada.cliente_nombre},\n\nAdjunto la cotización N° ${cotizacionGuardada.numero} por ${totalConBsTexto(cotizacionGuardada)}.\nEl PDF se acaba de descargar en tu equipo — adjúntalo aquí antes de enviar.\n\nSaludos,\nNicom Tech Solutions`;
     window.location.href = `mailto:${encodeURIComponent(cotizacionGuardada.cliente_email)}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
+    construirPDF(cotizacionGuardada)
+      .then(doc => doc.save(nombreArchivoPDF(cotizacionGuardada)))
+      .catch(err => { console.error('Error generando el PDF', err); alert('Se abrió tu correo, pero hubo un error generando el PDF: ' + err.message); });
   };
 
   // ---------- Historial ----------
@@ -821,8 +1148,12 @@
         <td>${escapeHtml(c.cliente_nombre)}</td>
         <td>${escapeHtml(c.fecha)}</td>
         <td class="num">$${parseFloat(c.total).toFixed(2)}</td>
+        <td class="num bs">${c.total_bs ? fmtBs(parseFloat(c.total_bs)) : '—'}</td>
         <td><select class="estado-select" onchange="actualizarEstadoCotizacion('${c.id}', this.value)">${opciones}</select></td>
-        <td><button class="secondary" style="margin:0; padding:5px 10px; font-size:11px;" onclick="regenerarPDFHistorial('${c.id}')">PDF</button></td>
+        <td>
+          <button class="secondary" style="margin:0 0 6px 0; padding:5px 10px; font-size:11px;" onclick="retomarCotizacion('${c.id}')">Retomar</button>
+          <button class="secondary" style="margin:0; padding:5px 10px; font-size:11px;" onclick="regenerarPDFHistorial('${c.id}')">PDF</button>
+        </td>
       `;
       tbody.appendChild(tr);
     });
@@ -833,17 +1164,30 @@
   };
 
   window.regenerarPDFHistorial = async function(id) {
-    const { data: cot } = await supabase.from('cotizaciones').select('*').eq('id', id).single();
-    const { data: items } = await supabase.from('cotizacion_items').select('*').eq('cotizacion_id', id).order('orden');
-    if (!cot) return;
-    const doc = await construirPDF({ ...cot, items: (items || []).map(it => ({ descripcion: it.descripcion, cantidad: parseFloat(it.cantidad), precioUnitario: parseFloat(it.precio_unitario) })) });
-    doc.save(nombreArchivoPDF(cot));
+    try {
+      const { data: cot } = await supabase.from('cotizaciones').select('*').eq('id', id).single();
+      const { data: items } = await supabase.from('cotizacion_items').select('*').eq('cotizacion_id', id).order('orden');
+      if (!cot) return;
+      const doc = await construirPDF({
+        ...cot,
+        items: (items || []).map(it => ({
+          descripcion: it.descripcion,
+          cantidad: parseFloat(it.cantidad),
+          precioUnitario: parseFloat(it.precio_unitario),
+          precioUnitarioBs: parseFloat(it.precio_unitario_bs || 0)
+        }))
+      });
+      doc.save(nombreArchivoPDF(cot));
+    } catch (err) {
+      console.error('Error generando el PDF', err);
+      alert('No se pudo generar el PDF: ' + err.message);
+    }
   };
 
   (async function init() {
     cargarDatosEmpresa();
     await initSesion();
-    await Promise.all([cargarClientes(), cargarProductos(), cargarHistorial()]);
+    await Promise.all([cargarTasas(), cargarClientes(), cargarProductos(), cargarProveedores(), cargarHistorial()]);
     renderizarTablaItems();
   })();
 </script>
