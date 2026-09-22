@@ -294,12 +294,25 @@
     { categoria: 'Cámaras y CCTV', palabras: ['camara', 'cctv', 'dvr', 'nvr', 'videoportero', 'domo', 'turret', 'videovigilancia', 'ptz'] },
     { categoria: 'Redes', palabras: ['router', 'switch', 'access point', 'antena', 'patch panel', 'cable utp', 'fibra optica', 'modem', 'repetidor wifi'] },
     { categoria: 'UPS y energía', palabras: ['ups', 'no break', 'regulador de voltaje', 'planta electrica', 'bateria de respaldo', 'inversor'] },
-    { categoria: 'Laptops', palabras: ['laptop', 'notebook', 'portatil'] },
+    { categoria: 'Laptops', palabras: ['laptop', 'notebook', 'computadora portatil', 'pc portatil'] },
     { categoria: 'Desktops', palabras: ['desktop', 'pc de escritorio', 'computadora de escritorio', 'all in one', 'todo en uno'] },
-    { categoria: 'Monitores', palabras: ['monitor', 'pantalla'] },
+    { categoria: 'Componentes de PC', palabras: ['tarjeta madre', 'motherboard', 'procesador', 'tarjeta de video', 'tarjeta grafica', 'fuente de poder', 'gabinete', 'cooler', 'disipador', 'chasis de pc'] },
+    { categoria: 'Monitores', palabras: ['monitor', 'pantalla de computadora'] },
+    { categoria: 'Televisores', palabras: ['televisor', 'tv led', 'tv lcd', 'smart tv'] },
+    { categoria: 'Proyectores', palabras: ['proyector', 'videobeam', 'pantalla de proyeccion'] },
     { categoria: 'Impresoras', palabras: ['impresora', 'multifuncional', 'escaner', 'toner', 'cartucho de tinta'] },
     { categoria: 'Almacenamiento y memoria', palabras: ['disco duro', 'ssd', 'hdd', 'memoria ram', 'pendrive', 'memoria usb', 'tarjeta sd', 'nas'] },
-    { categoria: 'Accesorios', palabras: ['teclado', 'mouse', 'audifono', 'diadema', 'cargador', 'adaptador', 'funda', 'soporte', 'bocina', 'parlante', 'webcam', 'hub usb', 'cable hdmi'] },
+    { categoria: 'Audio y sonido', palabras: ['altavoz', 'altavoces', 'parlante', 'parlantes', 'bocina', 'bocinas', 'bafle', 'corneta', 'barra de sonido', 'soundbar', 'audifono', 'diadema', 'auricular', 'karaoke', 'microfono'] },
+    { categoria: 'Teléfonos y tablets', palabras: ['telefono inteligente', 'celular', 'smartphone', 'tablet', 'ipad'] },
+    { categoria: 'Gaming y consolas', palabras: ['consola de videojuego', 'joystick', 'control de videojuego', 'playstation', 'xbox', 'nintendo', 'silla gamer'] },
+    { categoria: 'Drones y fotografía', palabras: ['drone', 'dron', 'tripode', 'lente fotografico', 'camara fotografica', 'gimbal'] },
+    { categoria: 'Domótica', palabras: ['foco inteligente', 'bombillo inteligente', 'enchufe inteligente', 'domotica', 'cerradura inteligente'] },
+    { categoria: 'Baterías y energía portátil', palabras: ['power bank', 'bateria externa', 'bateria portatil', 'bateria recargable', 'pila recargable'] },
+    { categoria: 'Climatización', palabras: ['aire acondicionado', 'ventilador', 'split de aire', 'purificador de aire'] },
+    { categoria: 'Electrodomésticos', palabras: ['licuadora', 'nevera', 'lavadora', 'microondas', 'freidora de aire', 'cafetera'] },
+    { categoria: 'Muebles y oficina', palabras: ['silla ergonomica', 'silla de oficina', 'escritorio', 'mesa para computadora'] },
+    { categoria: 'Herramientas', palabras: ['taladro', 'esmeril', 'pistola de calor', 'caja de herramientas'] },
+    { categoria: 'Accesorios', palabras: ['teclado', 'mouse', 'cargador', 'adaptador', 'funda', 'soporte', 'webcam', 'hub usb', 'cable hdmi', 'cable usb', 'convertidor', 'extension electrica', 'regleta'] },
     { categoria: 'Software y licencias', palabras: ['licencia', 'software', 'antivirus'] }
   ];
 
@@ -309,6 +322,44 @@
       if (regla.palabras.some(p => norm.includes(normalizeKey(p)))) return regla.categoria;
     }
     return '';
+  }
+
+  // Palabras que nunca deben quedar como nombre de una categoría nueva: conectores, colores,
+  // unidades de medida y adjetivos de marketing — describen el producto pero no su tipo.
+  const PALABRAS_VACIAS_CATEGORIA = new Set([
+    'de', 'del', 'la', 'el', 'los', 'las', 'un', 'una', 'unos', 'unas', 'con', 'para', 'sin', 'en', 'y', 'o', 'u', 'por',
+    'nuevo', 'nueva', 'nuevos', 'nuevas', 'modelo', 'ref', 'referencia', 'tipo', 'marca', 'serie',
+    'negro', 'negra', 'blanco', 'blanca', 'azul', 'rojo', 'roja', 'gris', 'verde', 'rosado', 'rosada',
+    'dorado', 'dorada', 'plateado', 'plateada', 'amarillo', 'amarilla', 'morado', 'morada', 'naranja', 'beige', 'vino',
+    'original', 'genuino', 'premium', 'pro', 'plus', 'mini', 'portatil', 'inalambrico', 'inalambrica',
+    'pulgadas', 'pulg', 'cm', 'mm', 'kg', 'lts', 'litros', 'gb', 'tb', 'mb', 'mah', 'hz', 'watts', 'w', 'v'
+  ]);
+
+  // Respaldo final cuando ninguna regla de REGLAS_CATEGORIA reconoce el producto: en vez de
+  // dejarlo sin categoría, arma una categoría nueva a partir del tipo de producto que aparece
+  // en su nombre/descripción (quitando marca, código/SKU, medidas y palabras de relleno). Como
+  // "categoria" es un campo de texto libre en productos, cualquier valor nuevo que se guarde
+  // aquí ya funciona como una categoría nueva del catálogo — no hace falta darla de alta aparte.
+  function inferirCategoriaAutomatica(nombreFinal, descripcion, marca) {
+    const marcaPalabras = new Set(normalizeKey(marca || '').split(/\s+/).filter(Boolean));
+
+    const textoLimpio = `${nombreFinal || ''} ${descripcion || ''}`
+      .replace(/\[[^\]]*\]/g, ' ')           // quita prefijos tipo "[XTS-617]"
+      .replace(/[^\p{L}\p{N}\s-]/gu, ' ');   // deja solo letras, números, espacios y guiones
+
+    const candidatos = normalizeKey(textoLimpio)
+      .split(/[\s-]+/)
+      .filter(Boolean)
+      .filter(tok => tok.length > 2)           // descarta siglas sueltas
+      .filter(tok => !/\d/.test(tok))          // descarta códigos/modelos/medidas (traen números)
+      .filter(tok => !marcaPalabras.has(tok))  // descarta la marca
+      .filter(tok => !PALABRAS_VACIAS_CATEGORIA.has(tok));
+
+    if (candidatos.length === 0) return '';
+
+    // Las primeras 1-2 palabras que sobreviven suelen ser el tipo de producto
+    // (ej. "termo", "silla gamer", "cortina") — eso se usa como nombre de la categoría nueva.
+    return candidatos.slice(0, 2).map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
   }
 
   // Convierte el texto FORMATEADO de la celda (tal como se ve en Excel) a un número,
@@ -767,7 +818,10 @@
       const sinPrecio = isNaN(costo) || costo <= 0;
 
       const nombreFinal = marca ? `${marca} ${nombre}` : nombre;
-      const categoriaFinal = categoriaArchivo || clasificarProducto([nombreFinal, descripcion, marca].filter(Boolean).join(' ')) || '';
+      const categoriaFinal = categoriaArchivo
+        || clasificarProducto([nombreFinal, descripcion, marca].filter(Boolean).join(' '))
+        || inferirCategoriaAutomatica(nombreFinal, descripcion, marca)
+        || '';
 
       // Clave de comparación: si hay código/SKU se usa eso; si no, el nombre final ya armado
       // (marca + nombre), que es tal como se guardó en productos.nombre la vez anterior.
