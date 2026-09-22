@@ -7,7 +7,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/jspdf-autotable@3.8.4/dist/jspdf-autotable.min.js"></script>
 <style>
   :root {
     --ink: #0F1B17; --surface: #16241F; --surface-2: #1D2E27; --line: #2C3F37;
@@ -1155,6 +1154,86 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
   };
 
   // ---------- PDF ----------
+  // Tabla de ítems dibujada a mano con las primitivas de jsPDF (texto, líneas, rectángulos).
+  // No depende del plugin jspdf-autotable: ese plugin se carga desde un CDN externo aparte
+  // de jsPDF y, si por lo que sea (red lenta, bloqueador, caché del navegador) no llega a
+  // registrarse a tiempo, "doc.autoTable is not a function" hacía fallar TODO el PDF. Con
+  // esto la generación del PDF ya no depende de ese segundo script.
+  function dibujarTablaItemsPDF(doc, filas, startY, margenX) {
+    const bordeDerecho = 555;
+    const columnas = [
+      { titulo: 'Descripción', ancho: 195, align: 'left' },
+      { titulo: 'Cant.', ancho: 40, align: 'right' },
+      { titulo: 'Precio $', ancho: 65, align: 'right' },
+      { titulo: 'Precio Bs', ancho: 90, align: 'right' },
+      { titulo: 'Subtotal $', ancho: 60, align: 'right' },
+      { titulo: 'Subtotal Bs', ancho: 65, align: 'right' }
+    ];
+    const padding = 5;
+    const altoLinea = 11;
+    const altoFilaMin = altoLinea + padding * 2;
+    const yTope = 50;
+    const yPie = 740;
+
+    function dibujarEncabezado(y) {
+      doc.setFillColor(22, 36, 31);
+      doc.rect(margenX, y, bordeDerecho - margenX, altoFilaMin, 'F');
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9);
+      doc.setTextColor(237, 232, 222);
+      let x = margenX;
+      columnas.forEach(col => {
+        const tx = col.align === 'right' ? x + col.ancho - padding : x + padding;
+        doc.text(col.titulo, tx, y + altoFilaMin - padding - 2, { align: col.align });
+        x += col.ancho;
+      });
+      doc.setTextColor(20, 30, 26);
+      return y + altoFilaMin;
+    }
+
+    let y = dibujarEncabezado(startY);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+
+    filas.forEach((fila, idx) => {
+      const [descripcion, cantidad, precioUsd, precioBs, subtotalUsd, subtotalBs] = fila;
+      const anchoTextoDesc = columnas[0].ancho - padding * 2;
+      const lineasDesc = doc.splitTextToSize(String(descripcion ?? ''), anchoTextoDesc);
+      const altoFila = Math.max(altoFilaMin, lineasDesc.length * altoLinea + padding * 2);
+
+      if (y + altoFila > yPie) {
+        doc.addPage();
+        y = dibujarEncabezado(yTope);
+      }
+
+      if (idx % 2 === 1) {
+        doc.setFillColor(244, 242, 236);
+        doc.rect(margenX, y, bordeDerecho - margenX, altoFila, 'F');
+      }
+
+      const valores = [lineasDesc, cantidad, precioUsd, precioBs, subtotalUsd, subtotalBs];
+      let x = margenX;
+      columnas.forEach((col, i) => {
+        const tx = col.align === 'right' ? x + col.ancho - padding : x + padding;
+        const yTexto = y + padding + 8;
+        if (i === 0) {
+          doc.text(valores[i], tx, yTexto);
+        } else {
+          doc.text(String(valores[i]), tx, yTexto, { align: col.align });
+        }
+        x += col.ancho;
+      });
+
+      doc.setDrawColor(220, 220, 220);
+      doc.line(margenX, y + altoFila, bordeDerecho, y + altoFila);
+      y += altoFila;
+    });
+
+    doc.setDrawColor(200, 200, 200);
+    doc.line(margenX, y, bordeDerecho, y);
+    return y;
+  }
+
   async function construirPDF(cot) {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ unit: 'pt', format: 'letter' });
@@ -1217,17 +1296,12 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
       ];
     });
 
-    doc.autoTable({
-      startY: y,
-      margin: { left: margenX, right: 40 },
-      head: [['Descripción', 'Cant.', 'Precio $', 'Precio Bs', 'Subtotal $', 'Subtotal Bs']],
-      body: filas,
-      styles: { font: 'helvetica', fontSize: 9, cellPadding: 5 },
-      headStyles: { fillColor: [22, 36, 31], textColor: [237, 232, 222] },
-      columnStyles: { 1: { halign: 'right' }, 2: { halign: 'right' }, 3: { halign: 'right' }, 4: { halign: 'right' }, 5: { halign: 'right' } }
-    });
+    const yTrasTabla = dibujarTablaItemsPDF(doc, filas, y, margenX);
 
-    let yFinal = doc.lastAutoTable.finalY + 20;
+    let yFinal = yTrasTabla + 20;
+    // Si la tabla llegó muy abajo (cotización con muchos ítems), abrimos página nueva
+    // para que el resumen de totales, condiciones y notas no se corten ni se encimen.
+    if (yFinal > 700) { doc.addPage(); yFinal = 60; }
     const subtotal = Number(cot.subtotal || 0);
     const total = Number(cot.total || 0);
     const subtotalBs = Number(cot.subtotal_bs || 0);
