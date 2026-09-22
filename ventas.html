@@ -506,7 +506,7 @@
   async function cargarVentas() {
     const { data } = await supabase
       .from('ventas')
-      .select('id, cantidad, precio_venta, moneda_cobrada, metodo_pago, canal, precio_venta_usd_equiv, created_at, productos(nombre)')
+      .select('id, cantidad, precio_venta, moneda_cobrada, metodo_pago, canal, precio_venta_usd_equiv, created_at, producto_nombre_historico, productos(nombre)')
       .order('created_at', { ascending: false })
       .limit(50);
 
@@ -522,7 +522,7 @@
       const fecha = new Date(v.created_at).toLocaleDateString('es-VE', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' });
       tr.innerHTML = `
         <td>${fecha}</td>
-        <td>${escapeHtml(v.productos?.nombre || '—')}</td>
+        <td>${escapeHtml(v.productos?.nombre || v.producto_nombre_historico || 'Producto eliminado')}</td>
         <td class="num">${v.cantidad}</td>
         <td class="num">${v.moneda_cobrada === 'VES' ? 'Bs ' + parseFloat(v.precio_venta).toLocaleString('es-VE') : '$' + parseFloat(v.precio_venta).toFixed(2)}</td>
         <td><span class="pill">${METODOS_TEXTO[v.metodo_pago] || v.metodo_pago}</span></td>
