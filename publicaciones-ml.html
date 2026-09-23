@@ -1173,7 +1173,11 @@
       const valores = [
         { col: enc.col.titulo, valor: truncarTitulo(p.nombre), tipo: 'texto' },
         { col: enc.col.sku, valor: p.sku || '', tipo: 'texto' },
-        { col: enc.col.descripcion, valor: p.nombre || '', tipo: 'texto' },
+        // La descripción generada con IA (o escrita a mano) en el Dashboard se guarda en
+        // publicaciones.descripcion — antes esta columna se llenaba siempre con el nombre del
+        // producto, ignorando esa descripción. Ahora usa la descripción real cuando existe, y
+        // solo cae de vuelta al nombre si el producto todavía no tiene ninguna descripción guardada.
+        { col: enc.col.descripcion, valor: (pub && pub.descripcion && pub.descripcion.trim()) ? pub.descripcion.trim() : (p.nombre || ''), tipo: 'texto' },
       ];
       if (pub) {
         valores.push({ col: enc.col.fotos, valor: (pub.imagenes || []).join(', '), tipo: 'texto' });
