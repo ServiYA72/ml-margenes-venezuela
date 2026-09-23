@@ -7,6 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <style>
   :root {
     --ink: #0F1B17; --surface: #16241F; --surface-2: #1D2E27; --line: #2C3F37;
@@ -251,7 +252,7 @@
           <li>Complétale a mano lo que falte (marca, modelo, envío...): eso Mercado Libre te lo pide con sus propias listas, dentro del mismo Excel.</li>
           <li>Entra a Mercado Libre → Publicar → Masivamente → <b>sube esta misma planilla</b>.</li>
         </ol>
-        <div class="hint" style="margin-top:12px; margin-bottom:0;">Para que se vea manejable, dejamos a la vista solo las columnas que hay que llenar (unas 20) — el resto de las más de 100 columnas de Mercado Libre quedan ocultas, no borradas. Si necesitas ver todas: selecciona todas las columnas (clic en la esquina de arriba a la izquierda) → clic derecho → "Mostrar columnas".</div>
+        <div class="hint" style="margin-top:12px; margin-bottom:0;">Se ve igual que la planilla original de Mercado Libre (mismos colores y formato) — solo dejamos a la vista las columnas que hay que llenar (unas 20 de más de 100). Si alguna celda aparece en rosado, es la propia Mercado Libre avisando que ahí falta algo obligatorio. Para ver las columnas ocultas: selecciona todas las columnas (clic en la esquina de arriba a la izquierda) → clic derecho → "Mostrar columnas".</div>
       </div>
     </div>
   </div>
@@ -662,6 +663,9 @@
   // propias listas de valores — solo se rellena lo que se puede tomar del catálogo con certeza.
 
   let workbookPreparar = null;
+  let bufferPreparar = null; // el archivo original tal cual, sin tocar — se usa para editarlo
+                              // quirúrgicamente y así conservar 100% los colores y el diseño
+                              // originales de Mercado Libre (ver generarPlantillaPreparar).
   let seleccionadosPreparar = []; // productos elegidos para esta tanda
 
   // La planilla real de Mercado Libre ("Publicar masivamente") NO trae códigos de campo tipo
@@ -708,6 +712,124 @@
     return null;
   }
 
+  // ── Edición quirúrgica del Excel original ──────────────────────────────────────────────────
+  // Antes esto se hacía con XLSX.write(), pero esa librería (en su versión gratuita) descarta
+  // TODO el diseño del archivo al reescribirlo: colores, la fila "Obligatorio" en rojo, el
+  // formato de precio/stock que ya trae Mercado Libre... por eso la planilla generada se veía
+  // "distinta" y sin sentido comparada con la original. La solución: en vez de reconstruir el
+  // archivo entero, se edita directamente el XML interno de la fila y las columnas que hacen
+  // falta, dejando el resto del archivo (que es la enorme mayoría) exactamente como venía.
+
+  function columnaALetra(idx) {
+    let n = idx + 1, s = '';
+    while (n > 0) { const r = (n - 1) % 26; s = String.fromCharCode(65 + r) + s; n = Math.floor((n - 1) / 26); }
+    return s;
+  }
+  function letraAColumna(letra) {
+    let n = 0;
+    for (let i = 0; i < letra.length; i++) n = n * 26 + (letra.charCodeAt(i) - 64);
+    return n - 1;
+  }
+  function escaparXmlTexto(texto) {
+    return String(texto).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\r\n/g, '\n');
+  }
+  // Encuentra en qué archivo interno (xl/worksheets/sheetN.xml) vive una hoja, buscando su
+  // nombre en workbook.xml y siguiendo la relación hasta workbook.xml.rels.
+  async function resolverRutaHoja(zip, nombreHoja) {
+    const workbookXml = await zip.file('xl/workbook.xml').async('string');
+    const escapado = nombreHoja.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const mSheet = workbookXml.match(new RegExp('<sheet[^>]*name="' + escapado + '"[^>]*/>'));
+    if (!mSheet) return null;
+    const mRid = mSheet[0].match(/r:id="(rId\d+)"/);
+    if (!mRid) return null;
+    const relsXml = await zip.file('xl/_rels/workbook.xml.rels').async('string');
+    const mRel = relsXml.match(new RegExp('<Relationship Id="' + mRid[1] + '"[^>]*Target="([^"]+)"'));
+    if (!mRel) return null;
+    const target = mRel[1];
+    return target.startsWith('/') ? target.slice(1) : 'xl/' + target;
+  }
+  function obtenerBloqueFila(xmlHoja, numFila) {
+    const m = xmlHoja.match(new RegExp('<row r="' + numFila + '"[^>]*>[\\s\\S]*?<\\/row>'));
+    return m ? { texto: m[0], indice: m.index } : null;
+  }
+  function descomponerFila(filaXml) {
+    const m = filaXml.match(/^<row([^>]*)>([\s\S]*)<\/row>$/);
+    return m ? { atributos: m[1], interior: m[2] } : null;
+  }
+  // Separa el interior de una fila en sus celdas <c>, una por una (las filas de esta planilla
+  // solo contienen celdas, nada más, así que es seguro cortarlas por "<c ...>...</c>").
+  function tokenizarCeldas(interior) {
+    const regex = /<c r="([A-Z]+)(\d+)"[^>]*?(?:\/>|>[\s\S]*?<\/c>)/g;
+    const celdas = []; let m;
+    while ((m = regex.exec(interior)) !== null) celdas.push({ col: letraAColumna(m[1]), xml: m[0] });
+    return celdas;
+  }
+  function extraerEstiloCelda(celdaXmlExistente) {
+    if (!celdaXmlExistente) return null;
+    const m = celdaXmlExistente.match(/ s="(\d+)"/);
+    return m ? m[1] : null;
+  }
+  // El estilo (color, borde, formato numérico) que Mercado Libre le puso a cada columna por
+  // defecto — se usa para las celdas que hay que crear de cero (las que en la planilla en blanco
+  // no existen todavía, como Título, Fotos o Precio), para que se vean igual que si Mercado
+  // Libre las hubiera puesto ahí.
+  function extraerEstilosColumnas(xmlHoja) {
+    const mCols = xmlHoja.match(/<cols>[\s\S]*?<\/cols>/);
+    const estilos = {};
+    if (!mCols) return estilos;
+    const regex = /<col min="(\d+)" max="(\d+)"[^\/]*?style="(\d+)"[^\/]*\/>/g;
+    let m;
+    while ((m = regex.exec(mCols[0])) !== null) {
+      const min = parseInt(m[1], 10), max = parseInt(m[2], 10);
+      for (let c = min; c <= max; c++) estilos[c - 1] = m[3];
+    }
+    return estilos;
+  }
+  function celdaTexto(ref, estilo, texto) {
+    const s = (estilo !== undefined && estilo !== null && estilo !== '0') ? ' s="' + estilo + '"' : '';
+    return '<c r="' + ref + '"' + s + ' t="inlineStr"><is><t xml:space="preserve">' + escaparXmlTexto(texto) + '</t></is></c>';
+  }
+  function celdaNumero(ref, estilo, numero) {
+    const s = (estilo !== undefined && estilo !== null && estilo !== '0') ? ' s="' + estilo + '"' : '';
+    return '<c r="' + ref + '"' + s + '><v>' + numero + '</v></c>';
+  }
+  function fijarCeldaEnFila(interior, colIndex, nuevaCeldaXml) {
+    const celdas = tokenizarCeldas(interior).filter(c => c.col !== colIndex);
+    celdas.push({ col: colIndex, xml: nuevaCeldaXml });
+    celdas.sort((a, b) => a.col - b.col);
+    return celdas.map(c => c.xml).join('');
+  }
+  // Escribe los valores de un producto en su fila, respetando el estilo que ya tenía la celda
+  // (si existía) o el de su columna (si la celda no existía todavía en el archivo en blanco).
+  function escribirFilaProducto(xmlHoja, numFila, valores, estilosColumnas) {
+    const bloque = obtenerBloqueFila(xmlHoja, numFila);
+    if (!bloque) return xmlHoja; // no debería pasar: Mercado Libre precarga todas las filas hasta la 1001
+    const desc = descomponerFila(bloque.texto);
+    if (!desc) return xmlHoja;
+    let interior = desc.interior;
+    const mapaExistentes = {};
+    tokenizarCeldas(interior).forEach(c => { mapaExistentes[c.col] = c.xml; });
+    valores.forEach(({ col, valor, tipo }) => {
+      if (col === undefined || col === -1 || valor === undefined || valor === '') return;
+      const ref = columnaALetra(col) + numFila;
+      const estilo = extraerEstiloCelda(mapaExistentes[col]) ?? estilosColumnas[col];
+      interior = fijarCeldaEnFila(interior, col, tipo === 'numero' ? celdaNumero(ref, estilo, valor) : celdaTexto(ref, estilo, valor));
+    });
+    const filaNueva = '<row' + desc.atributos + '>' + interior + '</row>';
+    return xmlHoja.slice(0, bloque.indice) + filaNueva + xmlHoja.slice(bloque.indice + bloque.texto.length);
+  }
+  // Oculta (sin borrar ni desarmar el ancho/color que ya tenían) las columnas que no hace falta
+  // mirar, dejando a la vista solo las que están en "columnasVisibles".
+  function ocultarColumnasNoVisibles(xmlHoja, columnasVisibles) {
+    return xmlHoja.replace(/<col min="(\d+)" max="(\d+)"([^\/]*)\/>/g, (completo, minStr, maxStr, resto) => {
+      const min = parseInt(minStr, 10), max = parseInt(maxStr, 10);
+      let todasVisibles = true;
+      for (let c = min; c <= max; c++) { if (!columnasVisibles.has(c - 1)) { todasVisibles = false; break; } }
+      const restoLimpio = resto.replace(/\s*hidden="[^"]*"/, '');
+      return '<col min="' + minStr + '" max="' + maxStr + '"' + restoLimpio + (todasVisibles ? '' : ' hidden="true"') + '/>';
+    });
+  }
+
   // Recorta el título a 60 caracteres (límite de Mercado Libre) sin cortar una palabra a la
   // mitad, y le quita el "[SKU]" que solemos guardar al inicio del nombre en el catálogo.
   function truncarTitulo(nombre, maxLen = 60) {
@@ -729,12 +851,16 @@
     bloque.style.display = 'none';
 
     try {
-      const buffer = await file.arrayBuffer();
-      workbookPreparar = XLSX.read(buffer, { type: 'array' });
+      bufferPreparar = await file.arrayBuffer();
+      // XLSX.read se usa solo para LEER (encontrar columnas, fila "Obligatorio", próxima fila
+      // libre) — nunca se vuelve a escribir con esta librería. Por eso se clona el buffer antes:
+      // XLSX.read puede quedarse con una referencia interna al ArrayBuffer original.
+      workbookPreparar = XLSX.read(bufferPreparar.slice(0), { type: 'array' });
     } catch (e) {
       msg.style.color = 'var(--rust)';
       msg.textContent = 'No se pudo leer el archivo.';
       workbookPreparar = null;
+      bufferPreparar = null;
       return;
     }
 
@@ -749,6 +875,7 @@
       msg.style.color = 'var(--rust)';
       msg.textContent = 'Este no parece ser el Excel de Mercado Libre — asegúrate de subir el que descargaste en Publicar → Masivamente (no otro archivo).';
       workbookPreparar = null;
+      bufferPreparar = null;
       return;
     }
 
@@ -915,69 +1042,59 @@
     let filaDestino = enc.filaDatosInicio;
     while (matriz[filaDestino] && matriz[filaDestino][enc.col.titulo]) filaDestino++;
 
-    const escribir = (fila, col, valor) => {
-      if (col === undefined || col === -1 || valor === undefined || valor === '') return;
-      const celda = XLSX.utils.encode_cell({ r: fila, c: col });
-      ws[celda] = typeof valor === 'number' ? { t: 'n', v: valor } : { t: 's', v: String(valor) };
-      return celda;
-    };
+    // Qué columnas hace falta ver: las que el sistema llena solo, más las que Mercado Libre
+    // marca como "Obligatorio" en la fila 4 (las que sí o sí hay que completar a mano). El resto
+    // de las más de 100 columnas de la ficha técnica quedan ocultas — no se borran, siguen ahí.
+    const filaObligatorio = matriz[enc.filaEncabezado + 1] || [];
+    const columnasVisibles = new Set();
+    filaObligatorio.forEach((valor, c) => { if (normalizarEncabezado(valor) === 'obligatorio') columnasVisibles.add(c); });
+    Object.values(enc.col).forEach(c => { if (c !== undefined && c !== -1) columnasVisibles.add(c); });
+
+    msg.textContent = 'Escribiendo los productos en tu planilla...';
+
+    // A partir de aquí se edita el archivo tal cual lo subiste, celda por celda, en vez de
+    // reconstruirlo con la librería xlsx — así se conservan intactos los colores, los bordes y
+    // el formato de número que ya trae Mercado Libre (ver los comentarios junto a
+    // "Edición quirúrgica del Excel original" más arriba).
+    const zip = await JSZip.loadAsync(bufferPreparar);
+    const rutaHoja = await resolverRutaHoja(zip, nombreHoja);
+    if (!rutaHoja || !zip.file(rutaHoja)) {
+      msg.style.color = 'var(--rust)';
+      msg.textContent = 'No se pudo preparar el archivo internamente. Prueba subiendo de nuevo la planilla en el paso 2.';
+      return;
+    }
+    let xmlHoja = await zip.file(rutaHoja).async('string');
+    const estilosColumnas = extraerEstilosColumnas(xmlHoja);
 
     seleccionadosPreparar.forEach(p => {
       const pub = pubPorProducto[p.id];
-      escribir(filaDestino, enc.col.titulo, truncarTitulo(p.nombre));
-      escribir(filaDestino, enc.col.sku, p.sku || '');
-      escribir(filaDestino, enc.col.descripcion, p.nombre || '');
+      const valores = [
+        { col: enc.col.titulo, valor: truncarTitulo(p.nombre), tipo: 'texto' },
+        { col: enc.col.sku, valor: p.sku || '', tipo: 'texto' },
+        { col: enc.col.descripcion, valor: p.nombre || '', tipo: 'texto' },
+      ];
       if (pub) {
-        escribir(filaDestino, enc.col.fotos, (pub.imagenes || []).join(', '));
-        escribir(filaDestino, enc.col.stock, Number.isFinite(pub.stock) ? pub.stock : undefined);
-        const celdaPrecio = escribir(filaDestino, enc.col.precio, pub.precio_efectivo_usd != null ? Number(pub.precio_efectivo_usd) : undefined);
-        // Formato moneda ($ con 2 decimales) para que el precio se lea de un vistazo, en vez de un número suelto
-        if (celdaPrecio && ws[celdaPrecio]) ws[celdaPrecio].z = '"$"#,##0.00';
+        valores.push({ col: enc.col.fotos, valor: (pub.imagenes || []).join(', '), tipo: 'texto' });
+        if (Number.isFinite(pub.stock)) valores.push({ col: enc.col.stock, valor: pub.stock, tipo: 'numero' });
+        if (pub.precio_efectivo_usd != null) valores.push({ col: enc.col.precio, valor: Number(pub.precio_efectivo_usd), tipo: 'numero' });
       }
+      xmlHoja = escribirFilaProducto(xmlHoja, filaDestino + 1, valores, estilosColumnas); // +1: la fila en el XML es 1-indexada
       filaDestino++;
     });
 
-    // Actualizar el rango de la hoja para que las filas nuevas queden incluidas al exportar
-    const rangoActual = XLSX.utils.decode_range(ws['!ref']);
-    rangoActual.e.r = Math.max(rangoActual.e.r, filaDestino - 1);
-    ws['!ref'] = XLSX.utils.encode_range(rangoActual);
-
-    // La planilla real de Mercado Libre trae más de 100 columnas (ficha técnica completa:
-    // procesador, pantalla, batería, dimensiones...), y eso es justo lo que hace que se vea
-    // "imposible de entender" al abrirla. La mayoría de esas columnas son opcionales. Para que
-    // se vea manejable dejamos visibles solo: las que el sistema ya llenó, y las que Mercado
-    // Libre marca como "Obligatorio" en la fila 4 (las que sí o sí hay que completar a mano).
-    // El resto queda oculta (no se borra ni se pierde: sigue ahí por si algún día hace falta).
-    const filaObligatorio = matriz[enc.filaEncabezado + 1] || [];
-    const columnasObligatorias = new Set();
-    filaObligatorio.forEach((valor, c) => {
-      if (normalizarEncabezado(valor) === 'obligatorio') columnasObligatorias.add(c);
-    });
-    const columnasVisibles = new Set(columnasObligatorias);
-    Object.values(enc.col).forEach(c => { if (c !== undefined && c !== -1) columnasVisibles.add(c); });
-
-    // Ensancha las columnas que el sistema llenó (para leer título/descripción/fotos de un
-    // vistazo) y da un ancho legible al resto de las columnas obligatorias (por defecto Excel
-    // las deja tan angostas que solo se ve un pedazo del nombre del campo). Excel solo respeta
-    // el ancho de columna si se define para TODAS las columnas de la hoja (una lista con huecos
-    // hace que descarte el ancho por completo al guardar) — por eso se arma un arreglo completo.
-    const totalColumnas = rangoActual.e.c + 1;
-    const anchosColumna = { titulo: 45, sku: 16, fotos: 60, stock: 8, precio: 12, descripcion: 55, marca: 20, modelo: 20 };
-    const colsExistentes = ws['!cols'] || [];
-    const colsNuevos = [];
-    for (let c = 0; c < totalColumnas; c++) {
-      const visible = columnasVisibles.has(c);
-      colsNuevos.push({ wch: visible ? 22 : 8.43, hidden: !visible });
-    }
-    Object.entries(anchosColumna).forEach(([campo, wch]) => {
-      const col = enc.col[campo];
-      if (col === undefined || col === -1) return;
-      colsNuevos[col] = Object.assign({}, colsNuevos[col], { wch, hidden: false });
-    });
-    ws['!cols'] = colsNuevos;
+    xmlHoja = ocultarColumnasNoVisibles(xmlHoja, columnasVisibles);
+    zip.file(rutaHoja, xmlHoja);
 
     const nombreArchivo = `planilla-${nombreHoja.replace(/[^a-zA-Z0-9]+/g, '-')}-${new Date().toISOString().slice(0, 10)}.xlsx`;
-    XLSX.writeFile(workbookPreparar, nombreArchivo);
+    const blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const url = URL.createObjectURL(blob);
+    const enlace = document.createElement('a');
+    enlace.href = url;
+    enlace.download = nombreArchivo;
+    document.body.appendChild(enlace);
+    enlace.click();
+    enlace.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
 
     msg.textContent = '';
     document.getElementById('rg-nombre-archivo').textContent = nombreArchivo;
