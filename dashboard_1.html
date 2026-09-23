@@ -1,0 +1,2547 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Nicom System — Productos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #0F1B17;
+    --surface: #16241F;
+    --surface-2: #1D2E27;
+    --line: #2C3F37;
+    --paper: #EDE8DE;
+    --muted: #8FA69B;
+    --gold: #C9A227;
+    --teal: #3FA796;
+    --rust: #C1553B;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    min-height: 100%;
+    background: var(--ink);
+    font-family: 'IBM Plex Sans', sans-serif;
+    color: var(--paper);
+  }
+  header {
+    border-bottom: 1px solid var(--line);
+    padding: 20px 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 16px;
+    position: sticky;
+    top: 0;
+    z-index: 30;
+    background: var(--ink);
+  }
+  .btns-scroll { position: fixed; right: 22px; bottom: 22px; display: flex; flex-direction: column; gap: 10px; z-index: 40; }
+  .btn-scroll {
+    width: 42px; height: 42px; border-radius: 50%; background: var(--surface); border: 1px solid var(--line);
+    color: var(--paper); font-size: 17px; cursor: pointer; display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 4px 14px rgba(0,0,0,.45); opacity: 0; pointer-events: none;
+    transition: opacity .15s ease, border-color .15s ease, transform .15s ease;
+  }
+  .btn-scroll.visible { opacity: 1; pointer-events: auto; }
+  .btn-scroll:hover { border-color: var(--gold); color: var(--gold); transform: translateY(-2px); }
+  .brand-mark {
+    display: flex;
+    align-items: center;
+  }
+  .brand-logo {
+    height: 42px;
+    width: auto;
+    filter: drop-shadow(0 3px 10px rgba(0,0,0,0.5));
+  }
+  .who {
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .nav-bar { display: flex; gap: 8px; flex-wrap: wrap; }
+  .nav-pill {
+    color: var(--muted); font-size: 12.5px; text-decoration: none; white-space: nowrap;
+    padding: 8px 14px; border: 1px solid var(--line); background: var(--surface-2);
+    transition: border-color .15s ease, color .15s ease, background .15s ease;
+  }
+  .nav-pill:hover { color: var(--paper); border-color: var(--gold); }
+  .nav-pill.activo { color: var(--ink); background: var(--gold); border-color: var(--gold); font-weight: 600; }
+  .rate-strip {
+    display: flex;
+    gap: 24px;
+    align-items: center;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .rate-strip b.gold { color: var(--gold); font-weight: 500; }
+  .rate-strip b.teal { color: var(--teal); font-weight: 500; }
+
+  main {
+    max-width: 2000px;
+    margin: 0 auto;
+    padding: 32px clamp(20px, 3vw, 48px);
+  }
+  .tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 28px;
+    border-bottom: 1px solid var(--line);
+  }
+  .tab {
+    padding: 10px 18px;
+    font-size: 14px;
+    color: var(--muted);
+    background: none;
+    border: none;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    font-family: 'IBM Plex Sans', sans-serif;
+  }
+  .tab.active { color: var(--paper); border-bottom-color: var(--gold); }
+
+  section.view { display: none; }
+  section.view.active { display: block; }
+
+  /* Se activa desde el script bloqueante en <head>, antes del primer render,
+     para evitar el parpadeo hacia "Proveedores" al llegar con ?tab=productos o ?editar= */
+  html.forzar-productos #view-proveedores { display: none !important; }
+  html.forzar-productos #view-productos { display: block !important; }
+  html.forzar-productos #tab-proveedores { color: var(--muted); border-bottom-color: transparent; }
+  html.forzar-productos #tab-productos { color: var(--paper); border-bottom-color: var(--gold); }
+
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    padding: 22px;
+    margin-bottom: 24px;
+  }
+  .panel h2 {
+    font-family: 'Fraunces', serif;
+    font-weight: 400;
+    font-size: 20px;
+    margin: 0 0 18px 0;
+  }
+  .grid-form {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 14px;
+    align-items: end;
+  }
+  label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+  input, select, textarea {
+    width: 100%;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    color: var(--paper);
+    padding: 10px 12px;
+    font-size: 14px;
+    font-family: 'IBM Plex Sans', sans-serif;
+  }
+  textarea { resize: vertical; line-height: 1.5; }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--gold); }
+  .btn-ia {
+    background: var(--surface-2); color: var(--gold); border: 1px solid var(--gold);
+    padding: 9px 14px; font-size: 12.5px; font-weight: 600; cursor: pointer; margin-top: 8px;
+    font-family: 'IBM Plex Sans', sans-serif;
+  }
+  .btn-ia:hover:not(:disabled) { background: var(--gold); color: var(--ink); }
+  .btn-ia:disabled { opacity: 0.6; cursor: default; }
+  button.add {
+    background: var(--gold);
+    color: var(--ink);
+    border: none;
+    padding: 10px 18px;
+    font-weight: 600;
+    font-size: 14px;
+    cursor: pointer;
+    height: 41px;
+  }
+  button.add:hover { background: #DAB13A; }
+  button.add:disabled { background: var(--line); color: var(--muted); cursor: not-allowed; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th {
+    text-align: left;
+    font-size: 12px;
+    color: var(--muted);
+    font-weight: 500;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  td {
+    padding: 12px;
+    border-bottom: 1px solid var(--line);
+  }
+  td.num, th.num { font-family: 'IBM Plex Mono', monospace; text-align: right; }
+  tr:last-child td { border-bottom: none; }
+  #tabla-productos thead th {
+    position: sticky;
+    z-index: 24;
+    background: var(--surface);
+  }
+  .fila-resaltada {
+    background: rgba(201, 162, 39, 0.14) !important;
+    box-shadow: inset 3px 0 0 var(--gold);
+    animation: parpadeoResaltado 1.4s ease-in-out 2;
+  }
+  @keyframes parpadeoResaltado {
+    0%, 100% { background: rgba(201, 162, 39, 0.14); }
+    50% { background: rgba(201, 162, 39, 0.30); }
+  }
+  .empty { color: var(--muted); font-size: 14px; padding: 20px 0; }
+  .fila-producto {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 10px 14px; border-bottom: 1px solid var(--line); font-size: 13px;
+  }
+  .fila-producto:last-child { border-bottom: none; }
+  .fila-producto:hover { background: var(--surface-2); }
+  .fila-producto .fp-nombre { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .fila-producto .fp-info { display: flex; gap: 12px; white-space: nowrap; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--muted); }
+  .pill {
+    display: inline-block;
+    padding: 3px 9px;
+    font-size: 11px;
+    border: 1px solid var(--line);
+    color: var(--muted);
+  }
+  .gold-text { color: var(--gold); }
+  .teal-text { color: var(--teal); }
+  .msg { font-size: 13px; margin-top: 12px; color: var(--rust); }
+</style>
+<script>
+  // Se ejecuta de inmediato, antes de pintar la página, para no mostrar "Proveedores" ni un instante
+  // si venimos con ?tab=productos o ?editar=ID en la URL.
+  (function() {
+    var params = new URLSearchParams(window.location.search);
+    if (params.get('tab') === 'productos' || params.get('editar')) {
+      document.documentElement.classList.add('forzar-productos');
+    }
+  })();
+</script>
+</head>
+<body>
+
+<header>
+  <div class="brand-mark"><img src="logo-nicom.png" alt="Nicom Tech Solutions" class="brand-logo"></div>
+  <nav class="nav-bar">
+    <a class="nav-pill activo" href="dashboard.html?tab=productos">Productos</a>
+    <a class="nav-pill" href="importar-precios.html">Importar precios</a>
+    <a class="nav-pill" href="analizar-competencia.html">Análisis de competencia</a>
+    <a class="nav-pill" href="ventas.html">Ventas</a>
+    <a class="nav-pill" href="cotizaciones.html">Cotizaciones</a>
+    <a class="nav-pill" href="publicaciones-ml.html">Publicado en ML</a>
+    <a class="nav-pill" href="catalogo.html" target="_blank" rel="noopener">Catálogo</a>
+  </nav>
+  <div class="rate-strip">
+    <span>BCV <b class="gold" id="rate-bcv">—</b></span>
+    <span>Binance <b class="teal" id="rate-binance">—</b></span>
+  </div>
+  <div class="who" id="who">Cargando sesión…</div>
+</header>
+
+<main>
+  <div class="tabs">
+    <button class="tab active" id="tab-proveedores" onclick="switchView('proveedores', this)">Proveedores</button>
+    <button class="tab" id="tab-productos" onclick="switchView('productos', this)">Productos</button>
+  </div>
+
+  <!-- PROVEEDORES -->
+  <section class="view active" id="view-proveedores">
+    <div class="panel">
+      <h2>Nuevo proveedor</h2>
+      <div class="grid-form">
+        <div>
+          <label for="prov-nombre">Nombre</label>
+          <input type="text" id="prov-nombre" placeholder="Ej: Braincorp">
+        </div>
+        <div>
+          <label for="prov-contacto">Contacto</label>
+          <input type="text" id="prov-contacto" placeholder="Teléfono / correo">
+        </div>
+        <div>
+          <label for="prov-notas">Notas</label>
+          <input type="text" id="prov-notas" placeholder="Opcional">
+        </div>
+        <button class="add" onclick="crearProveedor()">Agregar</button>
+      </div>
+      <div class="msg" id="msg-proveedor"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Proveedores registrados</h2>
+      <table id="tabla-proveedores">
+        <thead>
+          <tr><th>Nombre</th><th>Contacto</th><th>Notas</th><th>Agregado por</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <div class="empty" id="empty-proveedores" style="display:none;">Todavía no hay proveedores cargados.</div>
+    </div>
+  </section>
+
+  <!-- PRODUCTOS -->
+  <section class="view" id="view-productos">
+
+    <div class="panel">
+      <h2>Condiciones de venta predeterminadas</h2>
+      <div class="hint" style="margin-top:0;">Este texto se precarga solo en "Descripción de la publicación" de cada producto <b>nuevo</b> (no toca los productos que ya guardaste) — así no tenés que reescribir lo mismo cada vez. Lo podés editar por producto si ese caso es distinto, y podés cambiar este predeterminado cuando quieras.</div>
+      <div class="grid-form" style="margin-top:14px;">
+        <div>
+          <label for="cfg-envio">Forma de envío</label>
+          <input type="text" id="cfg-envio" placeholder="Ej: Mercado Envíos / Acordar con el comprador">
+        </div>
+        <div>
+          <label for="cfg-pago">Condiciones de pago</label>
+          <input type="text" id="cfg-pago" placeholder="Ej: Efectivo, Zelle, Pago Móvil, Bs a tasa BCV">
+        </div>
+        <div>
+          <label for="cfg-horario">Horario de atención</label>
+          <input type="text" id="cfg-horario" placeholder="Ej: Lunes a viernes, 9am - 5pm">
+        </div>
+        <button class="add" onclick="guardarConfiguracionVentas()">Guardar predeterminados</button>
+      </div>
+      <div class="msg" id="msg-configuracion-ventas"></div>
+    </div>
+
+    <div class="panel">
+      <h2>Márgenes automáticos por categoría</h2>
+      <div class="grid-form">
+        <div>
+          <label for="cat-nombre">Categoría</label>
+          <input type="text" id="cat-nombre" placeholder="Ej: Almacenamiento">
+        </div>
+        <div>
+          <label for="cat-tipo">Tipo de ganancia</label>
+          <select id="cat-tipo">
+            <option value="neta">Neta (después de comisión)</option>
+            <option value="fijo">Bruta (antes de comisión)</option>
+          </select>
+        </div>
+        <div>
+          <label for="cat-pct">Porcentaje (%)</label>
+          <input type="number" step="0.5" id="cat-pct" placeholder="25">
+        </div>
+        <button class="add" onclick="guardarMargenCategoria()">Guardar</button>
+      </div>
+      <div class="msg" id="msg-categoria"></div>
+      <div id="lista-margenes-categoria" style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap;"></div>
+    </div>
+
+    <div class="panel">
+      <h2 id="titulo-form-producto">Nuevo producto</h2>
+      <div class="grid-form">
+        <div>
+          <label for="prod-proveedor">Proveedor</label>
+          <select id="prod-proveedor"></select>
+        </div>
+        <div>
+          <label for="prod-nombre">Nombre del producto</label>
+          <input type="text" id="prod-nombre" placeholder="Ej: SSD Hiksemi 1TB">
+        </div>
+        <div>
+          <label for="prod-categoria">Categoría</label>
+          <input type="text" id="prod-categoria" placeholder="Ej: Almacenamiento" list="lista-categorias" onchange="aplicarMargenPorCategoria('prod')">
+          <datalist id="lista-categorias"></datalist>
+        </div>
+        <div>
+          <label for="prod-costo">Costo proveedor (USD)</label>
+          <input type="number" step="0.01" id="prod-costo" placeholder="157.00" oninput="sincronizarGanancia('prod','usd')">
+        </div>
+        <div>
+          <label for="prod-modo-ganancia">Tipo de ganancia</label>
+          <select id="prod-modo-ganancia" onchange="sincronizarGanancia('prod','tipo')">
+            <option value="fijo">Bruta (antes de comisión)</option>
+            <option value="neta">Neta (después de comisión)</option>
+          </select>
+        </div>
+        <div>
+          <label for="prod-valor-ganancia">Ganancia en $</label>
+          <input type="number" step="0.01" id="prod-valor-ganancia" value="30" oninput="sincronizarGanancia('prod','usd')">
+        </div>
+        <div>
+          <label for="prod-valor-ganancia-pct">Ganancia en %</label>
+          <input type="number" step="0.01" id="prod-valor-ganancia-pct" oninput="sincronizarGanancia('prod','pct')">
+        </div>
+        <div>
+          <label for="prod-tipo-publicacion">Tipo de publicación</label>
+          <select id="prod-tipo-publicacion" onchange="aplicarTipoPublicacion('prod')">
+            <option value="11">Clásica (11%)</option>
+            <option value="15">Premium (15%)</option>
+            <option value="custom">Personalizada</option>
+          </select>
+        </div>
+        <div>
+          <label for="prod-comision">Comisión ML (%)</label>
+          <input type="number" step="0.5" id="prod-comision" value="11" oninput="sincronizarGanancia('prod','tipo')">
+        </div>
+      </div>
+      <div id="comparacion-comisiones" style="display:none; margin-top:14px; padding:12px 14px; background:var(--surface-2); border:1px solid var(--line);"></div>
+
+      <div class="grid-form" style="margin-top:18px; padding-top:18px; border-top:1px solid var(--line);">
+        <div style="grid-column: 1 / -1;">
+          <label for="prod-descripcion">Descripción de la publicación</label>
+          <textarea id="prod-descripcion" rows="4" placeholder="Especificaciones, garantía, qué incluye..."></textarea>
+          <div style="display:flex; align-items:center; gap:10px; margin-top:2px; flex-wrap:wrap;">
+            <button type="button" class="btn-ia" id="btn-generar-descripcion" onclick="generarDescripcionIA()">✨ Generar con IA</button>
+            <span id="msg-descripcion-ia" style="font-size:12px; color:var(--muted);"></span>
+          </div>
+          <div class="hint" style="margin-top:6px;">Usa el nombre, la marca, el SKU y la categoría del producto para redactar una descripción — no inventa specs ni garantías que no le hayas cargado. Revisa el resultado antes de guardar.</div>
+        </div>
+        <div style="grid-column: 1 / -1;">
+          <label>Características técnicas</label>
+          <div id="lista-caracteristicas" style="display:flex; flex-direction:column; gap:6px;"></div>
+          <button type="button" onclick="agregarFilaCaracteristica()" style="margin-top:8px; padding:7px 12px; font-size:12.5px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line); cursor:pointer;">+ Agregar característica</button>
+          <div class="hint" style="margin-top:6px;">Se completan solas con "✨ Generar con IA" arriba (incluye la Marca), o agrégalas/edítalas a mano. Se guardan con el producto y se usan para intentar rellenar las columnas técnicas del Excel de Mercado Libre.</div>
+        </div>
+        <div>
+          <label for="prod-condicion">Condición</label>
+          <select id="prod-condicion">
+            <option value="nuevo">Nuevo</option>
+            <option value="usado">Usado</option>
+          </select>
+        </div>
+        <div>
+          <label for="prod-stock">Stock disponible</label>
+          <input type="number" step="1" id="prod-stock" value="1">
+        </div>
+        <div>
+          <label for="prod-envio">Forma de envío</label>
+          <input type="text" id="prod-envio" placeholder="Ej: Mercado Envíos / Acordar con el comprador">
+        </div>
+        <div>
+          <label for="prod-pago">Condiciones de pago</label>
+          <input type="text" id="prod-pago" placeholder="Ej: Efectivo, Zelle, Pago Móvil, Bs a tasa BCV">
+        </div>
+        <div>
+          <label for="prod-horario">Horario de atención</label>
+          <input type="text" id="prod-horario" placeholder="Ej: Lunes a viernes, 9am - 5pm">
+        </div>
+        <div style="grid-column: 1 / -1;">
+          <label for="prod-imagenes">Imágenes (URLs separadas por coma)</label>
+          <input type="text" id="prod-imagenes" placeholder="https://... , https://..." oninput="actualizarPrevisualizacionFotos()">
+          <div style="display:flex; align-items:center; gap:10px; margin-top:8px; flex-wrap:wrap;">
+            <label for="input-subir-fotos" class="add" style="padding:7px 14px; font-size:12.5px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line); cursor:pointer; display:inline-block; margin-top:0;">📷 Subir fotos</label>
+            <input type="file" id="input-subir-fotos" accept="image/jpeg,image/png,image/webp" multiple style="display:none;" onchange="subirFotosProducto(this.files)">
+            <span style="font-size:12px; color:var(--muted);">o toma una captura de pantalla y pega aquí con <strong>Ctrl+V</strong> (se abre un editor para recortar fondo/mejorarla antes de guardarla)</span>
+            <span id="msg-subida-fotos" style="font-size:12px; color:var(--muted);"></span>
+          </div>
+          <div class="hint" style="margin-top:6px;">Sube las fotos aquí (se alojan con link público, listas para usar también en la planilla de publicación masiva de Mercado Libre) o pega URLs de fotos ya alojadas en otro sitio, arriba.</div>
+          <div id="previsualizacion-fotos" style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;"></div>
+        </div>
+        <button class="add" id="btn-guardar-producto" onclick="crearProducto()">Agregar y calcular</button>
+        <button class="add" id="btn-cancelar-edicion" onclick="cancelarEdicion()" style="display:none; background:var(--surface-2); color:var(--paper); border:1px solid var(--line);">Cancelar edición</button>
+      </div>
+      <div class="msg" id="msg-producto"></div>
+    </div>
+
+    <div class="panel" style="padding-top:0;">
+      <div id="bloque-sticky-productos" style="position:sticky; z-index:25; background:var(--surface); padding-top:22px; padding-bottom:4px;">
+      <h2>Productos con margen calculado</h2>
+
+      <div style="display:flex; gap:12px; align-items:end; flex-wrap:wrap; margin-bottom:16px; padding-bottom:16px; border-bottom:1px solid var(--line);">
+        <div>
+          <label for="bulk-porcentaje" style="display:block; font-size:12px; color:var(--muted); margin-bottom:6px;">Aplicar % de ganancia a los seleccionados</label>
+          <div style="display:flex; gap:8px;">
+            <input type="number" step="0.5" id="bulk-porcentaje" placeholder="Ej: 25" style="width:100px; background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:9px 10px; font-size:14px;">
+            <button class="add" id="btn-aplicar-masivo" style="padding:9px 16px; font-size:13px;" onclick="aplicarPorcentajeMasivo()">Aplicar</button>
+            <button class="add" id="btn-detener-masivo" style="display:none; padding:9px 16px; font-size:13px; background:var(--rust); color:var(--paper);" onclick="detenerAplicacionMasiva()">Detener</button>
+            <button class="add" id="btn-revertir-masivo" style="display:none; padding:9px 16px; font-size:13px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line);" onclick="revertirAplicacionMasiva()">Revertir cambios</button>
+          </div>
+        </div>
+        <div style="flex:1;"></div>
+        <button class="add" style="padding:9px 16px; font-size:13px; background:var(--rust); color:var(--paper);" onclick="eliminarSeleccionados()">Eliminar seleccionados</button>
+        <button class="add" style="padding:9px 16px; font-size:13px; background:var(--surface-2); color:var(--rust); border:1px solid var(--rust);" onclick="eliminarTodos()">Eliminar todos</button>
+        <button class="add" style="padding:9px 16px; font-size:13px; background:var(--teal); color:var(--ink);" onclick="compararSeleccionadosEnCompetencia()">Comparar en Mercado Libre →</button>
+      </div>
+      <div class="msg" id="msg-bulk"></div>
+
+      <div style="display:flex; gap:12px; align-items:end; flex-wrap:wrap; margin-bottom:16px;">
+        <div style="flex:1; min-width:220px;">
+          <label for="filtro-busqueda" style="display:block; font-size:12px; color:var(--muted); margin-bottom:6px;">Buscar por nombre, código, marca o característica</label>
+          <input type="text" id="filtro-busqueda" placeholder="Ej: SSD, RGB, HIKSEMI, RG-AP180..." oninput="aplicarFiltrosProductos()" style="width:100%; background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:9px 10px; font-size:14px;">
+        </div>
+        <div>
+          <label for="filtro-precio" style="display:block; font-size:12px; color:var(--muted); margin-bottom:6px;">Rango de precio (Ref. BCV)</label>
+          <select id="filtro-precio" onchange="aplicarFiltrosProductos()" style="background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:9px 10px; font-size:14px;">
+            <option value="">Todos los precios</option>
+            <option value="0-100">$0 – $100</option>
+            <option value="101-200">$101 – $200</option>
+            <option value="201-300">$201 – $300</option>
+            <option value="301-500">$301 – $500</option>
+            <option value="501-1000">$501 – $1000</option>
+            <option value="1001-999999">Más de $1000</option>
+          </select>
+        </div>
+        <div>
+          <label for="filtro-costo" style="display:block; font-size:12px; color:var(--muted); margin-bottom:6px;">Rango de costo proveedor</label>
+          <select id="filtro-costo" onchange="aplicarFiltrosProductos()" style="background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:9px 10px; font-size:14px;">
+            <option value="">Todos los costos</option>
+            <option value="0-100">$0 – $100</option>
+            <option value="101-200">$101 – $200</option>
+            <option value="201-300">$201 – $300</option>
+            <option value="301-500">$301 – $500</option>
+            <option value="501-1000">$501 – $1000</option>
+            <option value="1001-999999">Más de $1000</option>
+          </select>
+        </div>
+        <div>
+          <label for="filtro-proveedor" style="display:block; font-size:12px; color:var(--muted); margin-bottom:6px;">Proveedor</label>
+          <select id="filtro-proveedor" onchange="aplicarFiltrosProductos()" style="background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:9px 10px; font-size:14px;">
+            <option value="">Todos los proveedores</option>
+          </select>
+        </div>
+        <div>
+          <label for="filtro-categoria" style="display:block; font-size:12px; color:var(--muted); margin-bottom:6px;">Categoría</label>
+          <select id="filtro-categoria" onchange="aplicarFiltrosProductos()" style="background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:9px 10px; font-size:14px;">
+            <option value="">Todas las categorías</option>
+          </select>
+        </div>
+        <div>
+          <label for="filtro-estado-pub" style="display:block; font-size:12px; color:var(--muted); margin-bottom:6px;">Estado de publicación</label>
+          <select id="filtro-estado-pub" onchange="aplicarFiltrosProductos()" style="background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:9px 10px; font-size:14px;">
+            <option value="">Todos los estados</option>
+            <option value="listo">🟢 Listo para publicar</option>
+            <option value="publicado">🔵 Ya publicado en ML</option>
+            <option value="borrador">⚪ Borrador (sin terminar)</option>
+          </select>
+        </div>
+        <div id="contador-resultados" style="font-size:12px; color:var(--muted); padding-bottom:10px;"></div>
+        <button class="add" style="padding:9px 14px; font-size:12.5px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line);" onclick="limpiarFiltrosProductos()">Limpiar filtros</button>
+      </div>
+      </div>
+
+      <div style="overflow-x:auto;">
+      <table id="tabla-productos" style="min-width: 1000px;">
+        <thead>
+          <tr>
+            <th><input type="checkbox" id="chk-todos" onchange="toggleTodos(this)"></th>
+            <th style="min-width:220px;">Producto</th><th>Proveedor</th>
+            <th>Estado</th>
+            <th class="num">Stock</th>
+            <th class="num">Costo</th>
+            <th class="num" style="color:var(--teal)">Precio final al cliente ($ Ref. BCV)</th>
+            <th class="num">Precio Bs (BCV)</th>
+            <th class="num">Precio efectivo (cash)</th>
+            <th class="num">Ganancia deseada</th>
+            <th class="num">Comisión ML $</th>
+            <th class="num">Ganancia neta $</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      </div>
+      <div class="empty" id="empty-productos" style="display:none;">Todavía no hay productos cargados.</div>
+      <div id="paginacion-productos"></div>
+    </div>
+
+    <div class="panel" style="padding: 12px 22px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;" onclick="toggleZonaLimpieza()">
+        <span style="font-size:12.5px; color:var(--muted);">⚠ Zona de limpieza de base de datos</span>
+        <span id="icono-limpieza" style="font-size:12px; color:var(--muted);">Mostrar ▾</span>
+      </div>
+      <div id="contenido-limpieza" style="display:none; margin-top:14px;">
+      <div class="hint" style="margin-top:0;">Borra productos y sus publicaciones de forma permanente, de un proveedor específico o de todos. Antes de borrar se descarga un respaldo automático y queda un registro de quién lo hizo, cuándo y cuántos productos.</div>
+      <div style="display:flex; gap:12px; align-items:end; flex-wrap:wrap; margin-top:14px;">
+        <div>
+          <label for="limpieza-proveedor" style="display:block; font-size:12px; color:var(--muted); margin-bottom:6px;">Proveedor a limpiar</label>
+          <select id="limpieza-proveedor" style="background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:9px 10px; font-size:14px; min-width:240px;">
+            <option value="">Todos los proveedores (TODO el catálogo)</option>
+          </select>
+        </div>
+        <button class="add" style="padding:9px 16px; font-size:13px; background:var(--rust); color:var(--paper);" onclick="ejecutarLimpieza()">Limpiar base de datos</button>
+        <button class="add" style="padding:9px 16px; font-size:13px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line);" onclick="verHistorialLimpieza()">Ver historial de limpiezas</button>
+      </div>
+      <div class="msg" id="msg-limpieza"></div>
+      <div id="historial-limpieza" style="display:none; margin-top:14px; font-size:12.5px; color:var(--muted); line-height:1.8;"></div>
+      </div>
+    </div>
+
+    <div class="panel" style="padding: 12px 22px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;" onclick="toggleProductosSinCategoria()">
+        <span style="font-size:12.5px; color:var(--muted);">📦 Productos sin categoría <span id="conteo-sin-categoria" style="color:var(--rust);"></span></span>
+        <span id="icono-sin-categoria" style="font-size:12px; color:var(--muted);">Mostrar ▾</span>
+      </div>
+      <div id="contenido-sin-categoria" style="display:none; margin-top:14px;">
+        <div class="hint" style="margin-top:0;">Productos que todavía no tienen categoría asignada. Haz clic en uno para abrirlo completo — nombre, descripción, precio, imágenes — revisarlo con calma y asignarle su categoría correspondiente.</div>
+        <div id="lista-sin-categoria" style="max-height: 320px; overflow-y: auto; border: 1px solid var(--line); margin-top: 12px;"></div>
+      </div>
+    </div>
+
+    <div class="panel" style="padding: 12px 22px;">
+      <div style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;" onclick="toggleGestionCategorias()">
+        <span style="font-size:12.5px; color:var(--muted);">🏷 Gestionar categorías</span>
+        <span id="icono-categorias" style="font-size:12px; color:var(--muted);">Mostrar ▾</span>
+      </div>
+      <div id="contenido-categorias" style="display:none; margin-top:14px;">
+        <div class="hint" style="margin-top:0;">Categorías que hay hoy en el catálogo (por ejemplo, valores numéricos sueltos que quedaron de una importación con la columna mal detectada). Selecciona las que no te interesan y vacíalas — los productos NO se borran, solo quedan sin categoría — o renómbralas todas de una vez a un nombre correcto.</div>
+        <div id="lista-gestion-categorias" style="max-height: 260px; overflow-y: auto; border: 1px solid var(--line); margin-top: 12px;"></div>
+        <div style="display:flex; gap:10px; align-items:end; flex-wrap:wrap; margin-top:14px;">
+          <button class="add" style="padding:9px 16px; font-size:13px; background:var(--rust); color:var(--paper);" onclick="vaciarCategoriasSeleccionadas()">Vaciar seleccionadas (quitar categoría)</button>
+          <div>
+            <label for="categoria-nuevo-nombre" style="display:block; font-size:12px; color:var(--muted); margin-bottom:6px;">Renombrar seleccionadas a</label>
+            <input type="text" id="categoria-nuevo-nombre" placeholder="Ej: Redes" style="background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:9px 10px; font-size:14px; min-width:200px;">
+          </div>
+          <button class="add" style="padding:9px 16px; font-size:13px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line);" onclick="renombrarCategoriasSeleccionadas()">Renombrar seleccionadas</button>
+        </div>
+        <div class="msg" id="msg-categorias"></div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div id="modal-desglose" style="display:none; position:fixed; inset:0; background:rgba(15,27,23,0.85); z-index:50; align-items:center; justify-content:center; padding:24px;">
+  <div style="background:var(--surface); border:1px solid var(--line); max-width:620px; width:100%; max-height:85vh; overflow-y:auto; padding:28px;">
+    <div style="display:flex; justify-content:space-between; align-items:start; margin-bottom:18px;">
+      <h2 style="font-family:'Fraunces',serif; font-weight:400; font-size:20px; margin:0;" id="desglose-titulo">Desglose del cálculo</h2>
+      <button onclick="document.getElementById('modal-desglose').style.display='none'" style="background:none; border:none; color:var(--muted); font-size:20px; cursor:pointer; line-height:1;">×</button>
+    </div>
+    <pre id="desglose-contenido" style="white-space:pre-wrap; font-family:'IBM Plex Mono',monospace; font-size:12.5px; line-height:1.7; color:var(--paper); margin:0;"></pre>
+  </div>
+</div>
+
+<div id="modal-editor-foto" style="display:none; position:fixed; inset:0; background:rgba(15,27,23,0.85); z-index:60; align-items:center; justify-content:center; padding:24px;">
+  <div style="background:var(--surface); border:1px solid var(--line); max-width:560px; width:100%; max-height:90vh; overflow-y:auto; padding:24px;">
+    <div style="display:flex; justify-content:space-between; align-items:start; margin-bottom:14px;">
+      <h2 style="font-family:'Fraunces',serif; font-weight:400; font-size:19px; margin:0;">Editar foto pegada</h2>
+      <button type="button" onclick="cerrarEditorFoto()" style="background:none; border:none; color:var(--muted); font-size:20px; cursor:pointer; line-height:1;">×</button>
+    </div>
+    <div style="background-image:repeating-conic-gradient(#3a3a3a 0% 25%, #2a2a2a 0% 50%); background-size:16px 16px; display:flex; align-items:center; justify-content:center; min-height:220px; border:1px solid var(--line);">
+      <canvas id="canvas-editor-foto" style="max-width:100%; max-height:400px; display:block;"></canvas>
+    </div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:14px;">
+      <button type="button" class="btn-ia" onclick="editorQuitarFondo()">🪄 Quitar fondo</button>
+      <button type="button" class="btn-ia" onclick="editorMejorarImagen()">✨ Mejorar automático</button>
+      <button type="button" onclick="editorDeshacer()" style="padding:9px 14px; font-size:12.5px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line); cursor:pointer;">↩ Deshacer</button>
+    </div>
+    <div id="msg-editor-foto" style="font-size:12px; color:var(--muted); margin-top:8px; min-height:14px;"></div>
+    <div class="hint" style="margin-top:6px;">"Quitar fondo" funciona mejor con fotos de fondo parejo (blanco, gris, una mesa lisa). Si el resultado no queda limpio, usa "Deshacer" e inténtalo con otra captura.</div>
+    <div style="display:flex; gap:8px; margin-top:16px; justify-content:flex-end;">
+      <button type="button" onclick="cerrarEditorFoto()" style="padding:9px 16px; font-size:13px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line); cursor:pointer;">Cancelar</button>
+      <button type="button" class="add" onclick="guardarFotoEditada()">Guardar foto</button>
+    </div>
+  </div>
+</div>
+
+<div id="modal-ventas" style="display:none; position:fixed; inset:0; background:rgba(15,27,23,0.85); z-index:50; align-items:center; justify-content:center; padding:24px;">
+  <div style="background:var(--surface); border:1px solid var(--line); max-width:680px; width:100%; max-height:85vh; overflow-y:auto; padding:28px;">
+    <div style="display:flex; justify-content:space-between; align-items:start; margin-bottom:18px;">
+      <h2 style="font-family:'Fraunces',serif; font-weight:400; font-size:20px; margin:0;" id="ventas-titulo">Historial de ventas</h2>
+      <button onclick="document.getElementById('modal-ventas').style.display='none'" style="background:none; border:none; color:var(--muted); font-size:20px; cursor:pointer; line-height:1;">×</button>
+    </div>
+    <div id="ventas-resumen" style="display:flex; gap:24px; margin-bottom:18px; font-size:13px; color:var(--muted);"></div>
+    <div style="overflow-x:auto;">
+    <table style="width:100%; border-collapse:collapse; font-size:13px;">
+      <thead>
+        <tr>
+          <th style="text-align:left; font-size:11px; color:var(--muted); font-weight:500; padding:8px 10px; border-bottom:1px solid var(--line);">Fecha</th>
+          <th style="text-align:right; font-size:11px; color:var(--muted); font-weight:500; padding:8px 10px; border-bottom:1px solid var(--line);">Cant.</th>
+          <th style="text-align:right; font-size:11px; color:var(--muted); font-weight:500; padding:8px 10px; border-bottom:1px solid var(--line);">Cobrado</th>
+          <th style="text-align:left; font-size:11px; color:var(--muted); font-weight:500; padding:8px 10px; border-bottom:1px solid var(--line);">Método</th>
+          <th style="text-align:left; font-size:11px; color:var(--muted); font-weight:500; padding:8px 10px; border-bottom:1px solid var(--line);">Canal</th>
+        </tr>
+      </thead>
+      <tbody id="ventas-tbody"></tbody>
+    </table>
+    </div>
+    <div id="ventas-vacio" style="display:none; color:var(--muted); font-size:14px; text-align:center; padding:24px 0;">Este producto todavía no tiene ventas registradas.</div>
+  </div>
+</div>
+
+<script type="module">
+  import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+  const SUPABASE_URL = 'https://tkhzuopapvclmcgxyood.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_KQB6B6uLIPr-xKdNDc8iEw_7tcWM5gS';
+  const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  let tasaBCV = null, tasaBinance = null;
+  let tenantIdActual = null; // necesario para armar la ruta de subida de fotos (ver revisarSubidaImagenes)
+
+  window.switchView = function(view, btn) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    if (btn) btn.classList.add('active');
+    document.getElementById('view-' + view).classList.add('active');
+  };
+
+  async function checkSession() {
+    const { data: { session } } = await supabase.auth.getSession();
+    const who = document.getElementById('who');
+    if (!session) {
+      who.textContent = 'No hay sesión — inicia sesión en login.html';
+      who.style.color = '#C1553B';
+      return null;
+    }
+    who.textContent = session.user.email;
+
+    const { data: perfil } = await supabase.from('profiles').select('tenant_id').eq('id', session.user.id).single();
+    tenantIdActual = perfil?.tenant_id || null;
+
+    return session.user;
+  }
+
+  async function cargarTasas() {
+    const { data, error } = await supabase
+      .from('tasas_cambio')
+      .select('*')
+      .order('fecha', { ascending: false })
+      .limit(1)
+      .single();
+    if (data) {
+      tasaBCV = parseFloat(data.tasa_bcv);
+      tasaBinance = parseFloat(data.tasa_binance);
+      document.getElementById('rate-bcv').textContent = tasaBCV.toFixed(2);
+      document.getElementById('rate-binance').textContent = tasaBinance.toFixed(2);
+    }
+  }
+
+  async function cargarProveedores() {
+    const { data, error } = await supabase
+      .from('proveedores')
+      .select('id, nombre, contacto, notas, profiles(nombre)')
+      .order('created_at', { ascending: false });
+
+    const tbody = document.querySelector('#tabla-proveedores tbody');
+    const empty = document.getElementById('empty-proveedores');
+    tbody.innerHTML = '';
+
+    if (!data || data.length === 0) {
+      empty.style.display = 'block';
+    } else {
+      empty.style.display = 'none';
+      data.forEach(p => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${escapeHtml(p.nombre)}</td><td>${escapeHtml(p.contacto || '—')}</td><td>${escapeHtml(p.notas || '—')}</td><td>${escapeHtml(p.profiles?.nombre || '—')}</td>`;
+        tbody.appendChild(tr);
+      });
+    }
+
+    // refrescar el selector del formulario de productos
+    const select = document.getElementById('prod-proveedor');
+    select.innerHTML = '<option value="">Selecciona un proveedor</option>';
+    (data || []).forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = p.nombre;
+      select.appendChild(opt);
+    });
+
+    // refrescar el selector del filtro de proveedor en la tabla de productos
+    const filtroProveedor = document.getElementById('filtro-proveedor');
+    const valorPrevio = filtroProveedor.value;
+    filtroProveedor.innerHTML = '<option value="">Todos los proveedores</option>';
+    (data || []).forEach(p => {
+      const opt = document.createElement('option');
+      opt.value = p.id;
+      opt.textContent = p.nombre;
+      filtroProveedor.appendChild(opt);
+    });
+    filtroProveedor.value = valorPrevio;
+
+    // refrescar el selector de la zona de limpieza de base de datos
+    const limpiezaProveedor = document.getElementById('limpieza-proveedor');
+    if (limpiezaProveedor) {
+      limpiezaProveedor.innerHTML = '<option value="">Todos los proveedores (TODO el catálogo)</option>';
+      (data || []).forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = p.nombre;
+        limpiezaProveedor.appendChild(opt);
+      });
+    }
+  }
+
+  // Condiciones de venta predeterminadas: un único renglón por cuenta (tenant) con el texto que
+  // se precarga en "Forma de envío / Condiciones de pago / Horario de atención" cada vez que se
+  // abre el formulario para un producto NUEVO. No se aplica al editar un producto existente,
+  // porque ese producto ya tiene sus propios valores guardados (que pueden ser distintos).
+  let configuracionVentasCache = { forma_envio_default: '', condiciones_pago_default: '', horario_atencion_default: '' };
+
+  async function cargarConfiguracionVentas() {
+    const { data } = await supabase.from('configuracion_ventas').select('*').maybeSingle();
+    if (data) {
+      configuracionVentasCache = {
+        forma_envio_default: data.forma_envio_default || '',
+        condiciones_pago_default: data.condiciones_pago_default || '',
+        horario_atencion_default: data.horario_atencion_default || ''
+      };
+    }
+    document.getElementById('cfg-envio').value = configuracionVentasCache.forma_envio_default;
+    document.getElementById('cfg-pago').value = configuracionVentasCache.condiciones_pago_default;
+    document.getElementById('cfg-horario').value = configuracionVentasCache.horario_atencion_default;
+  }
+
+  window.guardarConfiguracionVentas = async function() {
+    const msg = document.getElementById('msg-configuracion-ventas');
+    const forma_envio_default = document.getElementById('cfg-envio').value.trim();
+    const condiciones_pago_default = document.getElementById('cfg-pago').value.trim();
+    const horario_atencion_default = document.getElementById('cfg-horario').value.trim();
+
+    const { error } = await supabase.from('configuracion_ventas')
+      .upsert({ forma_envio_default, condiciones_pago_default, horario_atencion_default, updated_at: new Date().toISOString() });
+
+    if (error) {
+      msg.style.color = 'var(--rust)';
+      msg.textContent = 'Error al guardar: ' + error.message;
+      return;
+    }
+    configuracionVentasCache = { forma_envio_default, condiciones_pago_default, horario_atencion_default };
+    msg.style.color = 'var(--teal)';
+    msg.textContent = 'Guardado — de ahora en más, los productos nuevos arrancan con este texto.';
+    // Si el formulario está en modo "producto nuevo" (no editando uno existente), se actualiza
+    // también lo que ya se ve en pantalla, para no tener que recargar la página.
+    if (editandoProductoId === null) aplicarPredeterminadosVenta();
+  };
+
+  // Solo toca los 3 campos si están vacíos, para no pisar algo que el usuario ya haya escrito
+  // en esta misma sesión antes de guardar los predeterminados.
+  function aplicarPredeterminadosVenta() {
+    const envio = document.getElementById('prod-envio');
+    const pago = document.getElementById('prod-pago');
+    const horario = document.getElementById('prod-horario');
+    if (envio && !envio.value) envio.value = configuracionVentasCache.forma_envio_default;
+    if (pago && !pago.value) pago.value = configuracionVentasCache.condiciones_pago_default;
+    if (horario && !horario.value) horario.value = configuracionVentasCache.horario_atencion_default;
+  }
+
+  let productosCache = {};
+  let margenesCategoriaCache = {};
+
+  async function cargarMargenesCategoria() {
+    const { data } = await supabase.from('categorias_margen').select('*').order('categoria');
+    margenesCategoriaCache = {};
+    const datalist = document.getElementById('lista-categorias');
+    const lista = document.getElementById('lista-margenes-categoria');
+    datalist.innerHTML = '';
+    lista.innerHTML = '';
+
+    (data || []).forEach(c => {
+      margenesCategoriaCache[normalizarCategoria(c.categoria)] = c;
+      const opt = document.createElement('option');
+      opt.value = c.categoria;
+      datalist.appendChild(opt);
+
+      const pill = document.createElement('span');
+      pill.className = 'pill';
+      pill.style.cursor = 'pointer';
+      pill.title = 'Clic para eliminar';
+      pill.textContent = `${c.categoria}: ${c.margen_pct}% (${c.tipo_ganancia === 'neta' ? 'neta' : 'bruta'})`;
+      pill.onclick = () => eliminarMargenCategoria(c.id);
+      lista.appendChild(pill);
+    });
+  }
+
+  function normalizarCategoria(str) {
+    return str.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  }
+
+  window.guardarMargenCategoria = async function() {
+    const msg = document.getElementById('msg-categoria');
+    const categoria = document.getElementById('cat-nombre').value.trim();
+    const tipo = document.getElementById('cat-tipo').value;
+    const pct = parseFloat(document.getElementById('cat-pct').value);
+
+    if (!categoria || isNaN(pct)) { msg.textContent = 'Escribe la categoría y el porcentaje.'; return; }
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const { error } = await supabase.from('categorias_margen')
+      .upsert({ categoria, tipo_ganancia: tipo, margen_pct: pct, creado_por: session?.user?.id }, { onConflict: 'categoria' });
+
+    if (error) { msg.style.color = 'var(--rust)'; msg.textContent = 'Error: ' + error.message; return; }
+    msg.style.color = 'var(--teal)';
+    msg.textContent = `Guardado: ${categoria} → ${pct}%`;
+    document.getElementById('cat-nombre').value = '';
+    document.getElementById('cat-pct').value = '';
+    cargarMargenesCategoria();
+  };
+
+  window.eliminarMargenCategoria = async function(id) {
+    if (!confirm('¿Eliminar este margen automático?')) return;
+    await supabase.from('categorias_margen').delete().eq('id', id);
+    cargarMargenesCategoria();
+  };
+
+  window.aplicarMargenPorCategoria = function(prefix) {
+    const categoria = document.getElementById(prefix + '-categoria').value;
+    const match = margenesCategoriaCache[normalizarCategoria(categoria)];
+    if (!match) return;
+
+    document.getElementById(prefix + '-modo-ganancia').value = match.tipo_ganancia;
+    document.getElementById(prefix + '-valor-ganancia-pct').value = match.margen_pct;
+    sincronizarGanancia(prefix, 'pct');
+  };
+
+  async function cargarProductos() {
+    const columnas = 'id, nombre, categoria, costo_usd, sku, especificaciones, proveedores(id, nombre), publicaciones(id, precio_efectivo_usd, precio_bcv_usd_equiv, precio_bcv_bs, ganancia_real_usd, comision_ml_usd, ganancia_neta_usd, modo_ganancia, margen_objetivo_pct, comision_ml_pct, descripcion, condicion, stock, forma_envio, condiciones_pago, horario_atencion, imagenes, estado)';
+    const TAMANO_BLOQUE = 1000;
+    let desde = 0;
+    let todosLosDatos = [];
+
+    while (true) {
+      const { data, error } = await supabase
+        .from('productos')
+        .select(columnas)
+        .order('created_at', { ascending: false })
+        .range(desde, desde + TAMANO_BLOQUE - 1);
+
+      if (error || !data || data.length === 0) break;
+      todosLosDatos = todosLosDatos.concat(data);
+      if (data.length < TAMANO_BLOQUE) break;
+      desde += TAMANO_BLOQUE;
+    }
+
+    productosCache = {};
+    todosLosDatos.forEach(p => {
+      const pub = (p.publicaciones && p.publicaciones[0]) || {};
+      productosCache[p.id] = { ...p, pub };
+    });
+
+    actualizarFiltroCategorias();
+    renderizarTablaProductos();
+    actualizarProductosSinCategoria();
+  }
+
+  // --- Productos sin categoría: lista aparte para revisar cada producto completo
+  // (nombre, descripción, precio, imágenes, etc.) antes de decidir en qué categoría va,
+  // en vez de tener que adivinar a partir de solo el nombre en la tabla general. ---
+
+  function productosSinCategoria() {
+    return Object.values(productosCache).filter(p => !(p.categoria || '').trim());
+  }
+
+  function actualizarProductosSinCategoria() {
+    const sinCategoria = productosSinCategoria();
+    const conteoSpan = document.getElementById('conteo-sin-categoria');
+    if (conteoSpan) conteoSpan.textContent = sinCategoria.length > 0 ? `(${sinCategoria.length})` : '';
+    const cont = document.getElementById('contenido-sin-categoria');
+    if (cont && cont.style.display === 'block') renderizarListaSinCategoria(sinCategoria);
+  }
+
+  function renderizarListaSinCategoria(lista) {
+    const cont = document.getElementById('lista-sin-categoria');
+    const sinCategoria = lista || productosSinCategoria();
+    if (sinCategoria.length === 0) {
+      cont.innerHTML = '<div class="empty">Todos los productos tienen categoría asignada.</div>';
+      return;
+    }
+    const ordenados = [...sinCategoria].sort((a, b) => (a.nombre || '').localeCompare(b.nombre || '', 'es'));
+    cont.innerHTML = ordenados.map(p => {
+      const proveedor = p.proveedores?.nombre || 'sin proveedor';
+      return `
+        <div class="fila-producto" style="cursor:pointer;" onclick="revisarProductoSinCategoria('${p.id}')">
+          <span class="fp-nombre">${escapeHtml(p.nombre || '(sin nombre)')}</span>
+          <span class="fp-info">${escapeHtml(proveedor)} · $${Number(p.costo_usd || 0).toFixed(2)} · Revisar y clasificar →</span>
+        </div>`;
+    }).join('');
+  }
+
+  window.toggleProductosSinCategoria = function() {
+    const cont = document.getElementById('contenido-sin-categoria');
+    const icono = document.getElementById('icono-sin-categoria');
+    const abierta = cont.style.display === 'block';
+    cont.style.display = abierta ? 'none' : 'block';
+    icono.textContent = abierta ? 'Mostrar ▾' : 'Ocultar ▴';
+    if (!abierta) renderizarListaSinCategoria();
+  };
+
+  // Abre el producto en el formulario completo de edición (mismo formulario que "Editar" en la
+  // tabla de productos) para que se pueda leer todo antes de definir la categoría, y resalta el
+  // campo de categoría para que sea obvio qué hay que completar.
+  window.revisarProductoSinCategoria = function(id) {
+    editarProducto(id);
+    const campoCategoria = document.getElementById('prod-categoria');
+    if (campoCategoria) {
+      campoCategoria.focus();
+      campoCategoria.style.outline = '2px solid var(--gold)';
+      setTimeout(() => { campoCategoria.style.outline = ''; }, 2500);
+    }
+  };
+
+  window.aplicarFiltrosProductos = function() {
+    paginaActualProductos = 1;
+    renderizarTablaProductos();
+    guardarEstadoTablaProductos();
+  };
+
+  // El filtro de proveedor/búsqueda/precio/costo queda guardado en este navegador (localStorage)
+  // para que al volver no tengas que rehacerlo — pero si alguno queda puesto sin darte cuenta,
+  // este botón lo limpia todo y vuelve a mostrar el catálogo completo.
+  window.limpiarFiltrosProductos = function() {
+    document.getElementById('filtro-busqueda').value = '';
+    document.getElementById('filtro-precio').value = '';
+    document.getElementById('filtro-costo').value = '';
+    document.getElementById('filtro-proveedor').value = '';
+    document.getElementById('filtro-categoria').value = '';
+    document.getElementById('filtro-estado-pub').value = '';
+    paginaActualProductos = 1;
+    renderizarTablaProductos();
+    guardarEstadoTablaProductos();
+  };
+
+  // Recalcula las categorías disponibles en el filtro a partir de lo que hay realmente
+  // cargado en el catálogo (incluye las asignadas a mano y las clasificadas automáticamente
+  // al importar), conservando la selección actual si sigue existiendo.
+  function actualizarFiltroCategorias() {
+    const select = document.getElementById('filtro-categoria');
+    if (!select) return;
+    const valorPrevio = select.value;
+    const categorias = new Set();
+    Object.values(productosCache).forEach(p => { if (p.categoria) categorias.add(p.categoria); });
+    const ordenadas = Array.from(categorias).sort((a, b) => a.localeCompare(b, 'es'));
+    select.innerHTML = '<option value="">Todas las categorías</option>' +
+      ordenadas.map(c => `<option value="${escapeHtml(c)}">${escapeHtml(c)}</option>`).join('');
+    if (ordenadas.includes(valorPrevio)) select.value = valorPrevio;
+  }
+
+  function obtenerProductosFiltrados() {
+    const busqueda = normalizarCategoria(document.getElementById('filtro-busqueda').value || '');
+    const palabrasBusqueda = busqueda.split(/\s+/).filter(p => p.length >= 2);
+    const rangoSel = document.getElementById('filtro-precio').value;
+    let rangoMin = null, rangoMax = null;
+    if (rangoSel) {
+      const [min, max] = rangoSel.split('-').map(Number);
+      rangoMin = min; rangoMax = max;
+    }
+    const rangoCostoSel = document.getElementById('filtro-costo').value;
+    let costoMin = null, costoMax = null;
+    if (rangoCostoSel) {
+      const [min, max] = rangoCostoSel.split('-').map(Number);
+      costoMin = min; costoMax = max;
+    }
+    const proveedorSel = document.getElementById('filtro-proveedor').value;
+    const categoriaSel = document.getElementById('filtro-categoria').value;
+    const estadoSel = document.getElementById('filtro-estado-pub').value;
+
+    const todos = Object.values(productosCache);
+    return todos.filter(p => {
+      if (busqueda && palabrasBusqueda.length > 0) {
+        const marca = p.especificaciones?.marca || '';
+        const haystack = normalizarCategoria([p.nombre, p.sku, p.categoria, marca].filter(Boolean).join(' '));
+        if (!palabrasBusqueda.every(palabra => haystack.includes(palabra))) return false;
+      }
+      if (rangoMin !== null) {
+        const precio = parseFloat(p.pub?.precio_bcv_usd_equiv);
+        if (isNaN(precio) || precio < rangoMin || precio > rangoMax) return false;
+      }
+      if (costoMin !== null) {
+        const costo = parseFloat(p.costo_usd);
+        if (isNaN(costo) || costo < costoMin || costo > costoMax) return false;
+      }
+      if (proveedorSel && p.proveedores?.id !== proveedorSel) return false;
+      if (categoriaSel && p.categoria !== categoriaSel) return false;
+      if (estadoSel && (p.pub?.estado || 'borrador') !== estadoSel) return false;
+      return true;
+    });
+  }
+
+  window.renderizarTablaProductos = function() {
+    const tbody = document.querySelector('#tabla-productos tbody');
+    const empty = document.getElementById('empty-productos');
+    const contador = document.getElementById('contador-resultados');
+    tbody.innerHTML = '';
+
+    const filtrados = obtenerProductosFiltrados();
+    const todos = Object.values(productosCache);
+
+    contador.textContent = `${filtrados.length} de ${todos.length} productos`;
+
+    if (filtrados.length === 0) {
+      empty.style.display = 'block';
+      empty.textContent = todos.length === 0 ? 'Todavía no hay productos cargados.' : 'Ningún producto coincide con el filtro.';
+      document.getElementById('paginacion-productos').innerHTML = '';
+      return;
+    }
+    empty.style.display = 'none';
+
+
+    const porPagina = 100;
+    const totalPaginas = Math.max(1, Math.ceil(filtrados.length / porPagina));
+    if (paginaActualProductos > totalPaginas) paginaActualProductos = totalPaginas;
+    if (paginaActualProductos < 1) paginaActualProductos = 1;
+
+    const inicio = (paginaActualProductos - 1) * porPagina;
+    const paginaDeItems = filtrados.slice(inicio, inicio + porPagina);
+
+    paginaDeItems.forEach(p => {
+      const pub = p.pub || {};
+      const tr = document.createElement('tr');
+      tr.dataset.productoId = p.id;
+      if (p.id === productoResaltadoId) tr.classList.add('fila-resaltada');
+
+      const stock = pub.stock;
+      let stockHtml = '—';
+      if (stock !== null && stock !== undefined) {
+        let color = 'var(--teal)';
+        let etiqueta = '';
+        if (stock <= 0) { color = 'var(--rust)'; etiqueta = ' ⚠ agotado'; }
+        else if (stock <= 3) { color = 'var(--gold)'; etiqueta = ' ⚠ bajo'; }
+        stockHtml = `<span style="color:${color}; font-weight:600;">${stock}${etiqueta}</span>`;
+      }
+
+      const tieneDescripcion = !!(pub.descripcion && pub.descripcion.trim());
+      const nombreHtml = `${escapeHtml(p.nombre)}${tieneDescripcion ? ` <span title="${escapeHtml(pub.descripcion)}" style="color:var(--muted); cursor:help;">ⓘ</span>` : ''}` +
+        (p.categoria ? `<div style="font-size:11px; color:var(--muted); margin-top:2px;">${escapeHtml(p.categoria)}</div>` : '');
+
+      const estadoPub = pub.estado || 'borrador';
+      const ESTADOS_BADGE = {
+        listo:     { texto: '🟢 Listo', color: 'var(--teal)' },
+        publicado: { texto: '🔵 Publicado', color: '#4a90d9' },
+        borrador:  { texto: '⚪ Borrador', color: 'var(--muted)' }
+      };
+      const badgeEstado = ESTADOS_BADGE[estadoPub] || ESTADOS_BADGE.borrador;
+      const estadoHtml = `<span style="font-size:12px; color:${badgeEstado.color}; white-space:nowrap;">${badgeEstado.texto}</span>`;
+
+      tr.innerHTML = `
+        <td><input type="checkbox" class="chk-producto" value="${p.id}"></td>
+        <td style="min-width:220px;">${nombreHtml}</td>
+        <td>${escapeHtml(p.proveedores?.nombre || '—')}</td>
+        <td>${estadoHtml}</td>
+        <td class="num">${stockHtml}</td>
+        <td class="num">$${parseFloat(p.costo_usd).toFixed(2)}</td>
+        <td class="num" style="color:var(--teal); font-weight:700; font-size:14px;">${pub.precio_bcv_usd_equiv ? '$' + parseFloat(pub.precio_bcv_usd_equiv).toFixed(2) : '—'}</td>
+        <td class="num teal-text">${pub.precio_bcv_bs ? 'Bs ' + parseFloat(pub.precio_bcv_bs).toLocaleString('es-VE', {maximumFractionDigits: 2}) : '—'}</td>
+        <td class="num gold-text">${pub.precio_efectivo_usd ? '$' + parseFloat(pub.precio_efectivo_usd).toFixed(2) : '—'}</td>
+        <td class="num">${pub.ganancia_real_usd ? '$' + parseFloat(pub.ganancia_real_usd).toFixed(2) : '—'}</td>
+        <td class="num" style="color:var(--rust)">${pub.comision_ml_usd ? '$' + parseFloat(pub.comision_ml_usd).toFixed(2) : '—'}</td>
+        <td class="num" style="color:var(--teal); font-weight:600;">${pub.ganancia_neta_usd ? '$' + parseFloat(pub.ganancia_neta_usd).toFixed(2) : '—'}</td>
+        <td>
+          <button class="add" style="padding:6px 12px; font-size:12px;" onclick="editarProducto('${p.id}')">Editar</button>
+          <button class="add" style="padding:6px 12px; font-size:12px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line); margin-top:4px;" onclick="verDesglose('${p.id}')">Desglose</button>
+          <button class="add" style="padding:6px 12px; font-size:12px; background:var(--surface-2); color:var(--teal); border:1px solid var(--teal); margin-top:4px;" onclick="verVentasProducto('${p.id}')">Ventas</button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    renderizarPaginacion(totalPaginas, filtrados.length, inicio, paginaDeItems.length);
+  };
+
+  let paginaActualProductos = 1;
+  let productoResaltadoId = null;
+
+  function irYResaltarProducto(id) {
+    productoResaltadoId = id;
+    const filtrados = obtenerProductosFiltrados();
+    const indice = filtrados.findIndex(p => p.id === id);
+
+    if (indice === -1) {
+      // El producto no está visible con los filtros actuales: los limpiamos para poder mostrarlo
+      document.getElementById('filtro-busqueda').value = '';
+      document.getElementById('filtro-precio').value = '';
+      document.getElementById('filtro-costo').value = '';
+      document.getElementById('filtro-proveedor').value = '';
+      document.getElementById('filtro-categoria').value = '';
+      document.getElementById('filtro-estado-pub').value = '';
+      const filtradosSinFiltro = obtenerProductosFiltrados();
+      const indice2 = filtradosSinFiltro.findIndex(p => p.id === id);
+      paginaActualProductos = indice2 === -1 ? 1 : Math.floor(indice2 / 100) + 1;
+    } else {
+      paginaActualProductos = Math.floor(indice / 100) + 1;
+    }
+
+    renderizarTablaProductos();
+
+    setTimeout(() => {
+      const fila = document.querySelector(`tr[data-producto-id="${id}"]`);
+      if (fila) fila.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }, 50);
+  }
+
+  function renderizarPaginacion(totalPaginas, totalItems, inicio, cantidadEnPagina) {
+    const cont = document.getElementById('paginacion-productos');
+    if (totalPaginas <= 1) { cont.innerHTML = ''; return; }
+
+    const botones = [];
+    botones.push(`<button class="add" style="padding:6px 12px; font-size:12px;" ${paginaActualProductos===1?'disabled':''} onclick="irAPaginaProductos(1)">« Inicio</button>`);
+    botones.push(`<button class="add" style="padding:6px 12px; font-size:12px;" ${paginaActualProductos===1?'disabled':''} onclick="irAPaginaProductos(${paginaActualProductos-1})">‹ Anterior</button>`);
+
+    // Selector directo de página
+    let opciones = '';
+    for (let i = 1; i <= totalPaginas; i++) {
+      opciones += `<option value="${i}" ${i===paginaActualProductos?'selected':''}>Página ${i}</option>`;
+    }
+    botones.push(`<select onchange="irAPaginaProductos(this.value)" style="background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:6px 10px; font-size:12px;">${opciones}</select>`);
+
+    botones.push(`<button class="add" style="padding:6px 12px; font-size:12px;" ${paginaActualProductos===totalPaginas?'disabled':''} onclick="irAPaginaProductos(${paginaActualProductos+1})">Siguiente ›</button>`);
+    botones.push(`<button class="add" style="padding:6px 12px; font-size:12px;" ${paginaActualProductos===totalPaginas?'disabled':''} onclick="irAPaginaProductos(${totalPaginas})">Fin »</button>`);
+
+    cont.innerHTML = `
+      <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:16px;">
+        ${botones.join('')}
+        <span style="font-size:12px; color:var(--muted); margin-left:8px;">Mostrando ${inicio+1}–${inicio+cantidadEnPagina} de ${totalItems}</span>
+      </div>
+    `;
+  }
+
+  window.irAPaginaProductos = function(n) {
+    paginaActualProductos = parseInt(n);
+    renderizarTablaProductos();
+    guardarEstadoTablaProductos();
+  };
+
+  function guardarEstadoTablaProductos() {
+    localStorage.setItem('dashboard-productos-estado', JSON.stringify({
+      busqueda: document.getElementById('filtro-busqueda').value,
+      precio: document.getElementById('filtro-precio').value,
+      costo: document.getElementById('filtro-costo').value,
+      proveedor: document.getElementById('filtro-proveedor').value,
+      categoria: document.getElementById('filtro-categoria').value,
+      estadoPub: document.getElementById('filtro-estado-pub').value,
+      pagina: paginaActualProductos,
+      scroll: window.scrollY
+    }));
+  }
+
+  // Guarda también la posición del scroll justo antes de salir de la página (por ejemplo,
+  // al hacer clic en "Comparar en Mercado Libre" o en cualquier enlace del menú) para que
+  // al volver a "Productos" quedes exactamente donde estabas, no arriba del todo.
+  window.addEventListener('beforeunload', guardarEstadoTablaProductos);
+  window.addEventListener('pagehide', guardarEstadoTablaProductos);
+
+
+  function escapeHtml(str) {
+    const d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+  }
+
+  window.crearProveedor = async function() {
+    const nombre = document.getElementById('prov-nombre').value.trim();
+    const contacto = document.getElementById('prov-contacto').value.trim();
+    const notas = document.getElementById('prov-notas').value.trim();
+    const msg = document.getElementById('msg-proveedor');
+
+    if (!nombre) { msg.textContent = 'El nombre es obligatorio.'; return; }
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const { error } = await supabase.from('proveedores').insert({
+      nombre, contacto, notas, creado_por: session?.user?.id
+    });
+
+    if (error) {
+      msg.textContent = 'Error: ' + error.message;
+    } else {
+      msg.textContent = '';
+      document.getElementById('prov-nombre').value = '';
+      document.getElementById('prov-contacto').value = '';
+      document.getElementById('prov-notas').value = '';
+      cargarProveedores();
+    }
+  };
+
+  let editandoProductoId = null;
+
+  // --- Características técnicas (lista editable clave/valor) -------------------------------
+  // Se guardan dentro de productos.especificaciones como { marca, caracteristicas: {clave: valor} }.
+  // "marca" se mantiene como campo aparte (además de estar en la lista) porque ya lo usan la
+  // búsqueda del catálogo, el desglose y el generador de descripción por IA — así ese código
+  // sigue funcionando igual aunque ahora la marca también se pueda escribir/editar desde aquí.
+  function renderizarListaCaracteristicas(pares) {
+    const cont = document.getElementById('lista-caracteristicas');
+    if (!pares || pares.length === 0) { cont.innerHTML = ''; return; }
+    cont.innerHTML = pares.map((par, i) => `
+      <div class="fila-caracteristica" style="display:flex; gap:6px;">
+        <input type="text" class="carac-clave" value="${escapeHtml(par.clave)}" placeholder="Ej: Memoria RAM" style="width:auto; flex:1;">
+        <input type="text" class="carac-valor" value="${escapeHtml(par.valor)}" placeholder="Ej: 8GB" style="width:auto; flex:1;">
+        <button type="button" onclick="quitarFilaCaracteristica(${i})" style="padding:0 12px; background:var(--surface-2); color:var(--rust); border:1px solid var(--line); cursor:pointer;">×</button>
+      </div>`).join('');
+  }
+
+  function leerCaracteristicasDelForm() {
+    return Array.from(document.querySelectorAll('#lista-caracteristicas .fila-caracteristica')).map(fila => ({
+      clave: fila.querySelector('.carac-clave').value.trim(),
+      valor: fila.querySelector('.carac-valor').value.trim()
+    }));
+  }
+
+  window.agregarFilaCaracteristica = function() {
+    const pares = leerCaracteristicasDelForm();
+    pares.push({ clave: '', valor: '' });
+    renderizarListaCaracteristicas(pares);
+  };
+
+  window.quitarFilaCaracteristica = function(indice) {
+    const pares = leerCaracteristicasDelForm();
+    pares.splice(indice, 1);
+    renderizarListaCaracteristicas(pares);
+  };
+
+  // Convierte lo guardado en productos.especificaciones a la lista de pares que se edita en el
+  // formulario. Compatibilidad: si el producto viene de una importación vieja que solo tiene
+  // "marca" (sin "caracteristicas"), la mostramos igual como la primera fila.
+  function especificacionesAPares(esp) {
+    const detalles = (esp && typeof esp.caracteristicas === 'object' && esp.caracteristicas) || {};
+    const pares = Object.entries(detalles).map(([clave, valor]) => ({ clave, valor: String(valor ?? '') }));
+    if (esp?.marca && !pares.some(p => p.clave.trim().toLowerCase() === 'marca')) {
+      pares.unshift({ clave: 'Marca', valor: String(esp.marca) });
+    }
+    return pares;
+  }
+
+  // Arma el objeto que se guarda en productos.especificaciones a partir de lo que hay ahora
+  // mismo en el formulario.
+  function construirEspecificaciones() {
+    const pares = leerCaracteristicasDelForm().filter(p => p.clave && p.valor);
+    const especificaciones = { caracteristicas: {} };
+    pares.forEach(p => {
+      especificaciones.caracteristicas[p.clave] = p.valor;
+      if (p.clave.trim().toLowerCase() === 'marca') especificaciones.marca = p.valor;
+    });
+    return especificaciones;
+  }
+
+  // Agrega al formulario las características que trajo la IA: si ya había una fila con la misma
+  // clave (sin importar mayúsculas), se actualiza su valor; si no, se agrega una fila nueva. Así
+  // no se pierde lo que el usuario ya haya escrito o ajustado a mano.
+  function fusionarCaracteristicasIA(nuevas) {
+    if (!Array.isArray(nuevas) || nuevas.length === 0) return;
+    const pares = leerCaracteristicasDelForm();
+    nuevas.forEach(n => {
+      const clave = (n?.clave || '').trim();
+      const valor = (n?.valor || '').trim();
+      if (!clave || !valor) return;
+      const existente = pares.find(p => p.clave.trim().toLowerCase() === clave.toLowerCase());
+      if (existente) existente.valor = valor;
+      else pares.push({ clave, valor });
+    });
+    renderizarListaCaracteristicas(pares);
+  }
+
+  window.editarProducto = function(id) {
+    const p = productosCache[id];
+    if (!p) return;
+    const pub = p.pub || {};
+
+    editandoProductoId = id;
+    productoResaltadoId = id;
+    document.querySelectorAll('.chk-producto').forEach(chk => {
+      chk.closest('tr')?.classList.toggle('fila-resaltada', chk.value === id);
+    });
+    document.getElementById('titulo-form-producto').textContent = 'Editando: ' + p.nombre;
+    document.getElementById('prod-proveedor').value = p.proveedores?.id || '';
+    document.getElementById('prod-nombre').value = p.nombre || '';
+    document.getElementById('prod-categoria').value = p.categoria || '';
+    document.getElementById('prod-costo').value = p.costo_usd || '';
+    document.getElementById('prod-modo-ganancia').value = (pub.modo_ganancia === 'porcentaje' ? 'fijo' : pub.modo_ganancia) || 'fijo';
+    document.getElementById('prod-valor-ganancia').value = pub.ganancia_real_usd || 30;
+
+    const comisionGuardada = pub.comision_ml_pct ? parseFloat(pub.comision_ml_pct) : 11;
+    const tipoPubSelect = document.getElementById('prod-tipo-publicacion');
+    if (comisionGuardada === 11 || comisionGuardada === 15) {
+      tipoPubSelect.value = String(comisionGuardada);
+    } else {
+      tipoPubSelect.value = 'custom';
+    }
+    document.getElementById('prod-comision').value = comisionGuardada;
+    aplicarTipoPublicacion('prod');
+    sincronizarGanancia('prod', 'usd');
+    document.getElementById('prod-descripcion').value = pub.descripcion || '';
+    document.getElementById('prod-condicion').value = pub.condicion || 'nuevo';
+    document.getElementById('prod-stock').value = pub.stock || 1;
+    document.getElementById('prod-envio').value = pub.forma_envio || '';
+    document.getElementById('prod-pago').value = pub.condiciones_pago || '';
+    document.getElementById('prod-horario').value = pub.horario_atencion || '';
+    document.getElementById('prod-imagenes').value = (pub.imagenes || []).join(', ');
+    actualizarPrevisualizacionFotos();
+    renderizarListaCaracteristicas(especificacionesAPares(p.especificaciones));
+
+    document.getElementById('btn-guardar-producto').textContent = 'Guardar cambios';
+    document.getElementById('btn-cancelar-edicion').style.display = 'inline-block';
+    document.getElementById('prod-nombre').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
+  window.cancelarEdicion = function() {
+    editandoProductoId = null;
+    document.getElementById('titulo-form-producto').textContent = 'Nuevo producto';
+    document.getElementById('btn-guardar-producto').textContent = 'Agregar y calcular';
+    document.getElementById('btn-cancelar-edicion').style.display = 'none';
+    ['prod-nombre','prod-categoria','prod-costo','prod-descripcion','prod-envio','prod-pago','prod-horario','prod-imagenes']
+      .forEach(id => document.getElementById(id).value = '');
+    document.getElementById('prod-valor-ganancia').value = 30;
+    document.getElementById('prod-comision').value = 9;
+    sincronizarGanancia('prod', 'usd');
+    actualizarPrevisualizacionFotos();
+    renderizarListaCaracteristicas([]);
+    aplicarPredeterminadosVenta(); // vuelve a precargar envío/pago/horario para el próximo producto
+  };
+
+  // Arma la "Descripción de la publicación" con IA, a partir del nombre, la marca, el SKU y la
+  // categoría del producto. Si el producto ya existe (se está editando), la marca y el SKU se
+  // toman del catálogo (no hay campos para escribirlos a mano en este formulario); si es un
+  // producto nuevo que todavía no se guardó, la IA trabaja solo con lo que ya está escrito
+  // arriba (nombre y categoría). La llamada real a la IA vive en la función de Supabase
+  // "generar-descripcion-ia", que a su vez le pide explícitamente que no invente specs ni
+  // garantías que no vengan en estos datos.
+  window.generarDescripcionIA = async function() {
+    const btn = document.getElementById('btn-generar-descripcion');
+    const msg = document.getElementById('msg-descripcion-ia');
+    const nombre = document.getElementById('prod-nombre').value.trim();
+    const categoria = document.getElementById('prod-categoria').value.trim();
+
+    if (!nombre) {
+      msg.style.color = 'var(--rust)';
+      msg.textContent = 'Escribe primero el nombre del producto.';
+      return;
+    }
+
+    const productoExistente = editandoProductoId ? productosCache[editandoProductoId] : null;
+    const sku = productoExistente?.sku || '';
+    const marca = productoExistente?.especificaciones?.marca || '';
+    const descripcion_actual = document.getElementById('prod-descripcion').value.trim();
+
+    btn.disabled = true;
+    btn.textContent = 'Generando...';
+    msg.style.color = 'var(--muted)';
+    msg.textContent = '';
+
+    try {
+      const { data, error } = await supabase.functions.invoke('generar-descripcion-ia', {
+        body: { nombre, marca, sku, categoria, descripcion_actual }
+      });
+
+      if (error) {
+        msg.style.color = 'var(--rust)';
+        msg.textContent = 'No se pudo generar la descripción: ' + error.message;
+        return;
+      }
+      if (!data?.ok) {
+        msg.style.color = 'var(--rust)';
+        msg.textContent = data?.error || 'No se pudo generar la descripción.';
+        return;
+      }
+
+      document.getElementById('prod-descripcion').value = data.descripcion;
+      fusionarCaracteristicasIA(data.caracteristicas);
+      msg.style.color = 'var(--teal)';
+      msg.textContent = 'Listo — revísala y ajústala si hace falta antes de guardar.';
+    } catch (e) {
+      msg.style.color = 'var(--rust)';
+      msg.textContent = 'Ocurrió un error inesperado: ' + e.message;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '✨ Generar con IA';
+    }
+  };
+
+  // --- Fotos de producto: se alojan en Supabase Storage (bucket público "productos-fotos",
+  // separado por carpeta de tenant) para que cada foto tenga un link público fijo — necesario
+  // porque la planilla de "Publicación masiva" de Mercado Libre solo acepta un link de imagen,
+  // no el archivo. Las URLs resultantes se agregan al mismo campo de texto de siempre, así que
+  // pegar URLs de fotos alojadas en otro sitio sigue funcionando igual que antes. ---
+
+  window.subirFotosProducto = async function(files) {
+    const msg = document.getElementById('msg-subida-fotos');
+    if (!files || files.length === 0) return;
+    if (!tenantIdActual) {
+      msg.style.color = 'var(--rust)';
+      msg.textContent = 'No se pudo identificar tu cuenta todavía — recarga la página e intenta de nuevo.';
+      return;
+    }
+
+    const campoImagenes = document.getElementById('prod-imagenes');
+    const urlsActuales = campoImagenes.value.split(',').map(s => s.trim()).filter(Boolean);
+    const listaArchivos = Array.from(files);
+    let subidas = 0;
+
+    for (let i = 0; i < listaArchivos.length; i++) {
+      const file = listaArchivos[i];
+      msg.style.color = 'var(--muted)';
+      msg.textContent = `Subiendo ${i + 1}/${listaArchivos.length}...`;
+
+      const extension = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
+      const nombreArchivo = `${tenantIdActual}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${extension}`;
+
+      const { error } = await supabase.storage.from('productos-fotos').upload(nombreArchivo, file, {
+        cacheControl: '31536000',
+        upsert: false,
+        contentType: file.type || 'image/jpeg'
+      });
+
+      if (error) {
+        msg.style.color = 'var(--rust)';
+        msg.textContent = `Error subiendo "${file.name}": ${error.message}`;
+        continue;
+      }
+
+      const { data: pub } = supabase.storage.from('productos-fotos').getPublicUrl(nombreArchivo);
+      urlsActuales.push(pub.publicUrl);
+      subidas++;
+    }
+
+    campoImagenes.value = urlsActuales.join(', ');
+    actualizarPrevisualizacionFotos();
+    document.getElementById('input-subir-fotos').value = '';
+
+    if (subidas > 0) {
+      msg.style.color = 'var(--teal)';
+      msg.textContent = `${subidas} foto(s) subida(s) correctamente.`;
+    }
+  };
+
+  window.actualizarPrevisualizacionFotos = function() {
+    const cont = document.getElementById('previsualizacion-fotos');
+    if (!cont) return;
+    const urls = document.getElementById('prod-imagenes').value.split(',').map(s => s.trim()).filter(Boolean);
+    cont.innerHTML = urls.map((url, i) => `
+      <div style="position:relative;">
+        <img src="${escapeHtml(url)}" style="width:64px; height:64px; object-fit:cover; border:1px solid var(--line); display:block;" onerror="this.style.opacity='0.2';">
+        <button type="button" onclick="quitarImagenProducto(${i})" title="Quitar esta foto" style="position:absolute; top:-7px; right:-7px; width:18px; height:18px; border-radius:50%; background:var(--rust); color:var(--paper); border:none; font-size:11px; line-height:1; cursor:pointer;">×</button>
+      </div>`).join('');
+  };
+
+  window.quitarImagenProducto = function(index) {
+    const campo = document.getElementById('prod-imagenes');
+    const urls = campo.value.split(',').map(s => s.trim()).filter(Boolean);
+    urls.splice(index, 1);
+    campo.value = urls.join(', ');
+    actualizarPrevisualizacionFotos();
+  };
+
+  // --- Editor de fotos pegadas (capturas de pantalla) -----------------------------------------
+  // Todo corre en el navegador, con Canvas — no se manda la imagen a ningún servicio externo ni
+  // hace falta ninguna clave de API. "Quitar fondo" es un relleno por inundación (flood fill)
+  // desde los bordes de la imagen: funciona bien cuando el fondo es parejo (una mesa, una pared,
+  // una captura con fondo blanco/gris), pero no es una segmentación con IA — si el fondo es muy
+  // irregular puede no quedar perfecto, para eso está el botón "Deshacer".
+  let editorHistorial = []; // pila de ImageData para poder deshacer cada edición
+
+  function vistaProductosActiva() {
+    const vista = document.getElementById('view-productos');
+    return !!(vista && vista.classList.contains('active'));
+  }
+
+  document.addEventListener('paste', async (e) => {
+    if (!vistaProductosActiva()) return; // no interferir con pegar texto en otras pestañas
+    const items = e.clipboardData && e.clipboardData.items;
+    if (!items) return;
+    const item = Array.from(items).find(it => it.type && it.type.startsWith('image/'));
+    if (!item) return; // no hay imagen en el portapapeles: dejar que el pegado normal siga su curso
+    e.preventDefault();
+    const blob = item.getAsFile();
+    if (!blob) return;
+    await abrirEditorFoto(blob);
+  });
+
+  async function abrirEditorFoto(blobOrFile) {
+    const bitmap = await createImageBitmap(blobOrFile);
+    const canvas = document.getElementById('canvas-editor-foto');
+    const MAX = 1000; // límite razonable de trabajo, no hace falta más para una foto de producto
+    let w = bitmap.width, h = bitmap.height;
+    if (w > MAX || h > MAX) {
+      const escala = MAX / Math.max(w, h);
+      w = Math.round(w * escala); h = Math.round(h * escala);
+    }
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, w, h);
+    ctx.drawImage(bitmap, 0, 0, w, h);
+    editorHistorial = [];
+    document.getElementById('msg-editor-foto').textContent = '';
+    document.getElementById('modal-editor-foto').style.display = 'flex';
+  }
+
+  function guardarSnapshotEditor() {
+    const canvas = document.getElementById('canvas-editor-foto');
+    const ctx = canvas.getContext('2d');
+    editorHistorial.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
+    if (editorHistorial.length > 5) editorHistorial.shift(); // no acumular historial de más
+  }
+
+  window.editorDeshacer = function() {
+    if (editorHistorial.length === 0) return;
+    const anterior = editorHistorial.pop();
+    const canvas = document.getElementById('canvas-editor-foto');
+    canvas.getContext('2d').putImageData(anterior, 0, 0);
+    document.getElementById('msg-editor-foto').textContent = 'Se deshizo el último cambio.';
+  };
+
+  window.editorQuitarFondo = function() {
+    guardarSnapshotEditor();
+    const canvas = document.getElementById('canvas-editor-foto');
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width, h = canvas.height;
+    const imgData = ctx.getImageData(0, 0, w, h);
+    const data = imgData.data;
+
+    // Color de referencia del fondo: promedio de las 4 esquinas (así un pixel raro justo en una
+    // esquina no arruina la muestra).
+    const muestra = (x, y) => { const i = (y * w + x) * 4; return [data[i], data[i + 1], data[i + 2]]; };
+    const esquinas = [muestra(0, 0), muestra(w - 1, 0), muestra(0, h - 1), muestra(w - 1, h - 1)];
+    const ref = [0, 1, 2].map(c => Math.round(esquinas.reduce((s, e) => s + e[c], 0) / 4));
+
+    const TOLERANCIA = 42; // distancia de color aceptada como "esto también es fondo"
+    const distancia = (i) => {
+      const dr = data[i] - ref[0], dg = data[i + 1] - ref[1], db = data[i + 2] - ref[2];
+      return Math.sqrt(dr * dr + dg * dg + db * db);
+    };
+
+    // Relleno por inundación desde TODO el borde de la imagen: solo se vuelve transparente el
+    // fondo que está conectado con el borde — así no se hacen "agujeros" dentro del producto
+    // aunque tenga zonas del mismo color que el fondo (ej. teclas blancas de un teclado).
+    const visitado = new Uint8Array(w * h);
+    const pila = [];
+    for (let x = 0; x < w; x++) { pila.push(x, 0, x, h - 1); }
+    for (let y = 0; y < h; y++) { pila.push(0, y, w - 1, y); }
+
+    while (pila.length) {
+      const y = pila.pop(), x = pila.pop();
+      if (x < 0 || y < 0 || x >= w || y >= h) continue;
+      const p = y * w + x;
+      if (visitado[p]) continue;
+      visitado[p] = 1;
+      const i = p * 4;
+      if (distancia(i) > TOLERANCIA) continue; // ya no es fondo, no sigue expandiéndose por acá
+      data[i + 3] = 0; // transparente
+      pila.push(x + 1, y, x - 1, y, x, y + 1, x, y - 1);
+    }
+
+    ctx.putImageData(imgData, 0, 0);
+    document.getElementById('msg-editor-foto').textContent = 'Fondo eliminado — revisa los bordes. Si quedó incompleto, usa "Deshacer".';
+  };
+
+  window.editorMejorarImagen = function() {
+    guardarSnapshotEditor();
+    const canvas = document.getElementById('canvas-editor-foto');
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width, h = canvas.height;
+    const imgData = ctx.getImageData(0, 0, w, h);
+    const data = imgData.data;
+
+    // 1) Estiramiento de contraste por canal (percentiles 1/99, para no dejarse arrastrar por
+    // pixeles sueltos totalmente blancos o negros) — corrige fotos apagadas o descoloridas.
+    const histR = new Array(256).fill(0), histG = new Array(256).fill(0), histB = new Array(256).fill(0);
+    let opacos = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i + 3] === 0) continue; // pixeles ya transparentes (si se quitó el fondo antes) no cuentan
+      histR[data[i]]++; histG[data[i + 1]]++; histB[data[i + 2]]++;
+      opacos++;
+    }
+    if (opacos > 0) {
+      const percentil = (hist, p) => {
+        const objetivo = opacos * p;
+        let acumulado = 0;
+        for (let v = 0; v < 256; v++) { acumulado += hist[v]; if (acumulado >= objetivo) return v; }
+        return 255;
+      };
+      const [rMin, rMax] = [percentil(histR, 0.01), percentil(histR, 0.99)];
+      const [gMin, gMax] = [percentil(histG, 0.01), percentil(histG, 0.99)];
+      const [bMin, bMax] = [percentil(histB, 0.01), percentil(histB, 0.99)];
+      const estirar = (v, min, max) => max <= min ? v : Math.max(0, Math.min(255, Math.round((v - min) * 255 / (max - min))));
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3] === 0) continue;
+        data[i] = estirar(data[i], rMin, rMax);
+        data[i + 1] = estirar(data[i + 1], gMin, gMax);
+        data[i + 2] = estirar(data[i + 2], bMin, bMax);
+      }
+    }
+
+    // 2) Nitidez leve (realce simple contra el promedio de los 4 vecinos) — ayuda a que una
+    // captura de pantalla no se vea tan "plana". Se aplica sobre una copia ya con el contraste
+    // corregido, para no mezclar vecinos ya modificados con vecinos originales.
+    const copia = new Uint8ClampedArray(data);
+    const idx = (x, y) => (y * w + x) * 4;
+    const INTENSIDAD = 0.6;
+    for (let y = 1; y < h - 1; y++) {
+      for (let x = 1; x < w - 1; x++) {
+        const i = idx(x, y);
+        if (copia[i + 3] === 0) continue;
+        for (let c = 0; c < 3; c++) {
+          const centro = copia[i + c];
+          const promedioVecinos = (copia[idx(x - 1, y) + c] + copia[idx(x + 1, y) + c] + copia[idx(x, y - 1) + c] + copia[idx(x, y + 1) + c]) / 4;
+          data[i + c] = Math.max(0, Math.min(255, Math.round(centro + INTENSIDAD * (centro - promedioVecinos))));
+        }
+      }
+    }
+
+    ctx.putImageData(imgData, 0, 0);
+    document.getElementById('msg-editor-foto').textContent = 'Brillo, contraste y nitidez ajustados automáticamente.';
+  };
+
+  window.cerrarEditorFoto = function() {
+    document.getElementById('modal-editor-foto').style.display = 'none';
+    editorHistorial = [];
+  };
+
+  window.guardarFotoEditada = async function() {
+    const canvas = document.getElementById('canvas-editor-foto');
+    const msg = document.getElementById('msg-editor-foto');
+    if (!tenantIdActual) {
+      msg.style.color = 'var(--rust)';
+      msg.textContent = 'No se pudo identificar tu cuenta todavía — recarga la página e intenta de nuevo.';
+      return;
+    }
+    msg.style.color = 'var(--muted)';
+    msg.textContent = 'Guardando...';
+    canvas.toBlob(async (blob) => {
+      if (!blob) { msg.style.color = 'var(--rust)'; msg.textContent = 'No se pudo generar la imagen — intenta de nuevo.'; return; }
+      const archivo = new File([blob], `captura-${Date.now()}.png`, { type: 'image/png' });
+      await subirFotosProducto([archivo]);
+      cerrarEditorFoto();
+    }, 'image/png');
+  };
+
+  // Mantiene sincronizados los campos de ganancia en $ y en %, en ambas direcciones,
+  // según el tipo elegido (bruta = antes de comisión, neta = después de comisión).
+  window.verDesglose = function(id) {
+    const p = productosCache[id];
+    if (!p || !p.pub || !p.pub.id) { alert('Este producto todavía no tiene un cálculo guardado.'); return; }
+    if (!tasaBCV || !tasaBinance) { alert('No hay tasas de cambio cargadas.'); return; }
+
+    const costo = parseFloat(p.costo_usd);
+    const margen = parseFloat(p.pub.ganancia_neta_usd ?? p.pub.ganancia_real_usd ?? 0);
+    const comisionPct = parseFloat(p.pub.comision_ml_pct || 11) / 100;
+
+    // Paso 1: Meta neta en USDT
+    const metaUsdt = costo + margen;
+    // Paso 2: requerimiento en bolívares (compensación de brecha)
+    const baseVes = metaUsdt * tasaBinance;
+    const metaUsdBcv = baseVes / tasaBCV;
+    // Paso 3: absorber la comisión de Mercado Libre
+    const precioPublicarVes = baseVes / (1 - comisionPct);
+    const precioPublicarUsdBcv = precioPublicarVes / tasaBCV;
+    // Paso 4: verificación de desglose
+    const comisionMlVes = precioPublicarVes * comisionPct;
+    const comisionMlUsdBcv = comisionMlVes / tasaBCV;
+    const netoRecibidoVes = precioPublicarVes - comisionMlVes;
+    const usdtFinales = netoRecibidoVes / tasaBinance;
+
+    const fmtVes = (n) => n.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const fmtUsd = (n) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+    const ESTADOS_TEXTO = { listo: '🟢 Listo para publicar', publicado: '🔵 Ya publicado en Mercado Libre', borrador: '⚪ Borrador (sin terminar)' };
+    const estadoTexto = ESTADOS_TEXTO[p.pub.estado || 'borrador'] || ESTADOS_TEXTO.borrador;
+    const marca = p.especificaciones?.marca || '—';
+
+    document.getElementById('desglose-titulo').textContent = 'Desglose: ' + p.nombre;
+    document.getElementById('desglose-contenido').textContent =
+`--------------------------------------------------
+DETALLES DEL PRODUCTO
+--------------------------------------------------
+• Estado: ${estadoTexto}
+• Proveedor: ${p.proveedores?.nombre || '—'}
+• SKU/Código: ${p.sku || '—'}
+• Marca: ${marca}
+• Categoría: ${p.categoria || '—'}
+• Condición: ${p.pub.condicion || 'nuevo'}
+• Stock: ${p.pub.stock ?? '—'}
+• Forma de envío: ${p.pub.forma_envio || '—'}
+• Condiciones de pago: ${p.pub.condiciones_pago || '—'}
+• Horario de atención: ${p.pub.horario_atencion || '—'}
+• Descripción: ${(p.pub.descripcion && p.pub.descripcion.trim()) || '—'}
+
+--------------------------------------------------
+RESULTADOS DEL CÁLCULO DE PRECIO
+--------------------------------------------------
+📌 PRECIO A PUBLICAR EN MERCADOLIBRE:
+• Precio Final en Bolívares: ${fmtVes(precioPublicarVes)} VES
+• Precio Ref. en Dólares (BCV): $${fmtUsd(precioPublicarUsdBcv)} USD
+
+📊 DESGLOSE OPERATIVO:
+• Meta Neta Requerida: $${fmtUsd(metaUsdt)} USDT (${fmtVes(baseVes)} VES)
+• Comisión MercadoLibre (${(comisionPct*100).toFixed(0)}%): ${fmtVes(comisionMlVes)} VES ($${fmtUsd(comisionMlUsdBcv)} USD BCV)
+• Brecha Cambiaria Aplicada: Binance ${fmtVes(tasaBinance)} VES vs BCV ${fmtVes(tasaBCV)} VES
+
+✅ VERIFICACIÓN DE RETORNO:
+• Cobras en MercadoLibre: ${fmtVes(precioPublicarVes)} VES
+• MercadoLibre descuenta su comisión: -${fmtVes(comisionMlVes)} VES
+• Te transfieren a tu cuenta: ${fmtVes(netoRecibidoVes)} VES
+• Al comprar USDT en Binance a ${fmtVes(tasaBinance)}: Obtienes exactamente $${fmtUsd(usdtFinales)} USDT
+--------------------------------------------------`;
+
+    document.getElementById('modal-desglose').style.display = 'flex';
+  };
+
+  const METODOS_PAGO_TEXTO = {
+    efectivo: 'Efectivo', zelle: 'Zelle', pago_movil: 'Pago Móvil',
+    transferencia: 'Transferencia', binance: 'Binance/USDT', otro: 'Otro'
+  };
+
+  window.verVentasProducto = async function(id) {
+    const p = productosCache[id];
+    if (!p) return;
+
+    document.getElementById('ventas-titulo').textContent = 'Ventas: ' + p.nombre;
+    document.getElementById('modal-ventas').style.display = 'flex';
+    document.getElementById('ventas-resumen').innerHTML = 'Cargando...';
+    document.getElementById('ventas-tbody').innerHTML = '';
+    document.getElementById('ventas-vacio').style.display = 'none';
+
+    const { data, error } = await supabase
+      .from('ventas')
+      .select('cantidad, precio_venta, moneda_cobrada, metodo_pago, canal, precio_venta_usd_equiv, created_at')
+      .eq('producto_id', id)
+      .order('created_at', { ascending: false });
+
+    if (error || !data || data.length === 0) {
+      document.getElementById('ventas-resumen').innerHTML = '';
+      document.getElementById('ventas-vacio').style.display = 'block';
+      return;
+    }
+
+    const totalUnidades = data.reduce((s, v) => s + v.cantidad, 0);
+    const totalUsd = data.reduce((s, v) => s + parseFloat(v.precio_venta_usd_equiv || 0), 0);
+
+    document.getElementById('ventas-resumen').innerHTML = `
+      <div><b style="color:var(--paper); font-size:16px;">${data.length}</b><br>venta(s)</div>
+      <div><b style="color:var(--paper); font-size:16px;">${totalUnidades}</b><br>unidades vendidas</div>
+      <div><b style="color:var(--gold); font-size:16px;">$${totalUsd.toFixed(2)}</b><br>total acumulado (equiv. $)</div>
+    `;
+
+    const tbody = document.getElementById('ventas-tbody');
+    data.forEach(v => {
+      const fecha = new Date(v.created_at).toLocaleDateString('es-VE', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td style="padding:10px; border-bottom:1px solid var(--line);">${fecha}</td>
+        <td style="padding:10px; border-bottom:1px solid var(--line); text-align:right; font-family:'IBM Plex Mono',monospace;">${v.cantidad}</td>
+        <td style="padding:10px; border-bottom:1px solid var(--line); text-align:right; font-family:'IBM Plex Mono',monospace;">${v.moneda_cobrada === 'VES' ? 'Bs ' + parseFloat(v.precio_venta).toLocaleString('es-VE') : '$' + parseFloat(v.precio_venta).toFixed(2)}</td>
+        <td style="padding:10px; border-bottom:1px solid var(--line);"><span class="pill">${METODOS_PAGO_TEXTO[v.metodo_pago] || v.metodo_pago}</span></td>
+        <td style="padding:10px; border-bottom:1px solid var(--line);"><span class="pill">${v.canal === 'mercadolibre' ? 'Mercado Libre' : 'Manual'}</span></td>
+      `;
+      tbody.appendChild(tr);
+    });
+  };
+
+  window.toggleTodos = function(chkTodos) {
+    document.querySelectorAll('.chk-producto').forEach(chk => chk.checked = chkTodos.checked);
+  };
+
+  function obtenerSeleccionados() {
+    return Array.from(document.querySelectorAll('.chk-producto:checked')).map(chk => chk.value);
+  }
+
+  window.compararSeleccionadosEnCompetencia = function() {
+    const seleccionados = obtenerSeleccionados();
+    if (seleccionados.length === 0) {
+      document.getElementById('msg-bulk').style.color = 'var(--rust)';
+      document.getElementById('msg-bulk').textContent = 'Selecciona al menos un producto para comparar.';
+      return;
+    }
+    window.location.href = 'analizar-competencia.html?comparar=' + encodeURIComponent(seleccionados.join(','));
+  };
+
+  let masivoDetenido = false;
+  let ultimoRespaldoMasivo = null;
+
+  window.aplicarPorcentajeMasivo = async function() {
+    const msg = document.getElementById('msg-bulk');
+    const pct = parseFloat(document.getElementById('bulk-porcentaje').value);
+    const seleccionados = obtenerSeleccionados();
+
+    if (isNaN(pct)) { msg.style.color = 'var(--rust)'; msg.textContent = 'Escribe un porcentaje válido.'; return; }
+    if (seleccionados.length === 0) { msg.style.color = 'var(--rust)'; msg.textContent = 'Selecciona al menos un producto.'; return; }
+    if (!tasaBCV || !tasaBinance) { msg.style.color = 'var(--rust)'; msg.textContent = 'No hay tasas de cambio cargadas.'; return; }
+
+    // Respaldo de los valores actuales, por si luego se quiere revertir
+    ultimoRespaldoMasivo = seleccionados.map(id => {
+      const pub = productosCache[id]?.pub || {};
+      return {
+        producto_id: id,
+        modo_ganancia: pub.modo_ganancia ?? null,
+        precio_efectivo_usd: pub.precio_efectivo_usd ?? null,
+        precio_bcv_usd_equiv: pub.precio_bcv_usd_equiv ?? null,
+        precio_bcv_bs: pub.precio_bcv_bs ?? null,
+        ganancia_real_usd: pub.ganancia_real_usd ?? null,
+        comision_ml_usd: pub.comision_ml_usd ?? null,
+        ganancia_neta_usd: pub.ganancia_neta_usd ?? null
+      };
+    });
+
+    masivoDetenido = false;
+    document.getElementById('btn-aplicar-masivo').style.display = 'none';
+    document.getElementById('btn-detener-masivo').style.display = 'inline-block';
+    document.getElementById('btn-revertir-masivo').style.display = 'none';
+
+    msg.style.color = 'var(--muted)';
+    msg.textContent = `Aplicando a 0 / ${seleccionados.length}...`;
+    let hechos = 0;
+
+    for (const id of seleccionados) {
+      if (masivoDetenido) break;
+
+      const p = productosCache[id];
+      if (!p) continue;
+      const comision = p.pub?.comision_ml_pct || 11;
+      const { data: calculo, error: errCalc } = await supabase.rpc('calcular_precios', {
+        p_costo_usd: parseFloat(p.costo_usd),
+        p_modo: 'porcentaje',
+        p_valor: pct,
+        p_comision_ml_pct: comision,
+        p_tasa_bcv: tasaBCV,
+        p_tasa_binance: tasaBinance
+      });
+      if (!errCalc && calculo) {
+        const c = calculo[0];
+        await supabase.from('publicaciones').update({
+          modo_ganancia: 'porcentaje',
+          precio_efectivo_usd: c.precio_efectivo_usd,
+          precio_bcv_usd_equiv: c.precio_bcv_usd_equiv,
+          precio_bcv_bs: c.precio_bcv_bs,
+          ganancia_real_usd: c.ganancia_deseada_usd,
+          comision_ml_usd: c.comision_ml_usd,
+          ganancia_neta_usd: c.ganancia_neta_usd
+        }).eq('producto_id', id);
+        hechos++;
+      }
+      msg.textContent = `Aplicando ${hechos} / ${seleccionados.length}...`;
+    }
+
+    document.getElementById('btn-aplicar-masivo').style.display = 'inline-block';
+    document.getElementById('btn-detener-masivo').style.display = 'none';
+    document.getElementById('btn-revertir-masivo').style.display = 'inline-block';
+
+    msg.style.color = 'var(--teal)';
+    msg.textContent = masivoDetenido
+      ? `Detenido: se alcanzaron a actualizar ${hechos} de ${seleccionados.length} productos. Puedes revertir si quieres deshacerlo.`
+      : `Listo: ${hechos} de ${seleccionados.length} productos actualizados con ${pct}% de ganancia. Puedes revertir si te equivocaste.`;
+    cargarProductos();
+  };
+
+  window.detenerAplicacionMasiva = function() {
+    masivoDetenido = true;
+    document.getElementById('msg-bulk').textContent = 'Deteniendo... se completará el producto actual y parará ahí.';
+  };
+
+  window.revertirAplicacionMasiva = async function() {
+    const msg = document.getElementById('msg-bulk');
+    if (!ultimoRespaldoMasivo || ultimoRespaldoMasivo.length === 0) {
+      msg.style.color = 'var(--rust)'; msg.textContent = 'No hay ningún cambio reciente para revertir.'; return;
+    }
+    if (!confirm(`¿Revertir el último cambio masivo en ${ultimoRespaldoMasivo.length} producto(s)?`)) return;
+
+    msg.style.color = 'var(--muted)';
+    msg.textContent = 'Revirtiendo...';
+
+    for (const item of ultimoRespaldoMasivo) {
+      const { producto_id, ...valores } = item;
+      await supabase.from('publicaciones').update(valores).eq('producto_id', producto_id);
+    }
+
+    msg.style.color = 'var(--teal)';
+    msg.textContent = `Revertido: ${ultimoRespaldoMasivo.length} producto(s) regresaron a su valor anterior.`;
+    document.getElementById('btn-revertir-masivo').style.display = 'none';
+    ultimoRespaldoMasivo = null;
+    cargarProductos();
+  };
+
+  // Borra en lotes en vez de mandar TODOS los IDs en un solo .in(...): con miles de
+  // productos esa URL se vuelve demasiado larga y el servidor la rechaza con
+  // "Bad Request". Aquí se trocea en tandas chicas y, si una tanda falla, se detiene
+  // y se informa hasta dónde llegó (nunca queda "a medias" en silencio).
+  async function eliminarEnLotes(tabla, columna, ids, tamanoLote, onProgreso) {
+    for (let i = 0; i < ids.length; i += tamanoLote) {
+      const lote = ids.slice(i, i + tamanoLote);
+      const { error } = await supabase.from(tabla).delete().in(columna, lote);
+      if (error) return { error, eliminados: i };
+      if (onProgreso) onProgreso(Math.min(i + tamanoLote, ids.length), ids.length);
+    }
+    return { error: null, eliminados: ids.length };
+  }
+
+  async function borrarProductosPorId(ids, msgEl, textoBase) {
+    const TAMANO_LOTE = 150;
+    if (msgEl) { msgEl.style.color = 'var(--muted)'; msgEl.textContent = `${textoBase} 0/${ids.length}...`; }
+
+    const resultPub = await eliminarEnLotes('publicaciones', 'producto_id', ids, TAMANO_LOTE);
+    if (resultPub.error) return { error: resultPub.error, eliminados: 0, etapa: 'publicaciones' };
+
+    const resultProd = await eliminarEnLotes('productos', 'id', ids, TAMANO_LOTE, (hechos, totalIds) => {
+      if (msgEl) { msgEl.style.color = 'var(--muted)'; msgEl.textContent = `${textoBase} ${hechos}/${totalIds}...`; }
+    });
+    return { error: resultProd.error, eliminados: resultProd.eliminados, etapa: 'productos' };
+  }
+
+  window.eliminarSeleccionados = async function() {
+    const msg = document.getElementById('msg-bulk');
+    const seleccionados = obtenerSeleccionados();
+    if (seleccionados.length === 0) { msg.style.color = 'var(--rust)'; msg.textContent = 'Selecciona al menos un producto.'; return; }
+    if (!confirm(`¿Eliminar ${seleccionados.length} producto(s) seleccionado(s)? Esta acción no se puede deshacer.`)) return;
+
+    const { error, eliminados, etapa } = await borrarProductosPorId(seleccionados, msg, 'Eliminando');
+
+    if (error) {
+      msg.style.color = 'var(--rust)';
+      msg.textContent = `Error al eliminar (fallo en "${etapa || ''}" tras ${eliminados} producto(s)): ` + error.message;
+      cargarProductos();
+      return;
+    }
+    msg.style.color = 'var(--teal)';
+    msg.textContent = `${seleccionados.length} producto(s) eliminado(s).`;
+    cargarProductos();
+  };
+
+  window.eliminarTodos = async function() {
+    const msg = document.getElementById('msg-bulk');
+    const total = Object.keys(productosCache).length;
+    if (total === 0) return;
+    if (!confirm(`¿Eliminar TODOS los ${total} productos de la base de datos? Esta acción no se puede deshacer.`)) return;
+    if (!confirm('Confirma de nuevo: esto borrará todos los productos y sus publicaciones para todos los usuarios. ¿Continuar?')) return;
+
+    const todosLosIds = Object.keys(productosCache);
+    const { error, eliminados, etapa } = await borrarProductosPorId(todosLosIds, msg, 'Eliminando todos');
+
+    if (error) {
+      msg.style.color = 'var(--rust)';
+      msg.textContent = `Error al eliminar (se alcanzaron a borrar ${eliminados} de ${total} antes de fallar en "${etapa || ''}"): ` + error.message;
+      cargarProductos();
+      return;
+    }
+    msg.style.color = 'var(--teal)';
+    msg.textContent = 'Todos los productos fueron eliminados.';
+    cargarProductos();
+  };
+
+  // --- Zona de limpieza de base de datos: por proveedor o todos, con respaldo y auditoría ---
+
+  function descargarJSON(nombreArchivo, datos) {
+    const blob = new Blob([JSON.stringify(datos, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = nombreArchivo;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  window.toggleZonaLimpieza = function() {
+    const cont = document.getElementById('contenido-limpieza');
+    const icono = document.getElementById('icono-limpieza');
+    const abierta = cont.style.display === 'block';
+    cont.style.display = abierta ? 'none' : 'block';
+    icono.textContent = abierta ? 'Mostrar ▾' : 'Ocultar ▴';
+  };
+
+  window.ejecutarLimpieza = async function() {
+    const msg = document.getElementById('msg-limpieza');
+    const sel = document.getElementById('limpieza-proveedor');
+    const proveedorId = sel.value;
+    const proveedorNombre = proveedorId ? sel.options[sel.selectedIndex].textContent : 'Todos los proveedores';
+
+    const objetivo = Object.values(productosCache).filter(p => !proveedorId || p.proveedores?.id === proveedorId);
+
+    if (objetivo.length === 0) {
+      msg.style.color = 'var(--rust)';
+      msg.textContent = 'No hay productos para ese proveedor — no hay nada que limpiar.';
+      return;
+    }
+
+    const textoEsperado = proveedorId ? proveedorNombre : 'ELIMINAR TODO';
+    const textoIngresado = prompt(
+      `Vas a eliminar ${objetivo.length} producto(s) de "${proveedorNombre}" de forma PERMANENTE (no se puede deshacer).\n\nSe descargará un respaldo antes de borrar. Para confirmar, escribe exactamente:\n${textoEsperado}`
+    );
+    if (textoIngresado === null) return; // el usuario canceló
+    if (textoIngresado.trim().toLowerCase() !== textoEsperado.trim().toLowerCase()) {
+      msg.style.color = 'var(--rust)';
+      msg.textContent = 'Texto de confirmación incorrecto — no se eliminó nada.';
+      return;
+    }
+
+    const { data: { session } } = await supabase.auth.getSession();
+
+    // Respaldo descargable ANTES de borrar nada
+    const respaldo = objetivo.map(p => ({
+      id: p.id, nombre: p.nombre, sku: p.sku, categoria: p.categoria, costo_usd: p.costo_usd,
+      proveedor: p.proveedores?.nombre || null, especificaciones: p.especificaciones, publicacion: p.pub || null
+    }));
+    const fecha = new Date().toISOString().slice(0, 10);
+    const nombreProveedorArchivo = proveedorId ? proveedorNombre.replace(/[^a-z0-9]+/gi, '-') : 'todos';
+    descargarJSON(`respaldo-productos-${nombreProveedorArchivo}-${fecha}.json`, respaldo);
+
+    const ids = objetivo.map(p => p.id);
+    const { error, eliminados, etapa } = await borrarProductosPorId(ids, msg, `Eliminando ${objetivo.length} producto(s)...`);
+
+    if (error) {
+      msg.style.color = 'var(--rust)';
+      msg.textContent = `Error al eliminar en "${etapa || ''}" (se alcanzaron a borrar ${eliminados} de ${objetivo.length}): ${error.message} (ya se descargó el respaldo, no se perdió nada).`;
+      cargarProductos();
+      return;
+    }
+
+    // Registro de auditoría — se guarda una vez confirmado que el borrado sí ocurrió
+    const { error: errAuditoria } = await supabase.from('auditoria_eliminaciones').insert({
+      creado_por: session?.user?.id,
+      creado_por_email: session?.user?.email,
+      proveedor_id: proveedorId || null,
+      proveedor_nombre: proveedorNombre,
+      cantidad_productos: objetivo.length,
+      productos_eliminados: respaldo
+    });
+
+    msg.style.color = 'var(--teal)';
+    msg.textContent = errAuditoria
+      ? `${objetivo.length} producto(s) eliminados y respaldo descargado, pero no se pudo guardar el registro de auditoría: ${errAuditoria.message}`
+      : `Listo: ${objetivo.length} producto(s) de "${proveedorNombre}" eliminados. Se descargó el respaldo y quedó registrado en el historial.`;
+    cargarProductos();
+  };
+
+  window.verHistorialLimpieza = async function() {
+    const cont = document.getElementById('historial-limpieza');
+    if (cont.style.display === 'block') { cont.style.display = 'none'; return; }
+
+    const { data, error } = await supabase
+      .from('auditoria_eliminaciones')
+      .select('*')
+      .order('creado_en', { ascending: false })
+      .limit(20);
+
+    if (error) { cont.style.display = 'block'; cont.innerHTML = 'No se pudo cargar el historial: ' + escapeHtml(error.message); return; }
+    if (!data || data.length === 0) { cont.style.display = 'block'; cont.innerHTML = 'Todavía no hay limpiezas registradas.'; return; }
+
+    cont.innerHTML = data.map(r => {
+      const fecha = new Date(r.creado_en).toLocaleString('es-VE');
+      return `${escapeHtml(fecha)} — ${escapeHtml(r.creado_por_email || 'usuario desconocido')} eliminó ${r.cantidad_productos} producto(s) de "${escapeHtml(r.proveedor_nombre)}"`;
+    }).join('<br>');
+    cont.style.display = 'block';
+  };
+
+  // --- Gestionar categorías: limpiar valores basura (ej. numéricos, de una columna mal
+  // detectada al importar) que quedaron guardados en productos.categoria ---
+
+  window.toggleGestionCategorias = function() {
+    const cont = document.getElementById('contenido-categorias');
+    const icono = document.getElementById('icono-categorias');
+    const abierta = cont.style.display === 'block';
+    cont.style.display = abierta ? 'none' : 'block';
+    icono.textContent = abierta ? 'Mostrar ▾' : 'Ocultar ▴';
+    if (!abierta) renderizarListaGestionCategorias();
+  };
+
+  function pareceCategoriaNumerica(valor) {
+    const limpio = String(valor).trim().replace(',', '.');
+    return limpio !== '' && !isNaN(Number(limpio));
+  }
+
+  function renderizarListaGestionCategorias() {
+    const cont = document.getElementById('lista-gestion-categorias');
+    const conteo = {};
+    Object.values(productosCache).forEach(p => {
+      const cat = (p.categoria || '').trim();
+      if (!cat) return;
+      conteo[cat] = (conteo[cat] || 0) + 1;
+    });
+    const categorias = Object.keys(conteo).sort((a, b) => a.localeCompare(b, 'es'));
+    if (categorias.length === 0) {
+      cont.innerHTML = '<div class="empty">No hay categorías asignadas todavía.</div>';
+      return;
+    }
+    cont.innerHTML = categorias.map(cat => {
+      const sospechosa = pareceCategoriaNumerica(cat);
+      return `
+        <label class="fila-producto" style="cursor:pointer;">
+          <span style="display:flex; align-items:center; gap:10px; flex:1; min-width:0;">
+            <input type="checkbox" class="chk-categoria-gestion" value="${escapeHtml(cat)}">
+            <span class="fp-nombre">${escapeHtml(cat)}${sospechosa ? ' <span style="color:var(--rust); font-size:11px;">(parece no ser una categoría real)</span>' : ''}</span>
+          </span>
+          <span class="fp-info">${conteo[cat]} producto(s)</span>
+        </label>`;
+    }).join('');
+  }
+
+  function categoriasSeleccionadasGestion() {
+    return Array.from(document.querySelectorAll('.chk-categoria-gestion:checked')).map(chk => chk.value);
+  }
+
+  // Actualiza en lotes en vez de un solo .in(...) con todos los IDs — con categorías que
+  // agrupan cientos/miles de productos, esa URL sería demasiado larga (mismo problema que
+  // el borrado masivo) y el servidor la rechazaría con Bad Request.
+  async function actualizarEnLotes(tabla, columna, ids, valores, tamanoLote, onProgreso) {
+    for (let i = 0; i < ids.length; i += tamanoLote) {
+      const lote = ids.slice(i, i + tamanoLote);
+      const { error } = await supabase.from(tabla).update(valores).in(columna, lote);
+      if (error) return { error, hechos: i };
+      if (onProgreso) onProgreso(Math.min(i + tamanoLote, ids.length), ids.length);
+    }
+    return { error: null, hechos: ids.length };
+  }
+
+  function idsDeCategorias(categorias) {
+    const set = new Set(categorias);
+    return Object.values(productosCache).filter(p => set.has((p.categoria || '').trim())).map(p => p.id);
+  }
+
+  window.vaciarCategoriasSeleccionadas = async function() {
+    const msg = document.getElementById('msg-categorias');
+    const categorias = categoriasSeleccionadasGestion();
+    if (categorias.length === 0) { msg.style.color = 'var(--rust)'; msg.textContent = 'Selecciona al menos una categoría.'; return; }
+    const ids = idsDeCategorias(categorias);
+    if (!confirm(`¿Vaciar la categoría de ${ids.length} producto(s) en ${categorias.length} categoría(s) seleccionada(s)? Los productos NO se borran, solo quedan sin categoría.`)) return;
+
+    msg.style.color = 'var(--muted)'; msg.textContent = `Actualizando 0/${ids.length}...`;
+    const { error, hechos } = await actualizarEnLotes('productos', 'id', ids, { categoria: null }, 150, (h, t) => {
+      msg.style.color = 'var(--muted)'; msg.textContent = `Actualizando ${h}/${t}...`;
+    });
+    if (error) { msg.style.color = 'var(--rust)'; msg.textContent = `Error (se alcanzaron a actualizar ${hechos} de ${ids.length}): ` + error.message; }
+    else { msg.style.color = 'var(--teal)'; msg.textContent = `${ids.length} producto(s) quedaron sin categoría.`; }
+    await cargarProductos();
+    renderizarListaGestionCategorias();
+  };
+
+  window.renombrarCategoriasSeleccionadas = async function() {
+    const msg = document.getElementById('msg-categorias');
+    const categorias = categoriasSeleccionadasGestion();
+    const nuevoNombre = document.getElementById('categoria-nuevo-nombre').value.trim();
+    if (categorias.length === 0) { msg.style.color = 'var(--rust)'; msg.textContent = 'Selecciona al menos una categoría.'; return; }
+    if (!nuevoNombre) { msg.style.color = 'var(--rust)'; msg.textContent = 'Escribe el nombre nuevo de categoría.'; return; }
+    const ids = idsDeCategorias(categorias);
+    if (!confirm(`¿Renombrar ${ids.length} producto(s) de ${categorias.length} categoría(s) a "${nuevoNombre}"?`)) return;
+
+    msg.style.color = 'var(--muted)'; msg.textContent = `Actualizando 0/${ids.length}...`;
+    const { error, hechos } = await actualizarEnLotes('productos', 'id', ids, { categoria: nuevoNombre }, 150, (h, t) => {
+      msg.style.color = 'var(--muted)'; msg.textContent = `Actualizando ${h}/${t}...`;
+    });
+    if (error) { msg.style.color = 'var(--rust)'; msg.textContent = `Error (se alcanzaron a actualizar ${hechos} de ${ids.length}): ` + error.message; }
+    else { msg.style.color = 'var(--teal)'; msg.textContent = `${ids.length} producto(s) ahora están en "${nuevoNombre}".`; document.getElementById('categoria-nuevo-nombre').value = ''; }
+    await cargarProductos();
+    renderizarListaGestionCategorias();
+  };
+
+  let secuenciaComparacion = 0;
+
+  window.actualizarComparacionComisiones = async function(prefix) {
+    const cont = document.getElementById('comparacion-comisiones');
+    if (!cont) return;
+    const modo = document.getElementById(prefix + '-modo-ganancia').value;
+    const costo = parseFloat(document.getElementById(prefix + '-costo').value);
+    const valor = parseFloat(document.getElementById(prefix + '-valor-ganancia').value);
+
+    if (isNaN(costo) || isNaN(valor) || !tasaBCV || !tasaBinance) {
+      cont.style.display = 'none';
+      return;
+    }
+
+    const miSecuencia = ++secuenciaComparacion;
+    const comisionActual = parseFloat(document.getElementById(prefix + '-comision').value);
+    const tipoPub = document.getElementById(prefix + '-tipo-publicacion')?.value;
+
+    const { data: clasica } = await supabase.rpc('calcular_precios', { p_costo_usd: costo, p_modo: modo, p_valor: valor, p_comision_ml_pct: 11, p_tasa_bcv: tasaBCV, p_tasa_binance: tasaBinance });
+    const { data: premium } = await supabase.rpc('calcular_precios', { p_costo_usd: costo, p_modo: modo, p_valor: valor, p_comision_ml_pct: 15, p_tasa_bcv: tasaBCV, p_tasa_binance: tasaBinance });
+    let personalizada = null;
+    if (!isNaN(comisionActual) && comisionActual !== 11 && comisionActual !== 15) {
+      const { data } = await supabase.rpc('calcular_precios', { p_costo_usd: costo, p_modo: modo, p_valor: valor, p_comision_ml_pct: comisionActual, p_tasa_bcv: tasaBCV, p_tasa_binance: tasaBinance });
+      personalizada = data;
+    }
+
+    // Si mientras esperábamos la respuesta el usuario siguió escribiendo,
+    // ya hay una petición más nueva en camino: descartamos esta respuesta vieja.
+    if (miSecuencia !== secuenciaComparacion) return;
+
+    if (!clasica || !premium) { cont.style.display = 'none'; return; }
+    const c = clasica[0], p = premium[0];
+    const etiquetaGanancia = modo === 'neta' ? `quedarte con $${valor.toFixed(2)} netos` : `ganar $${valor.toFixed(2)} brutos`;
+
+    const fila = (nombre, d, comisionPct, activa) => `
+      <div style="flex:1; min-width:260px; border:1px solid ${activa ? 'var(--gold)' : 'var(--line)'}; padding:12px 14px;">
+        <div style="font-weight:600; margin-bottom:8px;">${nombre}${activa ? ' ✓' : ''}</div>
+        <div style="font-size:13px; line-height:1.9;">
+          <div>Precio en efectivo (cash): <b style="color:var(--gold)">$${parseFloat(d.precio_efectivo_usd).toFixed(2)}</b></div>
+          <div>Precio a publicar en Bs (BCV): <b style="color:var(--teal)">Bs ${parseFloat(d.precio_bcv_bs).toLocaleString('es-VE',{maximumFractionDigits:2})}</b></div>
+          <div>Ref. en $ a tasa BCV: <b style="color:var(--teal)">$${parseFloat(d.precio_bcv_usd_equiv).toFixed(2)}</b></div>
+          <div style="color:var(--muted); margin-top:6px; padding-top:6px; border-top:1px solid var(--line);">Comisión ML (${comisionPct}%, a tasa BCV): <b style="color:var(--rust)">$${parseFloat(d.comision_ml_usd).toFixed(2)}</b></div>
+          <div>Ganancia neta real: <b>$${parseFloat(d.ganancia_neta_usd).toFixed(2)}</b></div>
+        </div>
+      </div>`;
+
+    cont.style.display = 'block';
+    cont.innerHTML = `
+      <div style="font-size:12px; color:var(--muted); margin-bottom:12px;">Para ${etiquetaGanancia}, según el tipo de publicación:</div>
+      <div style="display:flex; gap:16px; flex-wrap:wrap;">
+        ${fila('Clásica (11%)', c, 11, tipoPub === '11')}
+        ${fila('Premium (15%)', p, 15, tipoPub === '15')}
+        ${personalizada ? fila(`Personalizada (${comisionActual}%)`, personalizada[0], comisionActual, tipoPub === 'custom') : ''}
+      </div>
+    `;
+  };
+
+  // Mantiene sincronizados los campos de ganancia en $ y en %, en ambas direcciones,
+  // según el tipo elegido (bruta = antes de comisión, neta = después de comisión).
+  window.aplicarTipoPublicacion = function(prefix) {
+    const tipo = document.getElementById(prefix + '-tipo-publicacion').value;
+    const comisionInput = document.getElementById(prefix + '-comision');
+    if (tipo !== 'custom') {
+      comisionInput.value = tipo;
+      comisionInput.readOnly = true;
+      comisionInput.style.opacity = '0.7';
+    } else {
+      comisionInput.readOnly = false;
+      comisionInput.style.opacity = '1';
+    }
+    sincronizarGanancia(prefix, 'tipo');
+  };
+
+  window.sincronizarGanancia = function(prefix, origen) {
+    const tipo = document.getElementById(prefix + '-modo-ganancia').value; // 'fijo' | 'neta'
+    const costo = parseFloat(document.getElementById(prefix + '-costo').value);
+    const comision = parseFloat(document.getElementById(prefix + '-comision').value) / 100;
+    // k = comisión efectiva sobre precio_efectivo, ya convertida a $ a tasa BCV (no Binance)
+    const k = (tasaBCV && tasaBinance) ? comision * (tasaBinance / tasaBCV) : comision;
+    const campoUsd = document.getElementById(prefix + '-valor-ganancia');
+    const campoPct = document.getElementById(prefix + '-valor-ganancia-pct');
+
+    if (isNaN(costo) || costo <= 0) { actualizarComparacionComisiones(prefix); return; }
+
+    if (origen === 'pct') {
+      const pct = parseFloat(campoPct.value);
+      if (isNaN(pct)) return;
+      let precio, monto;
+      if (tipo === 'fijo') {
+        precio = costo / (1 - pct / 100);
+        monto = precio - costo;
+      } else {
+        precio = costo / (1 - k - pct / 100);
+        monto = precio * (1 - k) - costo;
+      }
+      campoUsd.value = monto.toFixed(2);
+    } else {
+      // origen === 'usd' o cambió el tipo/costo/comisión: recalcular % a partir del $
+      const monto = parseFloat(campoUsd.value);
+      if (isNaN(monto)) return;
+      let precio;
+      if (tipo === 'fijo') {
+        precio = costo + monto;
+      } else {
+        precio = (costo + monto) / (1 - k);
+      }
+      const pct = precio > 0 ? (monto / precio) * 100 : 0;
+      campoPct.value = pct.toFixed(2);
+    }
+    actualizarComparacionComisiones(prefix);
+  };
+
+  window.crearProducto = async function() {
+    const proveedor_id = document.getElementById('prod-proveedor').value;
+    const nombre = document.getElementById('prod-nombre').value.trim();
+    const categoria = document.getElementById('prod-categoria').value.trim();
+    const costo_usd = parseFloat(document.getElementById('prod-costo').value);
+    const modo = document.getElementById('prod-modo-ganancia').value;
+    const valorGanancia = parseFloat(document.getElementById('prod-valor-ganancia').value);
+    const comision = parseFloat(document.getElementById('prod-comision').value);
+    const msg = document.getElementById('msg-producto');
+
+    if (!proveedor_id) { msg.textContent = 'Selecciona un proveedor.'; return; }
+    if (!nombre || isNaN(costo_usd)) { msg.textContent = 'Nombre y costo son obligatorios.'; return; }
+    if (!tasaBCV || !tasaBinance) { msg.textContent = 'No hay tasas de cambio cargadas todavía.'; return; }
+
+    const { data: { session } } = await supabase.auth.getSession();
+    let productoId = editandoProductoId;
+    const especificaciones = construirEspecificaciones();
+
+    if (editandoProductoId) {
+      const { error: errUpd } = await supabase
+        .from('productos')
+        .update({ proveedor_id, nombre, categoria, costo_usd, especificaciones })
+        .eq('id', editandoProductoId);
+      if (errUpd) { msg.textContent = 'Error al actualizar: ' + errUpd.message; return; }
+    } else {
+      const { data: producto, error: errProd } = await supabase
+        .from('productos')
+        .insert({ proveedor_id, nombre, categoria, costo_usd, especificaciones, creado_por: session?.user?.id })
+        .select()
+        .single();
+      if (errProd) { msg.textContent = 'Error: ' + errProd.message; return; }
+      productoId = producto.id;
+    }
+
+    // Llamar la función de cálculo de márgenes ya guardada en la base de datos
+    const { data: calculo, error: errCalc } = await supabase.rpc('calcular_precios', {
+      p_costo_usd: costo_usd,
+      p_modo: modo,
+      p_valor: valorGanancia,
+      p_comision_ml_pct: comision,
+      p_tasa_bcv: tasaBCV,
+      p_tasa_binance: tasaBinance
+    });
+
+    if (errCalc) { msg.textContent = 'Producto guardado, pero falló el cálculo: ' + errCalc.message; }
+    else {
+      const c = calculo[0];
+      const imagenes = document.getElementById('prod-imagenes').value
+        .split(',').map(s => s.trim()).filter(Boolean);
+
+      const datosPublicacion = {
+        modo_ganancia: modo,
+        margen_objetivo_pct: modo === 'porcentaje' ? valorGanancia : null,
+        comision_ml_pct: comision,
+        precio_efectivo_usd: c.precio_efectivo_usd,
+        precio_bcv_usd_equiv: c.precio_bcv_usd_equiv,
+        precio_bcv_bs: c.precio_bcv_bs,
+        ganancia_real_usd: c.ganancia_deseada_usd,
+        comision_ml_usd: c.comision_ml_usd,
+        ganancia_neta_usd: c.ganancia_neta_usd,
+        descripcion: document.getElementById('prod-descripcion').value.trim(),
+        condicion: document.getElementById('prod-condicion').value,
+        stock: parseInt(document.getElementById('prod-stock').value) || 1,
+        forma_envio: document.getElementById('prod-envio').value.trim(),
+        condiciones_pago: document.getElementById('prod-pago').value.trim(),
+        horario_atencion: document.getElementById('prod-horario').value.trim(),
+        imagenes: imagenes
+      };
+
+      // Al guardar, el producto pasa a la lista de "listos para publicar" — salvo que ya
+      // esté publicado de verdad en Mercado Libre (estado 'publicado'), en cuyo caso no lo
+      // tocamos: editar precio/descripción desde aquí no debe des-vincular una publicación real.
+      const estadoActual = editandoProductoId ? (productosCache[editandoProductoId]?.pub?.estado || 'borrador') : 'borrador';
+      if (estadoActual !== 'publicado') {
+        datosPublicacion.estado = 'listo';
+      }
+
+      if (editandoProductoId) {
+        const { error: errPubUpd } = await supabase.from('publicaciones').update(datosPublicacion).eq('producto_id', productoId);
+        if (errPubUpd) { msg.style.color = 'var(--rust)'; msg.textContent = 'Error al guardar los cambios: ' + errPubUpd.message; return; }
+      } else {
+        const { error: errPubIns } = await supabase.from('publicaciones').insert({ ...datosPublicacion, producto_id: productoId, creado_por: session?.user?.id });
+        if (errPubIns) { msg.style.color = 'var(--rust)'; msg.textContent = 'Error al guardar la publicación: ' + errPubIns.message; return; }
+      }
+
+      msg.style.color = '';
+      const idParaResaltar = productoId;
+      cancelarEdicion();
+      await cargarProductos();
+      irYResaltarProducto(idParaResaltar);
+    }
+  };
+
+  // Cambiar de pestaña de inmediato (antes de cargar datos) para que no se vea el salto visual
+  (function cambiarPestanaInmediato() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('tab') === 'productos' || params.get('editar')) {
+      const tabProductos = document.querySelector('.tab[onclick*="productos"]');
+      if (tabProductos) switchView('productos', tabProductos);
+    }
+    // El estado real (clases "active") ya quedó aplicado arriba; a partir de aquí
+    // dejamos de forzarlo por CSS para que el comportamiento normal de las pestañas siga mandando.
+    document.documentElement.classList.remove('forzar-productos');
+  })();
+
+  (async function init() {
+    await checkSession();
+    await cargarTasas();
+    await cargarProveedores();
+    await cargarMargenesCategoria();
+    await cargarConfiguracionVentas();
+    aplicarPredeterminadosVenta(); // el formulario arranca en modo "producto nuevo"
+
+    // Restaurar los filtros, la página y el scroll en que estaba la tabla de productos
+    // antes de salir (por ejemplo, al ir a analizar un producto en Mercado Libre y volver).
+    let categoriaGuardada = '';
+    let estadoGuardadoGlobal = null;
+    try {
+      const estadoGuardado = JSON.parse(localStorage.getItem('dashboard-productos-estado') || 'null');
+      if (estadoGuardado) {
+        estadoGuardadoGlobal = estadoGuardado;
+        if (estadoGuardado.busqueda) document.getElementById('filtro-busqueda').value = estadoGuardado.busqueda;
+        if (estadoGuardado.precio) document.getElementById('filtro-precio').value = estadoGuardado.precio;
+        if (estadoGuardado.costo) document.getElementById('filtro-costo').value = estadoGuardado.costo;
+        if (estadoGuardado.proveedor) document.getElementById('filtro-proveedor').value = estadoGuardado.proveedor;
+        if (estadoGuardado.estadoPub) document.getElementById('filtro-estado-pub').value = estadoGuardado.estadoPub;
+        if (estadoGuardado.categoria) categoriaGuardada = estadoGuardado.categoria;
+        if (estadoGuardado.pagina) paginaActualProductos = estadoGuardado.pagina;
+      }
+    } catch (e) {}
+
+    await cargarProductos();
+
+    // La categoría se aplica después de cargar productos, porque las opciones del filtro
+    // se generan a partir del catálogo real (no existen todavía cuando se restauran los demás filtros).
+    if (categoriaGuardada) {
+      const selCategoria = document.getElementById('filtro-categoria');
+      if (Array.from(selCategoria.options).some(o => o.value === categoriaGuardada)) {
+        selCategoria.value = categoriaGuardada;
+        renderizarTablaProductos();
+      }
+    }
+
+    // ¿Venimos de un enlace "Volver a productos" (?tab=productos) o de "Reajustar precio" (?editar=ID)?
+    const params = new URLSearchParams(window.location.search);
+    const tabSolicitada = params.get('tab');
+    if (tabSolicitada === 'productos') {
+      const tabProductos = document.querySelector('.tab[onclick*="productos"]');
+      if (tabProductos) switchView('productos', tabProductos);
+      window.history.replaceState({}, '', 'dashboard.html');
+    }
+
+    const idParaEditar = params.get('editar');
+    if (idParaEditar) {
+      const tabProductos = document.querySelector('.tab[onclick*="productos"]');
+      if (tabProductos) switchView('productos', tabProductos);
+
+      const intentarAbrirEdicion = async (reintento) => {
+        if (productosCache[idParaEditar]) {
+          editarProducto(idParaEditar);
+        } else if (reintento < 3) {
+          await new Promise(r => setTimeout(r, 400));
+          await cargarProductos();
+          await intentarAbrirEdicion(reintento + 1);
+        } else {
+          irYResaltarProducto(idParaEditar);
+          alert('No se pudo abrir el producto para editar automáticamente. Búscalo en la lista de abajo y dale "Editar" manualmente.');
+        }
+      };
+      await intentarAbrirEdicion(0);
+      // Limpiar el parámetro de la URL para que un refresh no vuelva a abrir la edición
+      window.history.replaceState({}, '', 'dashboard.html');
+    } else if (estadoGuardadoGlobal && typeof estadoGuardadoGlobal.scroll === 'number') {
+      // Sin un producto específico que editar: restaurar el scroll donde estabas
+      // (después de que la tabla ya se dibujó, para que la posición sea la correcta).
+      requestAnimationFrame(() => requestAnimationFrame(() => window.scrollTo(0, estadoGuardadoGlobal.scroll)));
+    }
+  })();
+</script>
+
+<div class="btns-scroll">
+  <button class="btn-scroll" id="btn-ir-inicio" title="Ir al inicio de la página" aria-label="Ir al inicio">↑</button>
+  <button class="btn-scroll" id="btn-ir-fin" title="Ir al final de la página" aria-label="Ir al final">↓</button>
+</div>
+<script>
+(function() {
+  var btnInicio = document.getElementById('btn-ir-inicio');
+  var btnFin = document.getElementById('btn-ir-fin');
+  function actualizar() {
+    var y = window.scrollY;
+    var alturaScrolleable = document.documentElement.scrollHeight - window.innerHeight;
+    btnInicio.classList.toggle('visible', y > 320);
+    btnFin.classList.toggle('visible', alturaScrolleable > 320 && y < alturaScrolleable - 320);
+  }
+  btnInicio.addEventListener('click', function() { window.scrollTo({ top: 0, behavior: 'smooth' }); });
+  btnFin.addEventListener('click', function() { window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'smooth' }); });
+  window.addEventListener('scroll', actualizar, { passive: true });
+  window.addEventListener('resize', actualizar);
+  actualizar();
+})();
+</script>
+<script>
+// Mide en vivo la altura real del encabezado de arriba (logo + menú, que ya queda fijo al
+// hacer scroll) y la del bloque "Productos con margen calculado" (título + acciones + filtros),
+// para que ese bloque se quede pegado justo debajo del encabezado, y la fila de títulos de la
+// tabla (Producto, Proveedor, Stock...) se quede pegada justo debajo de ese bloque — así nunca
+// se pierde de vista con qué columna corresponde cada dato al bajar por la lista larga.
+// Se recalcula en cada carga y cambio de tamaño porque el encabezado y los filtros pueden
+// ocupar una o dos líneas según el ancho de pantalla.
+(function() {
+  function actualizarStickyProductos() {
+    var header = document.querySelector('header');
+    var bloque = document.getElementById('bloque-sticky-productos');
+    if (!header || !bloque) return;
+    var altoHeader = header.getBoundingClientRect().height;
+    bloque.style.top = altoHeader + 'px';
+    var altoBloque = bloque.getBoundingClientRect().height;
+    var thead = document.querySelectorAll('#tabla-productos thead th');
+    thead.forEach(function(th) { th.style.top = (altoHeader + altoBloque) + 'px'; });
+  }
+  window.addEventListener('load', actualizarStickyProductos);
+  window.addEventListener('resize', actualizarStickyProductos);
+  actualizarStickyProductos();
+  // Los filtros son <select>/<input> que cambian de contenido dinámicamente (proveedores,
+  // categorías) sin cambiar de tamaño — pero por si acaso el layout se reajusta, se vuelve a
+  // medir un momento después de cargar los datos iniciales.
+  setTimeout(actualizarStickyProductos, 800);
+})();
+</script>
+</body>
+</html>
