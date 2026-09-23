@@ -426,8 +426,7 @@
           <div style="display:flex; align-items:center; gap:10px; margin-top:8px; flex-wrap:wrap;">
             <label for="input-subir-fotos" class="add" style="padding:7px 14px; font-size:12.5px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line); cursor:pointer; display:inline-block; margin-top:0;">📷 Subir fotos</label>
             <input type="file" id="input-subir-fotos" accept="image/jpeg,image/png,image/webp" multiple style="display:none;" onchange="subirFotosProducto(this.files)">
-            <button type="button" onclick="pegarCapturaDesdePortapapeles()" style="padding:7px 14px; font-size:12.5px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line); cursor:pointer; margin-top:0;">📋 Pegar captura</button>
-            <span style="font-size:12px; color:var(--muted);">(toma una captura de pantalla y haz clic aquí, o pega con <strong>Ctrl+V</strong> en esta pestaña — se abre un editor para recortar fondo/mejorarla antes de guardarla)</span>
+            <span style="font-size:12px; color:var(--muted);">o toma una captura de pantalla y pega aquí con <strong>Ctrl+V</strong> (se abre un editor para recortar fondo/mejorarla antes de guardarla)</span>
             <span id="msg-subida-fotos" style="font-size:12px; color:var(--muted);"></span>
           </div>
           <div class="hint" style="margin-top:6px;">Sube las fotos aquí (se alojan con link público, listas para usar también en la planilla de publicación masiva de Mercado Libre) o pega URLs de fotos ya alojadas en otro sitio, arriba.</div>
@@ -1515,38 +1514,6 @@
     const vista = document.getElementById('view-productos');
     return !!(vista && vista.classList.contains('active'));
   }
-
-  // Botón "📋 Pegar captura": lee el portapapeles directamente al hacer clic, sin depender de que
-  // el navegador dispare el evento "paste" (con Ctrl+V eso puede fallar según qué elemento tenga
-  // el foco en ese momento — este botón es la vía confiable; Ctrl+V sigue funcionando además, como
-  // atajo, gracias al listener de más abajo).
-  window.pegarCapturaDesdePortapapeles = async function() {
-    const msg = document.getElementById('msg-subida-fotos');
-    if (!navigator.clipboard || !navigator.clipboard.read) {
-      msg.style.color = 'var(--rust)';
-      msg.textContent = 'Tu navegador no permite este botón — copia la captura y pega con Ctrl+V en esta pestaña en su lugar.';
-      return;
-    }
-    try {
-      const items = await navigator.clipboard.read();
-      let blob = null;
-      for (const item of items) {
-        const tipoImagen = item.types.find(t => t.startsWith('image/'));
-        if (tipoImagen) { blob = await item.getType(tipoImagen); break; }
-      }
-      if (!blob) {
-        msg.style.color = 'var(--rust)';
-        msg.textContent = 'No se encontró ninguna imagen en el portapapeles. Toma una captura de pantalla y vuelve a intentar.';
-        return;
-      }
-      msg.style.color = 'var(--muted)';
-      msg.textContent = '';
-      await abrirEditorFoto(blob);
-    } catch (err) {
-      msg.style.color = 'var(--rust)';
-      msg.textContent = 'No se pudo leer el portapapeles (el navegador puede haber bloqueado el permiso) — prueba pegando con Ctrl+V en esta pestaña.';
-    }
-  };
 
   document.addEventListener('paste', async (e) => {
     if (!vistaProductosActiva()) return; // no interferir con pegar texto en otras pestañas
