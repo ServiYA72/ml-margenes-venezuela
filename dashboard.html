@@ -132,7 +132,7 @@
     align-items: end;
   }
   label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
-  input, select {
+  input, select, textarea {
     width: 100%;
     background: var(--surface-2);
     border: 1px solid var(--line);
@@ -141,7 +141,15 @@
     font-size: 14px;
     font-family: 'IBM Plex Sans', sans-serif;
   }
-  input:focus, select:focus { outline: none; border-color: var(--gold); }
+  textarea { resize: vertical; line-height: 1.5; }
+  input:focus, select:focus, textarea:focus { outline: none; border-color: var(--gold); }
+  .btn-ia {
+    background: var(--surface-2); color: var(--gold); border: 1px solid var(--gold);
+    padding: 9px 14px; font-size: 12.5px; font-weight: 600; cursor: pointer; margin-top: 8px;
+    font-family: 'IBM Plex Sans', sans-serif;
+  }
+  .btn-ia:hover:not(:disabled) { background: var(--gold); color: var(--ink); }
+  .btn-ia:disabled { opacity: 0.6; cursor: default; }
   button.add {
     background: var(--gold);
     color: var(--ink);
@@ -279,6 +287,27 @@
   <section class="view" id="view-productos">
 
     <div class="panel">
+      <h2>Condiciones de venta predeterminadas</h2>
+      <div class="hint" style="margin-top:0;">Este texto se precarga solo en "Descripción de la publicación" de cada producto <b>nuevo</b> (no toca los productos que ya guardaste) — así no tenés que reescribir lo mismo cada vez. Lo podés editar por producto si ese caso es distinto, y podés cambiar este predeterminado cuando quieras.</div>
+      <div class="grid-form" style="margin-top:14px;">
+        <div>
+          <label for="cfg-envio">Forma de envío</label>
+          <input type="text" id="cfg-envio" placeholder="Ej: Mercado Envíos / Acordar con el comprador">
+        </div>
+        <div>
+          <label for="cfg-pago">Condiciones de pago</label>
+          <input type="text" id="cfg-pago" placeholder="Ej: Efectivo, Zelle, Pago Móvil, Bs a tasa BCV">
+        </div>
+        <div>
+          <label for="cfg-horario">Horario de atención</label>
+          <input type="text" id="cfg-horario" placeholder="Ej: Lunes a viernes, 9am - 5pm">
+        </div>
+        <button class="add" onclick="guardarConfiguracionVentas()">Guardar predeterminados</button>
+      </div>
+      <div class="msg" id="msg-configuracion-ventas"></div>
+    </div>
+
+    <div class="panel">
       <h2>Márgenes automáticos por categoría</h2>
       <div class="grid-form">
         <div>
@@ -355,7 +384,12 @@
       <div class="grid-form" style="margin-top:18px; padding-top:18px; border-top:1px solid var(--line);">
         <div style="grid-column: 1 / -1;">
           <label for="prod-descripcion">Descripción de la publicación</label>
-          <input type="text" id="prod-descripcion" placeholder="Especificaciones, garantía, qué incluye...">
+          <textarea id="prod-descripcion" rows="4" placeholder="Especificaciones, garantía, qué incluye..."></textarea>
+          <div style="display:flex; align-items:center; gap:10px; margin-top:2px; flex-wrap:wrap;">
+            <button type="button" class="btn-ia" id="btn-generar-descripcion" onclick="generarDescripcionIA()">✨ Generar con IA</button>
+            <span id="msg-descripcion-ia" style="font-size:12px; color:var(--muted);"></span>
+          </div>
+          <div class="hint" style="margin-top:6px;">Usa el nombre, la marca, el SKU y la categoría del producto para redactar una descripción — no inventa specs ni garantías que no le hayas cargado. Revisa el resultado antes de guardar.</div>
         </div>
         <div>
           <label for="prod-condicion">Condición</label>
@@ -680,6 +714,59 @@
         limpiezaProveedor.appendChild(opt);
       });
     }
+  }
+
+  // Condiciones de venta predeterminadas: un único renglón por cuenta (tenant) con el texto que
+  // se precarga en "Forma de envío / Condiciones de pago / Horario de atención" cada vez que se
+  // abre el formulario para un producto NUEVO. No se aplica al editar un producto existente,
+  // porque ese producto ya tiene sus propios valores guardados (que pueden ser distintos).
+  let configuracionVentasCache = { forma_envio_default: '', condiciones_pago_default: '', horario_atencion_default: '' };
+
+  async function cargarConfiguracionVentas() {
+    const { data } = await supabase.from('configuracion_ventas').select('*').maybeSingle();
+    if (data) {
+      configuracionVentasCache = {
+        forma_envio_default: data.forma_envio_default || '',
+        condiciones_pago_default: data.condiciones_pago_default || '',
+        horario_atencion_default: data.horario_atencion_default || ''
+      };
+    }
+    document.getElementById('cfg-envio').value = configuracionVentasCache.forma_envio_default;
+    document.getElementById('cfg-pago').value = configuracionVentasCache.condiciones_pago_default;
+    document.getElementById('cfg-horario').value = configuracionVentasCache.horario_atencion_default;
+  }
+
+  window.guardarConfiguracionVentas = async function() {
+    const msg = document.getElementById('msg-configuracion-ventas');
+    const forma_envio_default = document.getElementById('cfg-envio').value.trim();
+    const condiciones_pago_default = document.getElementById('cfg-pago').value.trim();
+    const horario_atencion_default = document.getElementById('cfg-horario').value.trim();
+
+    const { error } = await supabase.from('configuracion_ventas')
+      .upsert({ forma_envio_default, condiciones_pago_default, horario_atencion_default, updated_at: new Date().toISOString() });
+
+    if (error) {
+      msg.style.color = 'var(--rust)';
+      msg.textContent = 'Error al guardar: ' + error.message;
+      return;
+    }
+    configuracionVentasCache = { forma_envio_default, condiciones_pago_default, horario_atencion_default };
+    msg.style.color = 'var(--teal)';
+    msg.textContent = 'Guardado — de ahora en más, los productos nuevos arrancan con este texto.';
+    // Si el formulario está en modo "producto nuevo" (no editando uno existente), se actualiza
+    // también lo que ya se ve en pantalla, para no tener que recargar la página.
+    if (editandoProductoId === null) aplicarPredeterminadosVenta();
+  };
+
+  // Solo toca los 3 campos si están vacíos, para no pisar algo que el usuario ya haya escrito
+  // en esta misma sesión antes de guardar los predeterminados.
+  function aplicarPredeterminadosVenta() {
+    const envio = document.getElementById('prod-envio');
+    const pago = document.getElementById('prod-pago');
+    const horario = document.getElementById('prod-horario');
+    if (envio && !envio.value) envio.value = configuracionVentasCache.forma_envio_default;
+    if (pago && !pago.value) pago.value = configuracionVentasCache.condiciones_pago_default;
+    if (horario && !horario.value) horario.value = configuracionVentasCache.horario_atencion_default;
   }
 
   let productosCache = {};
@@ -1147,6 +1234,64 @@
     document.getElementById('prod-comision').value = 9;
     sincronizarGanancia('prod', 'usd');
     actualizarPrevisualizacionFotos();
+    aplicarPredeterminadosVenta(); // vuelve a precargar envío/pago/horario para el próximo producto
+  };
+
+  // Arma la "Descripción de la publicación" con IA, a partir del nombre, la marca, el SKU y la
+  // categoría del producto. Si el producto ya existe (se está editando), la marca y el SKU se
+  // toman del catálogo (no hay campos para escribirlos a mano en este formulario); si es un
+  // producto nuevo que todavía no se guardó, la IA trabaja solo con lo que ya está escrito
+  // arriba (nombre y categoría). La llamada real a la IA vive en la función de Supabase
+  // "generar-descripcion-ia", que a su vez le pide explícitamente que no invente specs ni
+  // garantías que no vengan en estos datos.
+  window.generarDescripcionIA = async function() {
+    const btn = document.getElementById('btn-generar-descripcion');
+    const msg = document.getElementById('msg-descripcion-ia');
+    const nombre = document.getElementById('prod-nombre').value.trim();
+    const categoria = document.getElementById('prod-categoria').value.trim();
+
+    if (!nombre) {
+      msg.style.color = 'var(--rust)';
+      msg.textContent = 'Escribe primero el nombre del producto.';
+      return;
+    }
+
+    const productoExistente = editandoProductoId ? productosCache[editandoProductoId] : null;
+    const sku = productoExistente?.sku || '';
+    const marca = productoExistente?.especificaciones?.marca || '';
+    const descripcion_actual = document.getElementById('prod-descripcion').value.trim();
+
+    btn.disabled = true;
+    btn.textContent = 'Generando...';
+    msg.style.color = 'var(--muted)';
+    msg.textContent = '';
+
+    try {
+      const { data, error } = await supabase.functions.invoke('generar-descripcion-ia', {
+        body: { nombre, marca, sku, categoria, descripcion_actual }
+      });
+
+      if (error) {
+        msg.style.color = 'var(--rust)';
+        msg.textContent = 'No se pudo generar la descripción: ' + error.message;
+        return;
+      }
+      if (!data?.ok) {
+        msg.style.color = 'var(--rust)';
+        msg.textContent = data?.error || 'No se pudo generar la descripción.';
+        return;
+      }
+
+      document.getElementById('prod-descripcion').value = data.descripcion;
+      msg.style.color = 'var(--teal)';
+      msg.textContent = 'Listo — revísala y ajústala si hace falta antes de guardar.';
+    } catch (e) {
+      msg.style.color = 'var(--rust)';
+      msg.textContent = 'Ocurrió un error inesperado: ' + e.message;
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '✨ Generar con IA';
+    }
   };
 
   // --- Fotos de producto: se alojan en Supabase Storage (bucket público "productos-fotos",
@@ -1934,6 +2079,8 @@ RESULTADOS DEL CÁLCULO DE PRECIO
     await cargarTasas();
     await cargarProveedores();
     await cargarMargenesCategoria();
+    await cargarConfiguracionVentas();
+    aplicarPredeterminadosVenta(); // el formulario arranca en modo "producto nuevo"
 
     // Restaurar los filtros, la página y el scroll en que estaba la tabla de productos
     // antes de salir (por ejemplo, al ir a analizar un producto en Mercado Libre y volver).
