@@ -555,12 +555,31 @@
     return d.innerHTML;
   }
 
+  // Permite llegar aquí ya con el producto elegido — por ejemplo desde "Publicado en ML",
+  // haciendo clic en "🛒 Vender" sobre una publicación vinculada que se acaba de vender —
+  // así no hay que volver a buscarlo a mano y se reduce el riesgo de registrar la venta del
+  // producto equivocado. El canal, si viene en el link, también se preselecciona.
+  const CANALES_VALIDOS_URL = ['manual', 'mercadolibre'];
+  function preseleccionarDesdeUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const canal = params.get('canal');
+    if (canal && CANALES_VALIDOS_URL.includes(canal)) {
+      document.getElementById('v-canal').value = canal;
+    }
+    const productoId = params.get('producto_id');
+    if (productoId && productosCache[productoId]) {
+      elegirProducto(productoId);
+      document.getElementById('producto-elegido-panel').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
+
   (async function init() {
     await initSesion();
     await cargarTasas();
     await cargarProductos();
     await cargarClientes();
     await cargarVentas();
+    preseleccionarDesdeUrl();
   })();
 </script>
 

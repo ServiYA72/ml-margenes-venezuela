@@ -173,6 +173,12 @@
     font-size: 11.5px; cursor: pointer; margin: 0;
   }
   .btn-quitar:hover { border-color: var(--rust); color: var(--rust); }
+  .btn-vender {
+    display: inline-block; background: none; border: 1px solid var(--teal); color: var(--teal);
+    padding: 5px 10px; font-size: 11.5px; cursor: pointer; margin: 0 6px 0 0; text-decoration: none;
+  }
+  .btn-vender:hover { background: var(--teal); color: var(--ink); }
+  .celda-acciones { display: flex; gap: 6px; flex-wrap: wrap; }
 </style>
 </head>
 <body>
@@ -643,7 +649,12 @@
         <td>${p.mercadolibre_link ? `<a href="${escapeHtml(p.mercadolibre_link)}" target="_blank" rel="noopener">${escapeHtml(p.mercadolibre_item_id)} ↗</a>` : escapeHtml(p.mercadolibre_item_id || '—')}</td>
         <td style="text-align:right;">${p.precio_efectivo_usd != null ? '$' + Number(p.precio_efectivo_usd).toFixed(2) : '—'}</td>
         <td style="text-align:right;">${p.stock ?? '—'}</td>
-        <td><button class="btn-quitar" onclick="quitarPublicado('${p.id}')">Quitar</button></td>
+        <td>
+          <div class="celda-acciones">
+            <a class="btn-vender" href="ventas.html?producto_id=${encodeURIComponent(p.producto_id)}&canal=mercadolibre" title="Registrar esta venta en el panel de Ventas (descuenta el stock automáticamente)">🛒 Vender</a>
+            <button class="btn-quitar" onclick="quitarPublicado('${p.id}')">Quitar</button>
+          </div>
+        </td>
       </tr>`).join('');
   }
 
