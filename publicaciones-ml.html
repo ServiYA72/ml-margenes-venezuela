@@ -697,6 +697,7 @@
       return {
         filaEncabezado: f,
         filaDatosInicio: f + 4, // así vienen todas las planillas de Mercado Libre: encabezado + 4
+        normFila, // encabezados normalizados de TODA la fila — se usa para emparejar características técnicas
         col: {
           titulo: colTitulo,
           sku: colSku,
@@ -710,6 +711,30 @@
       };
     }
     return null;
+  }
+
+  // Intenta emparejar cada característica técnica (nombre libre, ej: "Marca") con una columna
+  // real de la planilla de Mercado Libre — cada categoría trae columnas técnicas distintas y con
+  // nombres largos y específicos (ej. Mercado Libre separa "Capacidad total del módulo de
+  // memoria RAM" de su columna hermana "Unidad de Capacidad total del módulo de memoria RAM").
+  // Por eso solo se acepta una coincidencia EXACTA de nombre (sin adivinar por parecido): así se
+  // evita el riesgo de escribir el valor en la columna de "Unidad" equivocada o en una columna
+  // que no era. Lo que no tenga una columna con el nombre exacto simplemente se descarta — es
+  // mejor una planilla correcta con menos datos rellenados, que una con datos en la columna
+  // equivocada. El usuario puede completar el resto a mano en Mercado Libre si hace falta.
+  function emparejarCaracteristicasConColumnas(normFila, columnasFijas, caracteristicas) {
+    const usadas = new Set(columnasFijas.filter(c => c >= 0));
+    const resultado = [];
+    (caracteristicas || []).forEach(({ clave, valor }) => {
+      const claveNorm = normalizarEncabezado(clave);
+      if (!claveNorm || !valor) return;
+      const col = normFila.findIndex((h, i) => !usadas.has(i) && h === claveNorm);
+      if (col !== -1) {
+        usadas.add(col);
+        resultado.push({ col, valor: String(valor), tipo: 'texto' });
+      }
+    });
+    return resultado;
   }
 
   // ── Edición quirúrgica del Excel original ──────────────────────────────────────────────────
@@ -929,7 +954,7 @@
     const ids = seleccionadosPreparar.map(p => p.id);
     const { data } = await supabase
       .from('publicaciones')
-      .select('producto_id, precio_efectivo_usd, stock, imagenes, descripcion')
+      .select('producto_id, precio_bcv_usd_equiv, stock, imagenes, descripcion')
       .in('producto_id', ids);
     infoPrepararPorProducto = {};
     (data || []).forEach(row => { infoPrepararPorProducto[row.producto_id] = row; });
@@ -1035,6 +1060,17 @@
     await refrescarInfoPreparar();
     const pubPorProducto = infoPrepararPorProducto;
 
+    // Características técnicas de cada producto (marca, modelo, y lo que se haya generado con
+    // IA o escrito a mano en el dashboard) — se usan para intentar rellenar las columnas técnicas
+    // que trae esta categoría (cada categoría trae columnas distintas: RAM, Color, Voltaje...).
+    const idsSeleccionados = seleccionadosPreparar.map(p => p.id);
+    const { data: filasEspecificaciones } = await supabase
+      .from('productos')
+      .select('id, especificaciones')
+      .in('id', idsSeleccionados);
+    const especificacionesPorProducto = {};
+    (filasEspecificaciones || []).forEach(row => { especificacionesPorProducto[row.id] = row.especificaciones || {}; });
+
     // El primer renglón libre es el primero (desde donde empiezan los datos) cuya celda de
     // Título esté vacía — en esta planilla TODAS las filas ya traen valores por defecto en
     // varias columnas (Condición, Stock, Tipo de publicación), así que no sirve buscar "la
@@ -1068,6 +1104,8 @@
 
     seleccionadosPreparar.forEach(p => {
       const pub = pubPorProducto[p.id];
+      const esp = especificacionesPorProducto[p.id] || {};
+      const detalles = (esp.caracteristicas && typeof esp.caracteristicas === 'object') ? esp.caracteristicas : {};
       const valores = [
         { col: enc.col.titulo, valor: truncarTitulo(p.nombre), tipo: 'texto' },
         { col: enc.col.sku, valor: p.sku || '', tipo: 'texto' },
@@ -1076,8 +1114,33 @@
       if (pub) {
         valores.push({ col: enc.col.fotos, valor: (pub.imagenes || []).join(', '), tipo: 'texto' });
         if (Number.isFinite(pub.stock)) valores.push({ col: enc.col.stock, valor: pub.stock, tipo: 'numero' });
-        if (pub.precio_efectivo_usd != null) valores.push({ col: enc.col.precio, valor: Number(pub.precio_efectivo_usd), tipo: 'numero' });
+        if (pub.precio_bcv_usd_equiv != null) valores.push({ col: enc.col.precio, valor: Number(pub.precio_bcv_usd_equiv), tipo: 'numero' });
       }
+
+      // Marca / Modelo: casi toda categoría de Mercado Libre trae estas dos columnas exactas.
+      if (enc.col.marca !== -1 && esp.marca) {
+        valores.push({ col: enc.col.marca, valor: String(esp.marca), tipo: 'texto' });
+        columnasVisibles.add(enc.col.marca);
+      }
+      const claveModelo = Object.keys(detalles).find(k => normalizarEncabezado(k) === 'modelo');
+      if (enc.col.modelo !== -1 && claveModelo) {
+        valores.push({ col: enc.col.modelo, valor: String(detalles[claveModelo]), tipo: 'texto' });
+        columnasVisibles.add(enc.col.modelo);
+      }
+
+      // El resto de las características técnicas (RAM, color, voltaje...) se intentan emparejar
+      // por nombre con cualquier otra columna de esta hoja. Lo que no coincida con ninguna
+      // columna se descarta — mejor una planilla correcta con menos datos, que datos puestos en
+      // la columna equivocada.
+      const columnasFijas = [enc.col.titulo, enc.col.sku, enc.col.descripcion, enc.col.fotos, enc.col.stock, enc.col.precio, enc.col.marca, enc.col.modelo];
+      const paresRestantes = Object.entries(detalles)
+        .filter(([clave]) => normalizarEncabezado(clave) !== 'modelo')
+        .map(([clave, valor]) => ({ clave, valor }));
+      emparejarCaracteristicasConColumnas(enc.normFila, columnasFijas, paresRestantes).forEach(({ col, valor, tipo }) => {
+        valores.push({ col, valor, tipo });
+        columnasVisibles.add(col);
+      });
+
       xmlHoja = escribirFilaProducto(xmlHoja, filaDestino + 1, valores, estilosColumnas); // +1: la fila en el XML es 1-indexada
       filaDestino++;
     });

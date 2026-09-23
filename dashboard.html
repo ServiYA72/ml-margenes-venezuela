@@ -391,6 +391,12 @@
           </div>
           <div class="hint" style="margin-top:6px;">Usa el nombre, la marca, el SKU y la categoría del producto para redactar una descripción — no inventa specs ni garantías que no le hayas cargado. Revisa el resultado antes de guardar.</div>
         </div>
+        <div style="grid-column: 1 / -1;">
+          <label>Características técnicas</label>
+          <div id="lista-caracteristicas" style="display:flex; flex-direction:column; gap:6px;"></div>
+          <button type="button" onclick="agregarFilaCaracteristica()" style="margin-top:8px; padding:7px 12px; font-size:12.5px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line); cursor:pointer;">+ Agregar característica</button>
+          <div class="hint" style="margin-top:6px;">Se completan solas con "✨ Generar con IA" arriba (incluye la Marca), o agrégalas/edítalas a mano. Se guardan con el producto y se usan para intentar rellenar las columnas técnicas del Excel de Mercado Libre.</div>
+        </div>
         <div>
           <label for="prod-condicion">Condición</label>
           <select id="prod-condicion">
@@ -493,6 +499,15 @@
             <option value="">Todas las categorías</option>
           </select>
         </div>
+        <div>
+          <label for="filtro-estado-pub" style="display:block; font-size:12px; color:var(--muted); margin-bottom:6px;">Estado de publicación</label>
+          <select id="filtro-estado-pub" onchange="aplicarFiltrosProductos()" style="background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:9px 10px; font-size:14px;">
+            <option value="">Todos los estados</option>
+            <option value="listo">🟢 Listo para publicar</option>
+            <option value="publicado">🔵 Ya publicado en ML</option>
+            <option value="borrador">⚪ Borrador (sin terminar)</option>
+          </select>
+        </div>
         <div id="contador-resultados" style="font-size:12px; color:var(--muted); padding-bottom:10px;"></div>
         <button class="add" style="padding:9px 14px; font-size:12.5px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line);" onclick="limpiarFiltrosProductos()">Limpiar filtros</button>
       </div>
@@ -504,6 +519,7 @@
           <tr>
             <th><input type="checkbox" id="chk-todos" onchange="toggleTodos(this)"></th>
             <th style="min-width:220px;">Producto</th><th>Proveedor</th>
+            <th>Estado</th>
             <th class="num">Stock</th>
             <th class="num">Costo</th>
             <th class="num" style="color:var(--teal)">Precio final al cliente ($ Ref. BCV)</th>
@@ -837,7 +853,7 @@
   };
 
   async function cargarProductos() {
-    const columnas = 'id, nombre, categoria, costo_usd, sku, especificaciones, proveedores(id, nombre), publicaciones(id, precio_efectivo_usd, precio_bcv_usd_equiv, precio_bcv_bs, ganancia_real_usd, comision_ml_usd, ganancia_neta_usd, modo_ganancia, margen_objetivo_pct, comision_ml_pct, descripcion, condicion, stock, forma_envio, condiciones_pago, horario_atencion, imagenes)';
+    const columnas = 'id, nombre, categoria, costo_usd, sku, especificaciones, proveedores(id, nombre), publicaciones(id, precio_efectivo_usd, precio_bcv_usd_equiv, precio_bcv_bs, ganancia_real_usd, comision_ml_usd, ganancia_neta_usd, modo_ganancia, margen_objetivo_pct, comision_ml_pct, descripcion, condicion, stock, forma_envio, condiciones_pago, horario_atencion, imagenes, estado)';
     const TAMANO_BLOQUE = 1000;
     let desde = 0;
     let todosLosDatos = [];
@@ -937,6 +953,7 @@
     document.getElementById('filtro-costo').value = '';
     document.getElementById('filtro-proveedor').value = '';
     document.getElementById('filtro-categoria').value = '';
+    document.getElementById('filtro-estado-pub').value = '';
     paginaActualProductos = 1;
     renderizarTablaProductos();
     guardarEstadoTablaProductos();
@@ -974,6 +991,7 @@
     }
     const proveedorSel = document.getElementById('filtro-proveedor').value;
     const categoriaSel = document.getElementById('filtro-categoria').value;
+    const estadoSel = document.getElementById('filtro-estado-pub').value;
 
     const todos = Object.values(productosCache);
     return todos.filter(p => {
@@ -992,6 +1010,7 @@
       }
       if (proveedorSel && p.proveedores?.id !== proveedorSel) return false;
       if (categoriaSel && p.categoria !== categoriaSel) return false;
+      if (estadoSel && (p.pub?.estado || 'borrador') !== estadoSel) return false;
       return true;
     });
   }
@@ -1044,10 +1063,20 @@
       const nombreHtml = `${escapeHtml(p.nombre)}${tieneDescripcion ? ` <span title="${escapeHtml(pub.descripcion)}" style="color:var(--muted); cursor:help;">ⓘ</span>` : ''}` +
         (p.categoria ? `<div style="font-size:11px; color:var(--muted); margin-top:2px;">${escapeHtml(p.categoria)}</div>` : '');
 
+      const estadoPub = pub.estado || 'borrador';
+      const ESTADOS_BADGE = {
+        listo:     { texto: '🟢 Listo', color: 'var(--teal)' },
+        publicado: { texto: '🔵 Publicado', color: '#4a90d9' },
+        borrador:  { texto: '⚪ Borrador', color: 'var(--muted)' }
+      };
+      const badgeEstado = ESTADOS_BADGE[estadoPub] || ESTADOS_BADGE.borrador;
+      const estadoHtml = `<span style="font-size:12px; color:${badgeEstado.color}; white-space:nowrap;">${badgeEstado.texto}</span>`;
+
       tr.innerHTML = `
         <td><input type="checkbox" class="chk-producto" value="${p.id}"></td>
         <td style="min-width:220px;">${nombreHtml}</td>
         <td>${escapeHtml(p.proveedores?.nombre || '—')}</td>
+        <td>${estadoHtml}</td>
         <td class="num">${stockHtml}</td>
         <td class="num">$${parseFloat(p.costo_usd).toFixed(2)}</td>
         <td class="num" style="color:var(--teal); font-weight:700; font-size:14px;">${pub.precio_bcv_usd_equiv ? '$' + parseFloat(pub.precio_bcv_usd_equiv).toFixed(2) : '—'}</td>
@@ -1083,6 +1112,7 @@
       document.getElementById('filtro-costo').value = '';
       document.getElementById('filtro-proveedor').value = '';
       document.getElementById('filtro-categoria').value = '';
+      document.getElementById('filtro-estado-pub').value = '';
       const filtradosSinFiltro = obtenerProductosFiltrados();
       const indice2 = filtradosSinFiltro.findIndex(p => p.id === id);
       paginaActualProductos = indice2 === -1 ? 1 : Math.floor(indice2 / 100) + 1;
@@ -1137,6 +1167,7 @@
       costo: document.getElementById('filtro-costo').value,
       proveedor: document.getElementById('filtro-proveedor').value,
       categoria: document.getElementById('filtro-categoria').value,
+      estadoPub: document.getElementById('filtro-estado-pub').value,
       pagina: paginaActualProductos,
       scroll: window.scrollY
     }));
@@ -1181,6 +1212,82 @@
 
   let editandoProductoId = null;
 
+  // --- Características técnicas (lista editable clave/valor) -------------------------------
+  // Se guardan dentro de productos.especificaciones como { marca, caracteristicas: {clave: valor} }.
+  // "marca" se mantiene como campo aparte (además de estar en la lista) porque ya lo usan la
+  // búsqueda del catálogo, el desglose y el generador de descripción por IA — así ese código
+  // sigue funcionando igual aunque ahora la marca también se pueda escribir/editar desde aquí.
+  function renderizarListaCaracteristicas(pares) {
+    const cont = document.getElementById('lista-caracteristicas');
+    if (!pares || pares.length === 0) { cont.innerHTML = ''; return; }
+    cont.innerHTML = pares.map((par, i) => `
+      <div class="fila-caracteristica" style="display:flex; gap:6px;">
+        <input type="text" class="carac-clave" value="${escapeHtml(par.clave)}" placeholder="Ej: Memoria RAM" style="width:auto; flex:1;">
+        <input type="text" class="carac-valor" value="${escapeHtml(par.valor)}" placeholder="Ej: 8GB" style="width:auto; flex:1;">
+        <button type="button" onclick="quitarFilaCaracteristica(${i})" style="padding:0 12px; background:var(--surface-2); color:var(--rust); border:1px solid var(--line); cursor:pointer;">×</button>
+      </div>`).join('');
+  }
+
+  function leerCaracteristicasDelForm() {
+    return Array.from(document.querySelectorAll('#lista-caracteristicas .fila-caracteristica')).map(fila => ({
+      clave: fila.querySelector('.carac-clave').value.trim(),
+      valor: fila.querySelector('.carac-valor').value.trim()
+    }));
+  }
+
+  window.agregarFilaCaracteristica = function() {
+    const pares = leerCaracteristicasDelForm();
+    pares.push({ clave: '', valor: '' });
+    renderizarListaCaracteristicas(pares);
+  };
+
+  window.quitarFilaCaracteristica = function(indice) {
+    const pares = leerCaracteristicasDelForm();
+    pares.splice(indice, 1);
+    renderizarListaCaracteristicas(pares);
+  };
+
+  // Convierte lo guardado en productos.especificaciones a la lista de pares que se edita en el
+  // formulario. Compatibilidad: si el producto viene de una importación vieja que solo tiene
+  // "marca" (sin "caracteristicas"), la mostramos igual como la primera fila.
+  function especificacionesAPares(esp) {
+    const detalles = (esp && typeof esp.caracteristicas === 'object' && esp.caracteristicas) || {};
+    const pares = Object.entries(detalles).map(([clave, valor]) => ({ clave, valor: String(valor ?? '') }));
+    if (esp?.marca && !pares.some(p => p.clave.trim().toLowerCase() === 'marca')) {
+      pares.unshift({ clave: 'Marca', valor: String(esp.marca) });
+    }
+    return pares;
+  }
+
+  // Arma el objeto que se guarda en productos.especificaciones a partir de lo que hay ahora
+  // mismo en el formulario.
+  function construirEspecificaciones() {
+    const pares = leerCaracteristicasDelForm().filter(p => p.clave && p.valor);
+    const especificaciones = { caracteristicas: {} };
+    pares.forEach(p => {
+      especificaciones.caracteristicas[p.clave] = p.valor;
+      if (p.clave.trim().toLowerCase() === 'marca') especificaciones.marca = p.valor;
+    });
+    return especificaciones;
+  }
+
+  // Agrega al formulario las características que trajo la IA: si ya había una fila con la misma
+  // clave (sin importar mayúsculas), se actualiza su valor; si no, se agrega una fila nueva. Así
+  // no se pierde lo que el usuario ya haya escrito o ajustado a mano.
+  function fusionarCaracteristicasIA(nuevas) {
+    if (!Array.isArray(nuevas) || nuevas.length === 0) return;
+    const pares = leerCaracteristicasDelForm();
+    nuevas.forEach(n => {
+      const clave = (n?.clave || '').trim();
+      const valor = (n?.valor || '').trim();
+      if (!clave || !valor) return;
+      const existente = pares.find(p => p.clave.trim().toLowerCase() === clave.toLowerCase());
+      if (existente) existente.valor = valor;
+      else pares.push({ clave, valor });
+    });
+    renderizarListaCaracteristicas(pares);
+  }
+
   window.editarProducto = function(id) {
     const p = productosCache[id];
     if (!p) return;
@@ -1217,6 +1324,7 @@
     document.getElementById('prod-horario').value = pub.horario_atencion || '';
     document.getElementById('prod-imagenes').value = (pub.imagenes || []).join(', ');
     actualizarPrevisualizacionFotos();
+    renderizarListaCaracteristicas(especificacionesAPares(p.especificaciones));
 
     document.getElementById('btn-guardar-producto').textContent = 'Guardar cambios';
     document.getElementById('btn-cancelar-edicion').style.display = 'inline-block';
@@ -1234,6 +1342,7 @@
     document.getElementById('prod-comision').value = 9;
     sincronizarGanancia('prod', 'usd');
     actualizarPrevisualizacionFotos();
+    renderizarListaCaracteristicas([]);
     aplicarPredeterminadosVenta(); // vuelve a precargar envío/pago/horario para el próximo producto
   };
 
@@ -1283,6 +1392,7 @@
       }
 
       document.getElementById('prod-descripcion').value = data.descripcion;
+      fusionarCaracteristicasIA(data.caracteristicas);
       msg.style.color = 'var(--teal)';
       msg.textContent = 'Listo — revísala y ajústala si hace falta antes de guardar.';
     } catch (e) {
@@ -1396,9 +1506,28 @@
     const fmtVes = (n) => n.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const fmtUsd = (n) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
+    const ESTADOS_TEXTO = { listo: '🟢 Listo para publicar', publicado: '🔵 Ya publicado en Mercado Libre', borrador: '⚪ Borrador (sin terminar)' };
+    const estadoTexto = ESTADOS_TEXTO[p.pub.estado || 'borrador'] || ESTADOS_TEXTO.borrador;
+    const marca = p.especificaciones?.marca || '—';
+
     document.getElementById('desglose-titulo').textContent = 'Desglose: ' + p.nombre;
     document.getElementById('desglose-contenido').textContent =
 `--------------------------------------------------
+DETALLES DEL PRODUCTO
+--------------------------------------------------
+• Estado: ${estadoTexto}
+• Proveedor: ${p.proveedores?.nombre || '—'}
+• SKU/Código: ${p.sku || '—'}
+• Marca: ${marca}
+• Categoría: ${p.categoria || '—'}
+• Condición: ${p.pub.condicion || 'nuevo'}
+• Stock: ${p.pub.stock ?? '—'}
+• Forma de envío: ${p.pub.forma_envio || '—'}
+• Condiciones de pago: ${p.pub.condiciones_pago || '—'}
+• Horario de atención: ${p.pub.horario_atencion || '—'}
+• Descripción: ${(p.pub.descripcion && p.pub.descripcion.trim()) || '—'}
+
+--------------------------------------------------
 RESULTADOS DEL CÁLCULO DE PRECIO
 --------------------------------------------------
 📌 PRECIO A PUBLICAR EN MERCADOLIBRE:
@@ -1994,17 +2123,18 @@ RESULTADOS DEL CÁLCULO DE PRECIO
 
     const { data: { session } } = await supabase.auth.getSession();
     let productoId = editandoProductoId;
+    const especificaciones = construirEspecificaciones();
 
     if (editandoProductoId) {
       const { error: errUpd } = await supabase
         .from('productos')
-        .update({ proveedor_id, nombre, categoria, costo_usd })
+        .update({ proveedor_id, nombre, categoria, costo_usd, especificaciones })
         .eq('id', editandoProductoId);
       if (errUpd) { msg.textContent = 'Error al actualizar: ' + errUpd.message; return; }
     } else {
       const { data: producto, error: errProd } = await supabase
         .from('productos')
-        .insert({ proveedor_id, nombre, categoria, costo_usd, creado_por: session?.user?.id })
+        .insert({ proveedor_id, nombre, categoria, costo_usd, especificaciones, creado_por: session?.user?.id })
         .select()
         .single();
       if (errProd) { msg.textContent = 'Error: ' + errProd.message; return; }
@@ -2045,6 +2175,14 @@ RESULTADOS DEL CÁLCULO DE PRECIO
         horario_atencion: document.getElementById('prod-horario').value.trim(),
         imagenes: imagenes
       };
+
+      // Al guardar, el producto pasa a la lista de "listos para publicar" — salvo que ya
+      // esté publicado de verdad en Mercado Libre (estado 'publicado'), en cuyo caso no lo
+      // tocamos: editar precio/descripción desde aquí no debe des-vincular una publicación real.
+      const estadoActual = editandoProductoId ? (productosCache[editandoProductoId]?.pub?.estado || 'borrador') : 'borrador';
+      if (estadoActual !== 'publicado') {
+        datosPublicacion.estado = 'listo';
+      }
 
       if (editandoProductoId) {
         const { error: errPubUpd } = await supabase.from('publicaciones').update(datosPublicacion).eq('producto_id', productoId);
@@ -2094,6 +2232,7 @@ RESULTADOS DEL CÁLCULO DE PRECIO
         if (estadoGuardado.precio) document.getElementById('filtro-precio').value = estadoGuardado.precio;
         if (estadoGuardado.costo) document.getElementById('filtro-costo').value = estadoGuardado.costo;
         if (estadoGuardado.proveedor) document.getElementById('filtro-proveedor').value = estadoGuardado.proveedor;
+        if (estadoGuardado.estadoPub) document.getElementById('filtro-estado-pub').value = estadoGuardado.estadoPub;
         if (estadoGuardado.categoria) categoriaGuardada = estadoGuardado.categoria;
         if (estadoGuardado.pagina) paginaActualProductos = estadoGuardado.pagina;
       }
