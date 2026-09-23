@@ -251,6 +251,7 @@
           <li>Complétale a mano lo que falte (marca, modelo, envío...): eso Mercado Libre te lo pide con sus propias listas, dentro del mismo Excel.</li>
           <li>Entra a Mercado Libre → Publicar → Masivamente → <b>sube esta misma planilla</b>.</li>
         </ol>
+        <div class="hint" style="margin-top:12px; margin-bottom:0;">Para que se vea manejable, dejamos a la vista solo las columnas que hay que llenar (unas 20) — el resto de las más de 100 columnas de Mercado Libre quedan ocultas, no borradas. Si necesitas ver todas: selecciona todas las columnas (clic en la esquina de arriba a la izquierda) → clic derecho → "Mostrar columnas".</div>
       </div>
     </div>
   </div>
@@ -941,21 +942,37 @@
     rangoActual.e.r = Math.max(rangoActual.e.r, filaDestino - 1);
     ws['!ref'] = XLSX.utils.encode_range(rangoActual);
 
-    // Ensancha solo las columnas que el sistema acaba de llenar, para que el título, la
-    // descripción y los links de fotos se puedan leer sin tener que ajustar el ancho a mano.
-    // Excel solo respeta el ancho de columna si se define para TODAS las columnas de la hoja
-    // (una lista con huecos hace que descarte el ancho por completo al guardar) — por eso se
-    // arma un arreglo completo, usando el ancho por defecto de Excel (8.43) para las columnas
-    // que no se tocan, que son las que Mercado Libre pide llenar a mano.
+    // La planilla real de Mercado Libre trae más de 100 columnas (ficha técnica completa:
+    // procesador, pantalla, batería, dimensiones...), y eso es justo lo que hace que se vea
+    // "imposible de entender" al abrirla. La mayoría de esas columnas son opcionales. Para que
+    // se vea manejable dejamos visibles solo: las que el sistema ya llenó, y las que Mercado
+    // Libre marca como "Obligatorio" en la fila 4 (las que sí o sí hay que completar a mano).
+    // El resto queda oculta (no se borra ni se pierde: sigue ahí por si algún día hace falta).
+    const filaObligatorio = matriz[enc.filaEncabezado + 1] || [];
+    const columnasObligatorias = new Set();
+    filaObligatorio.forEach((valor, c) => {
+      if (normalizarEncabezado(valor) === 'obligatorio') columnasObligatorias.add(c);
+    });
+    const columnasVisibles = new Set(columnasObligatorias);
+    Object.values(enc.col).forEach(c => { if (c !== undefined && c !== -1) columnasVisibles.add(c); });
+
+    // Ensancha las columnas que el sistema llenó (para leer título/descripción/fotos de un
+    // vistazo) y da un ancho legible al resto de las columnas obligatorias (por defecto Excel
+    // las deja tan angostas que solo se ve un pedazo del nombre del campo). Excel solo respeta
+    // el ancho de columna si se define para TODAS las columnas de la hoja (una lista con huecos
+    // hace que descarte el ancho por completo al guardar) — por eso se arma un arreglo completo.
     const totalColumnas = rangoActual.e.c + 1;
-    const anchosColumna = { titulo: 45, sku: 16, fotos: 60, stock: 8, precio: 12, descripcion: 55 };
+    const anchosColumna = { titulo: 45, sku: 16, fotos: 60, stock: 8, precio: 12, descripcion: 55, marca: 20, modelo: 20 };
     const colsExistentes = ws['!cols'] || [];
     const colsNuevos = [];
-    for (let c = 0; c < totalColumnas; c++) colsNuevos.push(colsExistentes[c] || { wch: 8.43 });
+    for (let c = 0; c < totalColumnas; c++) {
+      const visible = columnasVisibles.has(c);
+      colsNuevos.push({ wch: visible ? 22 : 8.43, hidden: !visible });
+    }
     Object.entries(anchosColumna).forEach(([campo, wch]) => {
       const col = enc.col[campo];
       if (col === undefined || col === -1) return;
-      colsNuevos[col] = Object.assign({}, colsNuevos[col], { wch });
+      colsNuevos[col] = Object.assign({}, colsNuevos[col], { wch, hidden: false });
     });
     ws['!cols'] = colsNuevos;
 
