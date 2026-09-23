@@ -90,6 +90,35 @@
     font-family: 'IBM Plex Sans', sans-serif; vertical-align: middle;
   }
 
+  .flujo-explicador {
+    display: flex; align-items: stretch; gap: 0; margin-bottom: 24px; flex-wrap: wrap;
+    border: 1px solid var(--line); background: var(--surface);
+  }
+  .flujo-paso {
+    flex: 1 1 200px; padding: 16px 18px; font-size: 12.5px; line-height: 1.55; color: var(--muted);
+    position: relative;
+  }
+  .flujo-paso:not(:last-child) { border-right: 1px solid var(--line); }
+  .flujo-paso .flujo-icono { font-size: 18px; margin-bottom: 6px; display: block; }
+  .flujo-paso b { color: var(--paper); display: block; margin-bottom: 3px; font-size: 13px; }
+
+  .categoria-detectada {
+    display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--paper);
+    background: var(--surface-2); border: 1px solid var(--line); padding: 10px 12px; margin-top: 12px;
+  }
+  .categoria-detectada b { color: var(--teal); }
+
+  .resultado-generado {
+    display: none; margin-top: 16px; border: 1px solid var(--teal); background: var(--surface-2); padding: 18px;
+  }
+  .resultado-generado .rg-titulo { font-size: 14px; font-weight: 600; color: var(--teal); margin-bottom: 4px; }
+  .resultado-generado .rg-archivo {
+    font-family: 'IBM Plex Mono', monospace; font-size: 12.5px; color: var(--paper);
+    background: var(--surface); border: 1px solid var(--line); padding: 6px 10px; display: inline-block; margin: 6px 0 14px 0;
+  }
+  .resultado-generado ol { margin: 0; padding-left: 20px; font-size: 13px; line-height: 1.9; color: var(--paper); }
+  .resultado-generado ol li b { color: var(--gold); }
+
   .chip-producto {
     display: flex; align-items: center; gap: 10px; background: var(--surface-2); border: 1px solid var(--line);
     padding: 8px 10px; font-size: 12.5px;
@@ -171,6 +200,12 @@
   </div>
 
   <div id="modo-publicar">
+    <div class="flujo-explicador">
+      <div class="flujo-paso"><span class="flujo-icono">📥</span><b>1. Tú la descargas</b>En Mercado Libre: Publicar → Masivamente → tu categoría → Descargar planilla. Es un archivo Excel vacío.</div>
+      <div class="flujo-paso"><span class="flujo-icono">🔧</span><b>2. Aquí la completamos</b>Subes ese mismo archivo abajo y el sistema le agrega tus productos (título, precio, fotos, etc.).</div>
+      <div class="flujo-paso"><span class="flujo-icono">📤</span><b>3. Tú la subes ya lista</b>Se descarga el mismo Excel, ahora con tus productos adentro. Ese es el que subes de vuelta a Mercado Libre.</div>
+    </div>
+
     <div class="panel">
       <h2><span class="paso-num">1</span> Elige los productos</h2>
       <div class="hint" style="margin-top:0;">Busca y agrega los que vas a publicar en esta tanda. Si a alguno le falta foto, súbesela aquí mismo — no hace falta ir al catálogo.</div>
@@ -185,23 +220,38 @@
     </div>
 
     <div class="panel">
-      <h2><span class="paso-num">2</span> Sube la planilla de esa categoría</h2>
-      <div class="hint" style="margin-top:0;">Una sola vez por categoría: en Mercado Libre, Publicar → Masivamente → elige la categoría → Descargar planilla. Súbela aquí.</div>
-      <label for="input-plantilla-preparar" class="subir-archivo" style="margin-top:12px;">📄 Elegir planilla</label>
+      <h2><span class="paso-num">2</span> Sube el Excel vacío que descargaste de Mercado Libre</h2>
+      <div class="hint" style="margin-top:0;">El mismo archivo del paso "Publicar → Masivamente" de Mercado Libre. Lo necesitas solo la primera vez por categoría — si ya lo tienes en tu computadora de una tanda anterior, sirve el mismo.</div>
+      <label for="input-plantilla-preparar" class="subir-archivo" style="margin-top:12px;">📄 Elegir archivo Excel</label>
       <input type="file" id="input-plantilla-preparar" accept=".xlsx,.xls" style="display:none;" onchange="cargarPlantillaPreparar(this.files[0])">
       <div class="hint" id="msg-plantilla-preparar"></div>
 
       <div id="bloque-preparar" style="display:none; margin-top:16px;">
-        <label for="select-hoja-preparar">Categoría (hoja) donde se agregan</label>
-        <select id="select-hoja-preparar" style="width:100%; background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:10px 12px; font-size:14px;"></select>
+        <div id="categoria-auto" class="categoria-detectada" style="display:none;"></div>
+        <div id="categoria-elegir" style="display:none;">
+          <label for="select-hoja-preparar">Este archivo tiene varias categorías — ¿cuál usamos?</label>
+          <select id="select-hoja-preparar" style="width:100%; background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:10px 12px; font-size:14px;"></select>
+        </div>
       </div>
     </div>
 
     <div class="panel">
-      <h2><span class="paso-num">3</span> Genera la planilla</h2>
-      <div class="hint" style="margin-top:0;">Se completa título, SKU, fotos, precio, stock y descripción. Lo que falte (marca, ficha técnica, envío) Mercado Libre lo pide con listas propias — complétalo ahí antes de subir el archivo a Mercado Libre.</div>
-      <button class="primary" onclick="generarPlantillaPreparar()">Generar planilla con estos productos</button>
+      <h2><span class="paso-num">3</span> Descarga tu planilla ya lista</h2>
+      <div class="hint" style="margin-top:0;">Se le agregan a tu Excel: título, SKU, foto(s), precio, stock y descripción de cada producto elegido arriba.</div>
+      <button class="primary" onclick="generarPlantillaPreparar()">Generar y descargar</button>
       <div class="hint" id="msg-generar-preparar"></div>
+
+      <div class="resultado-generado" id="resultado-generado">
+        <div class="rg-titulo">✅ Tu planilla está lista</div>
+        <span class="rg-archivo" id="rg-nombre-archivo"></span>
+        <div>Se descargó a tu computadora. Ahora:</div>
+        <ol>
+          <li>Búscala en tu carpeta de <b>Descargas</b> (se llama como arriba).</li>
+          <li>Ábrela — vas a ver tus productos ya cargados, con foto y precio.</li>
+          <li>Complétale a mano lo que falte (marca, modelo, envío...): eso Mercado Libre te lo pide con sus propias listas, dentro del mismo Excel.</li>
+          <li>Entra a Mercado Libre → Publicar → Masivamente → <b>sube esta misma planilla</b>.</li>
+        </ol>
+      </div>
     </div>
   </div>
 
@@ -696,16 +746,31 @@
 
     if (hojasValidas.length === 0) {
       msg.style.color = 'var(--rust)';
-      msg.textContent = 'No se encontró ninguna hoja de categoría con columnas de Título/SKU reconocibles en este archivo.';
+      msg.textContent = 'Este no parece ser el Excel de Mercado Libre — asegúrate de subir el que descargaste en Publicar → Masivamente (no otro archivo).';
       workbookPreparar = null;
       return;
     }
 
+    const autoDiv = document.getElementById('categoria-auto');
+    const elegirDiv = document.getElementById('categoria-elegir');
     const select = document.getElementById('select-hoja-preparar');
-    select.innerHTML = hojasValidas.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+
+    if (hojasValidas.length === 1) {
+      // Caso normal: la planilla de Mercado Libre trae una sola categoría — no hace falta
+      // preguntar nada, solo confirmar cuál es para que quede claro qué se va a llenar.
+      select.innerHTML = `<option value="${escapeHtml(hojasValidas[0])}">${escapeHtml(hojasValidas[0])}</option>`;
+      autoDiv.innerHTML = `Categoría de esta planilla: <b>${escapeHtml(hojasValidas[0])}</b>`;
+      autoDiv.style.display = 'flex';
+      elegirDiv.style.display = 'none';
+    } else {
+      // Solo si el archivo trae más de una categoría hace falta que el usuario elija.
+      select.innerHTML = hojasValidas.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+      autoDiv.style.display = 'none';
+      elegirDiv.style.display = 'block';
+    }
 
     msg.style.color = 'var(--teal)';
-    msg.textContent = `Listo — ${hojasValidas.length} categoría(s) detectada(s) en el archivo.`;
+    msg.textContent = 'Listo, se leyó el archivo correctamente.';
     bloque.style.display = 'block';
   };
 
@@ -822,8 +887,9 @@
 
   window.generarPlantillaPreparar = async function() {
     const msg = document.getElementById('msg-generar-preparar');
-    if (!workbookPreparar) { msg.style.color = 'var(--rust)'; msg.textContent = 'Sube primero la planilla.'; return; }
-    if (seleccionadosPreparar.length === 0) { msg.style.color = 'var(--rust)'; msg.textContent = 'Agrega al menos un producto.'; return; }
+    document.getElementById('resultado-generado').style.display = 'none';
+    if (!workbookPreparar) { msg.style.color = 'var(--rust)'; msg.textContent = 'Primero sube, en el paso 2, el Excel que descargaste de Mercado Libre.'; return; }
+    if (seleccionadosPreparar.length === 0) { msg.style.color = 'var(--rust)'; msg.textContent = 'Primero elige al menos un producto en el paso 1.'; return; }
 
     msg.style.color = 'var(--muted)';
     msg.textContent = 'Confirmando precio, stock, fotos y descripción de cada producto...';
@@ -896,8 +962,10 @@
     const nombreArchivo = `planilla-${nombreHoja.replace(/[^a-zA-Z0-9]+/g, '-')}-${new Date().toISOString().slice(0, 10)}.xlsx`;
     XLSX.writeFile(workbookPreparar, nombreArchivo);
 
-    msg.style.color = 'var(--teal)';
-    msg.textContent = `Listo — se agregaron ${seleccionadosPreparar.length} producto(s) con título, SKU, descripción, y precio/stock/fotos cuando estaban disponibles en el catálogo. Se descargó "${nombreArchivo}". Revisa el título (quedó recortado a 60 caracteres) y completa código universal, color/variante, marca, modelo y el resto de la ficha técnica antes de subirla a Mercado Libre.`;
+    msg.textContent = '';
+    document.getElementById('rg-nombre-archivo').textContent = nombreArchivo;
+    document.getElementById('resultado-generado').style.display = 'block';
+    document.getElementById('resultado-generado').scrollIntoView({ behavior: 'smooth', block: 'center' });
   };
 
   // Cerrar sugerencias al hacer clic afuera
