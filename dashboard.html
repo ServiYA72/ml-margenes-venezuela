@@ -426,6 +426,7 @@
           <div style="display:flex; align-items:center; gap:10px; margin-top:8px; flex-wrap:wrap;">
             <label for="input-subir-fotos" class="add" style="padding:7px 14px; font-size:12.5px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line); cursor:pointer; display:inline-block; margin-top:0;">📷 Subir fotos</label>
             <input type="file" id="input-subir-fotos" accept="image/jpeg,image/png,image/webp" multiple style="display:none;" onchange="subirFotosProducto(this.files)">
+            <span style="font-size:12px; color:var(--muted);">o toma una captura de pantalla y pega aquí con <strong>Ctrl+V</strong> (se abre un editor para recortar fondo/mejorarla antes de guardarla)</span>
             <span id="msg-subida-fotos" style="font-size:12px; color:var(--muted);"></span>
           </div>
           <div class="hint" style="margin-top:6px;">Sube las fotos aquí (se alojan con link público, listas para usar también en la planilla de publicación masiva de Mercado Libre) o pega URLs de fotos ya alojadas en otro sitio, arriba.</div>
@@ -600,6 +601,29 @@
       <button onclick="document.getElementById('modal-desglose').style.display='none'" style="background:none; border:none; color:var(--muted); font-size:20px; cursor:pointer; line-height:1;">×</button>
     </div>
     <pre id="desglose-contenido" style="white-space:pre-wrap; font-family:'IBM Plex Mono',monospace; font-size:12.5px; line-height:1.7; color:var(--paper); margin:0;"></pre>
+  </div>
+</div>
+
+<div id="modal-editor-foto" style="display:none; position:fixed; inset:0; background:rgba(15,27,23,0.85); z-index:60; align-items:center; justify-content:center; padding:24px;">
+  <div style="background:var(--surface); border:1px solid var(--line); max-width:560px; width:100%; max-height:90vh; overflow-y:auto; padding:24px;">
+    <div style="display:flex; justify-content:space-between; align-items:start; margin-bottom:14px;">
+      <h2 style="font-family:'Fraunces',serif; font-weight:400; font-size:19px; margin:0;">Editar foto pegada</h2>
+      <button type="button" onclick="cerrarEditorFoto()" style="background:none; border:none; color:var(--muted); font-size:20px; cursor:pointer; line-height:1;">×</button>
+    </div>
+    <div style="background-image:repeating-conic-gradient(#3a3a3a 0% 25%, #2a2a2a 0% 50%); background-size:16px 16px; display:flex; align-items:center; justify-content:center; min-height:220px; border:1px solid var(--line);">
+      <canvas id="canvas-editor-foto" style="max-width:100%; max-height:400px; display:block;"></canvas>
+    </div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:14px;">
+      <button type="button" class="btn-ia" onclick="editorQuitarFondo()">🪄 Quitar fondo</button>
+      <button type="button" class="btn-ia" onclick="editorMejorarImagen()">✨ Mejorar automático</button>
+      <button type="button" onclick="editorDeshacer()" style="padding:9px 14px; font-size:12.5px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line); cursor:pointer;">↩ Deshacer</button>
+    </div>
+    <div id="msg-editor-foto" style="font-size:12px; color:var(--muted); margin-top:8px; min-height:14px;"></div>
+    <div class="hint" style="margin-top:6px;">"Quitar fondo" funciona mejor con fotos de fondo parejo (blanco, gris, una mesa lisa). Si el resultado no queda limpio, usa "Deshacer" e inténtalo con otra captura.</div>
+    <div style="display:flex; gap:8px; margin-top:16px; justify-content:flex-end;">
+      <button type="button" onclick="cerrarEditorFoto()" style="padding:9px 16px; font-size:13px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line); cursor:pointer;">Cancelar</button>
+      <button type="button" class="add" onclick="guardarFotoEditada()">Guardar foto</button>
+    </div>
   </div>
 </div>
 
@@ -1476,6 +1500,189 @@
     urls.splice(index, 1);
     campo.value = urls.join(', ');
     actualizarPrevisualizacionFotos();
+  };
+
+  // --- Editor de fotos pegadas (capturas de pantalla) -----------------------------------------
+  // Todo corre en el navegador, con Canvas — no se manda la imagen a ningún servicio externo ni
+  // hace falta ninguna clave de API. "Quitar fondo" es un relleno por inundación (flood fill)
+  // desde los bordes de la imagen: funciona bien cuando el fondo es parejo (una mesa, una pared,
+  // una captura con fondo blanco/gris), pero no es una segmentación con IA — si el fondo es muy
+  // irregular puede no quedar perfecto, para eso está el botón "Deshacer".
+  let editorHistorial = []; // pila de ImageData para poder deshacer cada edición
+
+  function vistaProductosActiva() {
+    const vista = document.getElementById('view-productos');
+    return !!(vista && vista.classList.contains('active'));
+  }
+
+  document.addEventListener('paste', async (e) => {
+    if (!vistaProductosActiva()) return; // no interferir con pegar texto en otras pestañas
+    const items = e.clipboardData && e.clipboardData.items;
+    if (!items) return;
+    const item = Array.from(items).find(it => it.type && it.type.startsWith('image/'));
+    if (!item) return; // no hay imagen en el portapapeles: dejar que el pegado normal siga su curso
+    e.preventDefault();
+    const blob = item.getAsFile();
+    if (!blob) return;
+    await abrirEditorFoto(blob);
+  });
+
+  async function abrirEditorFoto(blobOrFile) {
+    const bitmap = await createImageBitmap(blobOrFile);
+    const canvas = document.getElementById('canvas-editor-foto');
+    const MAX = 1000; // límite razonable de trabajo, no hace falta más para una foto de producto
+    let w = bitmap.width, h = bitmap.height;
+    if (w > MAX || h > MAX) {
+      const escala = MAX / Math.max(w, h);
+      w = Math.round(w * escala); h = Math.round(h * escala);
+    }
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, w, h);
+    ctx.drawImage(bitmap, 0, 0, w, h);
+    editorHistorial = [];
+    document.getElementById('msg-editor-foto').textContent = '';
+    document.getElementById('modal-editor-foto').style.display = 'flex';
+  }
+
+  function guardarSnapshotEditor() {
+    const canvas = document.getElementById('canvas-editor-foto');
+    const ctx = canvas.getContext('2d');
+    editorHistorial.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
+    if (editorHistorial.length > 5) editorHistorial.shift(); // no acumular historial de más
+  }
+
+  window.editorDeshacer = function() {
+    if (editorHistorial.length === 0) return;
+    const anterior = editorHistorial.pop();
+    const canvas = document.getElementById('canvas-editor-foto');
+    canvas.getContext('2d').putImageData(anterior, 0, 0);
+    document.getElementById('msg-editor-foto').textContent = 'Se deshizo el último cambio.';
+  };
+
+  window.editorQuitarFondo = function() {
+    guardarSnapshotEditor();
+    const canvas = document.getElementById('canvas-editor-foto');
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width, h = canvas.height;
+    const imgData = ctx.getImageData(0, 0, w, h);
+    const data = imgData.data;
+
+    // Color de referencia del fondo: promedio de las 4 esquinas (así un pixel raro justo en una
+    // esquina no arruina la muestra).
+    const muestra = (x, y) => { const i = (y * w + x) * 4; return [data[i], data[i + 1], data[i + 2]]; };
+    const esquinas = [muestra(0, 0), muestra(w - 1, 0), muestra(0, h - 1), muestra(w - 1, h - 1)];
+    const ref = [0, 1, 2].map(c => Math.round(esquinas.reduce((s, e) => s + e[c], 0) / 4));
+
+    const TOLERANCIA = 42; // distancia de color aceptada como "esto también es fondo"
+    const distancia = (i) => {
+      const dr = data[i] - ref[0], dg = data[i + 1] - ref[1], db = data[i + 2] - ref[2];
+      return Math.sqrt(dr * dr + dg * dg + db * db);
+    };
+
+    // Relleno por inundación desde TODO el borde de la imagen: solo se vuelve transparente el
+    // fondo que está conectado con el borde — así no se hacen "agujeros" dentro del producto
+    // aunque tenga zonas del mismo color que el fondo (ej. teclas blancas de un teclado).
+    const visitado = new Uint8Array(w * h);
+    const pila = [];
+    for (let x = 0; x < w; x++) { pila.push(x, 0, x, h - 1); }
+    for (let y = 0; y < h; y++) { pila.push(0, y, w - 1, y); }
+
+    while (pila.length) {
+      const y = pila.pop(), x = pila.pop();
+      if (x < 0 || y < 0 || x >= w || y >= h) continue;
+      const p = y * w + x;
+      if (visitado[p]) continue;
+      visitado[p] = 1;
+      const i = p * 4;
+      if (distancia(i) > TOLERANCIA) continue; // ya no es fondo, no sigue expandiéndose por acá
+      data[i + 3] = 0; // transparente
+      pila.push(x + 1, y, x - 1, y, x, y + 1, x, y - 1);
+    }
+
+    ctx.putImageData(imgData, 0, 0);
+    document.getElementById('msg-editor-foto').textContent = 'Fondo eliminado — revisa los bordes. Si quedó incompleto, usa "Deshacer".';
+  };
+
+  window.editorMejorarImagen = function() {
+    guardarSnapshotEditor();
+    const canvas = document.getElementById('canvas-editor-foto');
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width, h = canvas.height;
+    const imgData = ctx.getImageData(0, 0, w, h);
+    const data = imgData.data;
+
+    // 1) Estiramiento de contraste por canal (percentiles 1/99, para no dejarse arrastrar por
+    // pixeles sueltos totalmente blancos o negros) — corrige fotos apagadas o descoloridas.
+    const histR = new Array(256).fill(0), histG = new Array(256).fill(0), histB = new Array(256).fill(0);
+    let opacos = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i + 3] === 0) continue; // pixeles ya transparentes (si se quitó el fondo antes) no cuentan
+      histR[data[i]]++; histG[data[i + 1]]++; histB[data[i + 2]]++;
+      opacos++;
+    }
+    if (opacos > 0) {
+      const percentil = (hist, p) => {
+        const objetivo = opacos * p;
+        let acumulado = 0;
+        for (let v = 0; v < 256; v++) { acumulado += hist[v]; if (acumulado >= objetivo) return v; }
+        return 255;
+      };
+      const [rMin, rMax] = [percentil(histR, 0.01), percentil(histR, 0.99)];
+      const [gMin, gMax] = [percentil(histG, 0.01), percentil(histG, 0.99)];
+      const [bMin, bMax] = [percentil(histB, 0.01), percentil(histB, 0.99)];
+      const estirar = (v, min, max) => max <= min ? v : Math.max(0, Math.min(255, Math.round((v - min) * 255 / (max - min))));
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3] === 0) continue;
+        data[i] = estirar(data[i], rMin, rMax);
+        data[i + 1] = estirar(data[i + 1], gMin, gMax);
+        data[i + 2] = estirar(data[i + 2], bMin, bMax);
+      }
+    }
+
+    // 2) Nitidez leve (realce simple contra el promedio de los 4 vecinos) — ayuda a que una
+    // captura de pantalla no se vea tan "plana". Se aplica sobre una copia ya con el contraste
+    // corregido, para no mezclar vecinos ya modificados con vecinos originales.
+    const copia = new Uint8ClampedArray(data);
+    const idx = (x, y) => (y * w + x) * 4;
+    const INTENSIDAD = 0.6;
+    for (let y = 1; y < h - 1; y++) {
+      for (let x = 1; x < w - 1; x++) {
+        const i = idx(x, y);
+        if (copia[i + 3] === 0) continue;
+        for (let c = 0; c < 3; c++) {
+          const centro = copia[i + c];
+          const promedioVecinos = (copia[idx(x - 1, y) + c] + copia[idx(x + 1, y) + c] + copia[idx(x, y - 1) + c] + copia[idx(x, y + 1) + c]) / 4;
+          data[i + c] = Math.max(0, Math.min(255, Math.round(centro + INTENSIDAD * (centro - promedioVecinos))));
+        }
+      }
+    }
+
+    ctx.putImageData(imgData, 0, 0);
+    document.getElementById('msg-editor-foto').textContent = 'Brillo, contraste y nitidez ajustados automáticamente.';
+  };
+
+  window.cerrarEditorFoto = function() {
+    document.getElementById('modal-editor-foto').style.display = 'none';
+    editorHistorial = [];
+  };
+
+  window.guardarFotoEditada = async function() {
+    const canvas = document.getElementById('canvas-editor-foto');
+    const msg = document.getElementById('msg-editor-foto');
+    if (!tenantIdActual) {
+      msg.style.color = 'var(--rust)';
+      msg.textContent = 'No se pudo identificar tu cuenta todavía — recarga la página e intenta de nuevo.';
+      return;
+    }
+    msg.style.color = 'var(--muted)';
+    msg.textContent = 'Guardando...';
+    canvas.toBlob(async (blob) => {
+      if (!blob) { msg.style.color = 'var(--rust)'; msg.textContent = 'No se pudo generar la imagen — intenta de nuevo.'; return; }
+      const archivo = new File([blob], `captura-${Date.now()}.png`, { type: 'image/png' });
+      await subirFotosProducto([archivo]);
+      cerrarEditorFoto();
+    }, 'image/png');
   };
 
   // Mantiene sincronizados los campos de ganancia en $ y en %, en ambas direcciones,
