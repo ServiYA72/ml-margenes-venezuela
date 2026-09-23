@@ -855,6 +855,37 @@
     });
   }
 
+  // Algunas categorías traen, SOLO en la primera fila de datos, celdas combinadas (ej. columnas
+  // Fotos+SKU+Stock fusionadas en una sola celda) — probablemente pensadas como un aviso visual
+  // en la planilla original de Mercado Libre. El problema: al combinarse, todo lo que se escriba
+  // en las columnas "tapadas" por la fusión (todas menos la de más a la izquierda) se vuelve
+  // invisible para cualquier lector de Excel — incluido el validador de Mercado Libre, que por
+  // eso rechaza la planilla como "vacía o con campos incompletos" aunque los datos SÍ estén en
+  // el archivo. La solución: antes de escribir en una fila, se separan (des-combinan) las celdas
+  // combinadas que caen exactamente en esa fila, dejando cada columna independiente — igual a
+  // como ya vienen, sin combinar, todas las demás filas de la planilla.
+  function quitarFusionEnFila(xmlHoja, numFila) {
+    const mMerges = xmlHoja.match(/<mergeCells count="(\d+)">([\s\S]*?)<\/mergeCells>/);
+    if (!mMerges) return xmlHoja; // esta hoja no tiene celdas combinadas
+    const countOriginal = parseInt(mMerges[1], 10);
+    const entradas = mMerges[2].match(/<mergeCell ref="[^"]*"\s*\/>/g) || [];
+    const filaDeRef = (ref) => ref.split(':').map(p => parseInt(p.match(/\d+/)[0], 10));
+    const restantes = [];
+    let eliminadas = 0;
+    entradas.forEach(entrada => {
+      const refMatch = entrada.match(/ref="([^"]*)"/);
+      const [filaIni, filaFin] = filaDeRef(refMatch ? refMatch[1] : '0:0');
+      // Solo se separan las combinaciones que caen ENTERAS en esta fila de datos — así nunca se
+      // toca una combinación del área de encabezados (que sí puede abarcar varias filas, ej. la 1-2).
+      if (filaIni === numFila && filaFin === numFila) eliminadas++;
+      else restantes.push(entrada);
+    });
+    if (eliminadas === 0) return xmlHoja;
+    const nuevoCount = countOriginal - eliminadas;
+    const nuevoBloque = nuevoCount > 0 ? `<mergeCells count="${nuevoCount}">${restantes.join('')}</mergeCells>` : '';
+    return xmlHoja.slice(0, mMerges.index) + nuevoBloque + xmlHoja.slice(mMerges.index + mMerges[0].length);
+  }
+
   // Recorta el título a 60 caracteres (límite de Mercado Libre) sin cortar una palabra a la
   // mitad, y le quita el "[SKU]" que solemos guardar al inicio del nombre en el catálogo.
   function truncarTitulo(nombre, maxLen = 60) {
@@ -1141,6 +1172,7 @@
         columnasVisibles.add(col);
       });
 
+      xmlHoja = quitarFusionEnFila(xmlHoja, filaDestino + 1); // separa celdas combinadas que puedan tapar columnas de esta fila
       xmlHoja = escribirFilaProducto(xmlHoja, filaDestino + 1, valores, estilosColumnas); // +1: la fila en el XML es 1-indexada
       filaDestino++;
     });
