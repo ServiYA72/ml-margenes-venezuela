@@ -886,6 +886,32 @@
     return xmlHoja.slice(0, mMerges.index) + nuevoBloque + xmlHoja.slice(mMerges.index + mMerges[0].length);
   }
 
+  // SEGUNDO problema encontrado (además de las celdas combinadas): en categorías como "Impresoras",
+  // la primera fila de datos (fila 7) viene, de fábrica, INCOMPLETA — a diferencia de todas las
+  // demás filas en blanco (8, 9, 10... hasta la 1000), a las que Mercado Libre les precarga un
+  // valor por defecto en cada columna "Obligatorio" que nuestro sistema no llena a mano (Condición
+  // = "Nuevo", Tipo de publicación = "Clásico", Forma de envío, Costo de envío, Retiro en persona,
+  // Código universal de producto...), la fila 7 de "Impresoras" las trae vacías, y una de ellas
+  // (Tipo de publicación) trae por error un texto de ayuda en vez de un valor real de la lista.
+  // Si se deja así, Mercado Libre ve varios campos obligatorios sin completar en esa fila y
+  // rechaza la planilla como "vacía o con campos de título incompletos" — el mismo error, pero por
+  // esta causa, no (solo) por las celdas combinadas. La solución: antes de escribir el producto,
+  // se toman los valores por defecto de una fila en blanco que SÍ los tenga completos (la primera
+  // fila libre después de donde empiezan los datos) y se copian a las columnas Obligatorias que el
+  // producto no llena por su cuenta (que son datos propios del producto: Título, SKU, fotos, stock,
+  // precio, descripción, marca, modelo y ficha técnica).
+  function capturarValoresObligatoriosPorDefecto(filaObligatorio, filaDefectos, columnasYaUsadas) {
+    const resultado = [];
+    (filaObligatorio || []).forEach((valor, c) => {
+      if (columnasYaUsadas.has(c)) return; // esta columna ya la llena el propio producto
+      if (normalizarEncabezado(valor) !== 'obligatorio') return;
+      const def = filaDefectos ? filaDefectos[c] : undefined;
+      if (def === undefined || def === null || def === '') return;
+      resultado.push({ col: c, valor: String(def), tipo: 'texto' });
+    });
+    return resultado;
+  }
+
   // Recorta el título a 60 caracteres (límite de Mercado Libre) sin cortar una palabra a la
   // mitad, y le quita el "[SKU]" que solemos guardar al inicio del nombre en el catálogo.
   function truncarTitulo(nombre, maxLen = 60) {
@@ -1117,6 +1143,13 @@
     filaObligatorio.forEach((valor, c) => { if (normalizarEncabezado(valor) === 'obligatorio') columnasVisibles.add(c); });
     Object.values(enc.col).forEach(c => { if (c !== undefined && c !== -1) columnasVisibles.add(c); });
 
+    // Fila de referencia para los valores por defecto (Condición, Tipo de publicación, Forma de
+    // envío...): la primera fila, después de donde empiezan los datos, que todavía esté vacía
+    // (columna Título sin usar) — así nunca se copian datos de un producto real ya cargado antes.
+    let filaDefectosIdx = enc.filaDatosInicio + 1;
+    while (matriz[filaDefectosIdx] && matriz[filaDefectosIdx][enc.col.titulo]) filaDefectosIdx++;
+    const filaDefectos = matriz[filaDefectosIdx] || [];
+
     msg.textContent = 'Escribiendo los productos en tu planilla...';
 
     // A partir de aquí se edita el archivo tal cual lo subiste, celda por celda, en vez de
@@ -1168,6 +1201,15 @@
         .filter(([clave]) => normalizarEncabezado(clave) !== 'modelo')
         .map(([clave, valor]) => ({ clave, valor }));
       emparejarCaracteristicasConColumnas(enc.normFila, columnasFijas, paresRestantes).forEach(({ col, valor, tipo }) => {
+        valores.push({ col, valor, tipo });
+        columnasVisibles.add(col);
+      });
+
+      // Completa con el valor por defecto cualquier columna Obligatoria que esta fila NO traiga ya
+      // lista de fábrica (ver "capturarValoresObligatoriosPorDefecto" más arriba) — evita dejar
+      // Condición, Tipo de publicación, Forma/Costo de envío, Retiro en persona, etc. sin completar.
+      const columnasUsadas = new Set(valores.map(v => v.col));
+      capturarValoresObligatoriosPorDefecto(filaObligatorio, filaDefectos, columnasUsadas).forEach(({ col, valor, tipo }) => {
         valores.push({ col, valor, tipo });
         columnasVisibles.add(col);
       });
