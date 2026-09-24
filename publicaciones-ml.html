@@ -707,7 +707,20 @@
       const buscar = (pred) => normFila.findIndex(pred);
       return {
         filaEncabezado: f,
-        filaDatosInicio: f + 4, // así vienen todas las planillas de Mercado Libre: encabezado + 4
+        // IMPORTANTE — antes esto era "f + 4" (apuntaba a la fila 7). Comparando el archivo XML
+        // original de Mercado Libre se encontró que la fila 7 es una fila especial de "vista
+        // previa" (solo trae un aviso tipo "Revisa las condiciones de venta que completamos por
+        // ti..." en la columna K) y NO una fila real de datos: a diferencia de TODAS las filas
+        // 8 en adelante, la fila 7 no trae ninguna fórmula (Cantidad de caracteres, Cargo por
+        // venta), ningún valor por defecto en las columnas de lista desplegable, y — la prueba
+        // más contundente — Mercado Libre define sus 33 rangos de validación de datos (los
+        // desplegables de Condición, Envío, Garantía, características, etc.) como "8:10001", NUNCA
+        // incluyendo la fila 7. Es decir: la propia plantilla de Mercado Libre nunca consideró la
+        // fila 7 como parte del rango donde se cargan productos — por eso, sin importar qué tan
+        // completo estuviera el contenido que se escribía ahí, Mercado Libre seguía viendo la
+        // planilla como vacía (porque, desde su punto de vista, las filas de datos reales — la 8
+        // en adelante — seguían efectivamente vacías). Ahora se empieza a escribir en la fila 8.
+        filaDatosInicio: f + 5,
         normFila, // encabezados normalizados de TODA la fila — se usa para emparejar características técnicas
         col: {
           titulo: colTitulo,
