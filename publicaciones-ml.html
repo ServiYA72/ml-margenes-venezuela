@@ -821,8 +821,60 @@
     }
     return estilos;
   }
-  function celdaTexto(ref, estilo, texto) {
+  // DESCUBRIMIENTO CLAVE (tras varias subidas reales fallidas): comparando byte a byte la fila 7
+  // que generamos contra cualquier otra fila (8, 9, 500...) de la MISMA planilla, todo el texto de
+  // las filas 8+ está guardado como "shared string" (t="s", un índice a xl/sharedStrings.xml) —
+  // el formato que usa Excel cuando una persona escribe en una celda. Nuestra fila 7, en cambio,
+  // escribía el texto como "inline string" (t="inlineStr") — también válido según el estándar de
+  // Excel, Excel/LibreOffice/openpyxl lo leen perfecto, PERO el validador propio de Mercado Libre
+  // no lo reconoce y trata esas celdas como vacías. Por eso la planilla salía rechazada como
+  // "vacía o con campos de título incompletos" incluso con todo el contenido correcto y completo.
+  // La solución: en vez de escribir el texto directo en la celda, se agrega (o reutiliza) una
+  // entrada en la tabla de textos compartidos del archivo y se escribe solo su número de índice
+  // — exactamente como lo hace cualquier fila "normal" de la plantilla.
+  function crearTablaSharedStrings(xmlSharedStrings) {
+    const indicePorTexto = new Map();
+    const entradas = [];
+    if (xmlSharedStrings) {
+      const regexSi = /<si>([\s\S]*?)<\/si>/g;
+      let m;
+      while ((m = regexSi.exec(xmlSharedStrings)) !== null) {
+        const textoPlano = [...m[1].matchAll(/<t[^>]*>([\s\S]*?)<\/t>/g)].map(x => x[1]).join('');
+        const texto = textoPlano
+          .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+          .replace(/&apos;/g, "'").replace(/&amp;/g, '&');
+        entradas.push(texto);
+        if (!indicePorTexto.has(texto)) indicePorTexto.set(texto, entradas.length - 1);
+      }
+    }
+    return { entradas, indicePorTexto, nuevasEntradas: 0, referenciasNuevas: 0, disponible: !!xmlSharedStrings };
+  }
+  function obtenerIndiceSharedString(tabla, texto) {
+    const t = String(texto);
+    tabla.referenciasNuevas++;
+    if (tabla.indicePorTexto.has(t)) return tabla.indicePorTexto.get(t);
+    const idx = tabla.entradas.length;
+    tabla.entradas.push(t);
+    tabla.indicePorTexto.set(t, idx);
+    tabla.nuevasEntradas++;
+    return idx;
+  }
+  function serializarSharedStrings(xmlSharedStrings, tabla) {
+    const nuevasSi = tabla.entradas.slice(tabla.entradas.length - tabla.nuevasEntradas)
+      .map(t => '<si><t xml:space="preserve">' + escaparXmlTexto(t) + '</t></si>').join('');
+    let xmlNuevo = xmlSharedStrings.replace('</sst>', nuevasSi + '</sst>');
+    xmlNuevo = xmlNuevo.replace(/(<sst[^>]*\bcount=")(\d+)(")/, (m0, pre, num, post) => pre + (parseInt(num, 10) + tabla.referenciasNuevas) + post);
+    xmlNuevo = xmlNuevo.replace(/(\buniqueCount=")(\d+)(")/, (m0, pre, num, post) => pre + (parseInt(num, 10) + tabla.nuevasEntradas) + post);
+    return xmlNuevo;
+  }
+  function celdaTexto(ref, estilo, texto, tablaStrings) {
     const s = (estilo !== undefined && estilo !== null && estilo !== '0') ? ' s="' + estilo + '"' : '';
+    if (tablaStrings && tablaStrings.disponible) {
+      const idx = obtenerIndiceSharedString(tablaStrings, texto);
+      return '<c r="' + ref + '"' + s + ' t="s"><v>' + idx + '</v></c>';
+    }
+    // Respaldo por si esta planilla no trae xl/sharedStrings.xml (no visto hasta ahora, pero por
+    // si acaso) — mejor un inlineStr que nada, aunque sepamos que Mercado Libre podría no leerlo.
     return '<c r="' + ref + '"' + s + ' t="inlineStr"><is><t xml:space="preserve">' + escaparXmlTexto(texto) + '</t></is></c>';
   }
   function celdaNumero(ref, estilo, numero) {
@@ -837,7 +889,7 @@
   }
   // Escribe los valores de un producto en su fila, respetando el estilo que ya tenía la celda
   // (si existía) o el de su columna (si la celda no existía todavía en el archivo en blanco).
-  function escribirFilaProducto(xmlHoja, numFila, valores, estilosColumnas) {
+  function escribirFilaProducto(xmlHoja, numFila, valores, estilosColumnas, tablaStrings) {
     const bloque = obtenerBloqueFila(xmlHoja, numFila);
     if (!bloque) return xmlHoja; // no debería pasar: Mercado Libre precarga todas las filas hasta la 1001
     const desc = descomponerFila(bloque.texto);
@@ -849,7 +901,7 @@
       if (col === undefined || col === -1 || valor === undefined || valor === '') return;
       const ref = columnaALetra(col) + numFila;
       const estilo = extraerEstiloCelda(mapaExistentes[col]) ?? estilosColumnas[col];
-      interior = fijarCeldaEnFila(interior, col, tipo === 'numero' ? celdaNumero(ref, estilo, valor) : celdaTexto(ref, estilo, valor));
+      interior = fijarCeldaEnFila(interior, col, tipo === 'numero' ? celdaNumero(ref, estilo, valor) : celdaTexto(ref, estilo, valor, tablaStrings));
     });
     const filaNueva = '<row' + desc.atributos + '>' + interior + '</row>';
     return xmlHoja.slice(0, bloque.indice) + filaNueva + xmlHoja.slice(bloque.indice + bloque.texto.length);
@@ -1206,6 +1258,17 @@
     let xmlHoja = await zip.file(rutaHoja).async('string');
     const estilosColumnas = extraerEstilosColumnas(xmlHoja);
 
+    // Mercado Libre escribe todo su contenido de texto como "shared strings" (t="s", con un
+    // índice hacia xl/sharedStrings.xml) — jamás como texto suelto en la celda (t="inlineStr").
+    // Las 993 filas que ya trae la plantilla usan ese formato, y todo indica que el validador
+    // de Mercado Libre solo reconoce celdas de texto en ese formato — de ahí que la planilla
+    // pasara todas las verificaciones de openpyxl/LibreOffice pero Mercado Libre la siguiera
+    // rechazando como "vacía". Por eso acá se carga la tabla de shared strings existente y cada
+    // celda de texto que se escribe más abajo pasa a usar el mismo formato que el resto del archivo.
+    const rutaSharedStrings = 'xl/sharedStrings.xml';
+    let xmlSharedStrings = zip.file(rutaSharedStrings) ? await zip.file(rutaSharedStrings).async('string') : null;
+    const tablaStrings = crearTablaSharedStrings(xmlSharedStrings);
+
     seleccionadosPreparar.forEach(p => {
       const pub = pubPorProducto[p.id];
       const esp = especificacionesPorProducto[p.id] || {};
@@ -1264,12 +1327,18 @@
       });
 
       xmlHoja = quitarFusionEnFila(xmlHoja, filaDestino + 1); // separa celdas combinadas que puedan tapar columnas de esta fila
-      xmlHoja = escribirFilaProducto(xmlHoja, filaDestino + 1, valores, estilosColumnas); // +1: la fila en el XML es 1-indexada
+      xmlHoja = escribirFilaProducto(xmlHoja, filaDestino + 1, valores, estilosColumnas, tablaStrings); // +1: la fila en el XML es 1-indexada
       filaDestino++;
     });
 
     xmlHoja = ocultarColumnasNoVisibles(xmlHoja, columnasVisibles);
     zip.file(rutaHoja, xmlHoja);
+    // Si se agregaron textos nuevos a la tabla de shared strings, hay que guardar también
+    // xl/sharedStrings.xml actualizado — si no, las celdas t="s" que acabamos de escribir
+    // apuntarían a índices que no existen en el archivo.
+    if (tablaStrings.disponible && tablaStrings.nuevasEntradas > 0) {
+      zip.file(rutaSharedStrings, serializarSharedStrings(xmlSharedStrings, tablaStrings));
+    }
 
     const nombreArchivo = `planilla-${nombreHoja.replace(/[^a-zA-Z0-9]+/g, '-')}-${new Date().toISOString().slice(0, 10)}.xlsx`;
     const blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
