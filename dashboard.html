@@ -1170,9 +1170,33 @@
 
     renderizarTablaProductos();
 
+    // El bloque de filtros y el encabezado de la tabla quedan "pegados" (sticky) arriba mientras
+    // se hace scroll, apilados encima del <header> del sitio (que también es sticky). Si la fila
+    // resaltada queda cerca del principio de la lista — como cuando el filtro de búsqueda deja un
+    // solo resultado — scrollIntoView({block:'center'}) no tiene suficiente contenido debajo para
+    // "centrarla" de verdad, y la fila termina justo debajo (o tapada) por esa pila de barras
+    // fijas: se ve como si el producto quedara "cortado" o con las columnas superpuestas.
+    // Por eso, después del scroll automático, se mide cuánto ocupa esa pila (header + bloque de
+    // filtros + fila de títulos) y si la fila quedó tapada, se corrige con un scroll adicional.
     setTimeout(() => {
       const fila = document.querySelector(`tr[data-producto-id="${id}"]`);
-      if (fila) fila.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      if (!fila) return;
+      fila.scrollIntoView({ behavior: 'auto', block: 'center' });
+      requestAnimationFrame(() => {
+        const header = document.querySelector('header');
+        const bloque = document.getElementById('bloque-sticky-productos');
+        const thead = document.querySelector('#tabla-productos thead');
+        const altoOcultador =
+          (header ? header.getBoundingClientRect().height : 0) +
+          (bloque ? bloque.getBoundingClientRect().height : 0) +
+          (thead ? thead.getBoundingClientRect().height : 0);
+        const filaRect = fila.getBoundingClientRect();
+        const margen = 14;
+        const diferencia = altoOcultador + margen - filaRect.top;
+        if (diferencia > 0) {
+          window.scrollBy({ top: diferencia, behavior: 'smooth' });
+        }
+      });
     }, 50);
   }
 
