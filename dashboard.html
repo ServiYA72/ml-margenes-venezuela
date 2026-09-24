@@ -551,7 +551,7 @@
         <div style="flex:1;"></div>
         <button class="add" style="padding:9px 16px; font-size:13px; background:var(--rust); color:var(--paper);" onclick="eliminarSeleccionados()">Eliminar seleccionados</button>
         <button class="add" style="padding:9px 16px; font-size:13px; background:var(--surface-2); color:var(--rust); border:1px solid var(--rust);" onclick="eliminarTodos()">Eliminar todos</button>
-        <button class="add" id="btn-catalogo-pdf" style="padding:9px 16px; font-size:13px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line);" onclick="generarCatalogoPDF()" title="Genera un catálogo en PDF (nombre, descripción, categoría y precio) de los productos que ves filtrados ahora mismo en la tabla — no depende de que tengan fotos">📄 Catálogo en PDF</button>
+        <button class="add" id="btn-catalogo-pdf" style="padding:9px 16px; font-size:13px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line);" onclick="generarCatalogoPDF()" title="Genera un catálogo en PDF (nombre, descripción, categoría, precio y stock) de los productos filtrados en la tabla — no depende de fotos, trae un índice por categoría clicable y un enlace de WhatsApp en cada producto">📄 Catálogo en PDF</button>
         <button class="add" style="padding:9px 16px; font-size:13px; background:var(--teal); color:var(--ink);" onclick="compararSeleccionadosEnCompetencia()">Comparar en Mercado Libre →</button>
       </div>
       <div class="msg" id="msg-bulk"></div>
@@ -2141,6 +2141,21 @@ RESULTADOS DEL CÁLCULO DE PRECIO
     return partes.length > 1 ? partes[1].trim() : '';
   }
 
+  // Número de WhatsApp Business que recibe las consultas que salen del catálogo en PDF — es el
+  // mismo número que usa el catálogo web (catalogo.html); si cambia, hay que actualizarlo en los
+  // dos archivos.
+  const WHATSAPP_NUMERO_CATALOGO_PDF = '584242342204';
+
+  function linkWhatsAppProductoCatalogoPdf(p) {
+    // A diferencia del catálogo web, un PDF puede seguir circulando días o semanas después de
+    // generado — por eso el mensaje no incluye el precio (podría estar desactualizado para
+    // cuando el cliente escriba) y en cambio le pide al vendedor que lo confirme.
+    let texto = `Hola, vi este producto en su catálogo y me interesa:\n\n${(p.nombre || '').trim()}`;
+    if (p.sku) texto += `\nCódigo: ${p.sku}`;
+    texto += `\n\n¿Me confirman precio y disponibilidad?`;
+    return `https://wa.me/${WHATSAPP_NUMERO_CATALOGO_PDF}?text=${encodeURIComponent(texto)}`;
+  }
+
   window.generarCatalogoPDF = async function() {
     const btn = document.getElementById('btn-catalogo-pdf');
     const productos = obtenerProductosFiltrados();
@@ -2165,9 +2180,16 @@ RESULTADOS DEL CÁLCULO DE PRECIO
       const anchoUtil = anchoDerecho - margenX;
       let y = 50;
 
+      // Página (1-based) en la que arranca cada categoría, dentro de la numeración "solo
+      // productos" (antes de insertarle las páginas de índice al principio, al final de esta
+      // función) — se completa mientras se dibuja el catálogo, más abajo.
+      const categoriaPaginaMap = {};
+      let numeroPaginaActual = 1;
+
       function nuevaPaginaSiHaceFalta(alturaNecesaria) {
         if (y + alturaNecesaria > 760) {
           doc.addPage();
+          numeroPaginaActual++;
           y = 50;
           return true;
         }
@@ -2209,6 +2231,7 @@ RESULTADOS DEL CÁLCULO DE PRECIO
         if (categoria !== categoriaActual) {
           categoriaActual = categoria;
           if (nuevaPaginaSiHaceFalta(34)) dibujarEncabezado(false);
+          if (categoriaPaginaMap[categoria] === undefined) categoriaPaginaMap[categoria] = numeroPaginaActual;
           y += 4;
           doc.setFillColor(29, 46, 39);
           doc.rect(margenX, y, anchoUtil, 20, 'F');
@@ -2236,7 +2259,7 @@ RESULTADOS DEL CÁLCULO DE PRECIO
         let descWrap = descripcion ? doc.splitTextToSize(descripcion, anchoUtil) : [];
         if (descWrap.length > 2) descWrap = [descWrap[0], descWrap[1].replace(/.{0,3}$/, '').trim() + '…'];
 
-        const altoBloque = 13 * nombreWrap.length + (p.sku ? 10 : 0) + 10.5 * descWrap.length + (stock !== null && stock !== undefined ? 10 : 0) + 18;
+        const altoBloque = 13 * nombreWrap.length + (p.sku ? 10 : 0) + 10.5 * descWrap.length + (stock !== null && stock !== undefined ? 10 : 0) + 12 + 18;
         if (nuevaPaginaSiHaceFalta(altoBloque)) dibujarEncabezado(false);
 
         doc.setFont('helvetica', 'bold');
@@ -2281,11 +2304,77 @@ RESULTADOS DEL CÁLCULO DE PRECIO
           y += 10;
         }
 
+        // Llamado a la acción: un enlace clicable que abre WhatsApp con un mensaje ya redactado
+        // para ese producto — para que el cliente que se interesa en algo pueda escribir con un
+        // solo toque en vez de copiar el nombre a mano.
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8);
+        doc.setTextColor(63, 167, 150);
+        doc.textWithLink('Pedir por WhatsApp »', margenX, y + 8, { url: linkWhatsAppProductoCatalogoPdf(p) });
+        y += 12;
+
         doc.setTextColor(15, 27, 23);
         doc.setDrawColor(230, 230, 225);
         y += 6;
         doc.line(margenX, y, anchoDerecho, y);
         y += 10;
+      });
+
+      // --- Índice por categoría, clicable, insertado al principio del PDF ---
+      // Se calcula después de dibujar todos los productos porque recién ahí se sabe en qué
+      // página quedó cada categoría; luego se insertan páginas nuevas al frente (doc.insertPage
+      // corre todo el contenido ya dibujado hacia atrás sin tener que volver a dibujarlo) y se
+      // ajustan los números de página del mapa sumándoles cuántas páginas de índice se agregaron.
+      const categoriasIndice = Object.keys(categoriaPaginaMap);
+      const lineasPorPaginaIndice = 28;
+      const numPaginasIndice = Math.max(1, Math.ceil(categoriasIndice.length / lineasPorPaginaIndice));
+      for (let i = 0; i < numPaginasIndice; i++) doc.insertPage(1);
+      const desplazamiento = numPaginasIndice;
+
+      for (let pag = 1; pag <= numPaginasIndice; pag++) {
+        doc.setPage(pag);
+        y = 50;
+        dibujarEncabezado(pag === 1);
+
+        if (pag === 1) {
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(12);
+          doc.setTextColor(15, 27, 23);
+          doc.text('Índice por categoría', margenX, y);
+          y += 18;
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(8.5);
+          doc.setTextColor(143, 166, 155);
+          const notaWrap = doc.splitTextToSize('Toca una categoría para ir directo a esa sección. También puedes buscar cualquier producto por nombre o código con el buscador de tu lector de PDF (ícono de lupa, o Ctrl+F / Cmd+F). Cada producto tiene además un enlace para pedirlo por WhatsApp con un solo toque.', anchoUtil);
+          doc.text(notaWrap, margenX, y);
+          y += 11 * notaWrap.length + 14;
+        }
+
+        doc.setTextColor(15, 27, 23);
+        const desde = (pag - 1) * lineasPorPaginaIndice;
+        const hasta = Math.min(desde + lineasPorPaginaIndice, categoriasIndice.length);
+        for (let idx = desde; idx < hasta; idx++) {
+          const categoria = categoriasIndice[idx];
+          const paginaDestino = categoriaPaginaMap[categoria] + desplazamiento;
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(10.5);
+          doc.setTextColor(15, 27, 23);
+          doc.textWithLink(categoria, margenX, y, { pageNumber: paginaDestino });
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(9);
+          doc.setTextColor(143, 166, 155);
+          doc.text('página ' + paginaDestino, anchoDerecho, y, { align: 'right' });
+          doc.setDrawColor(230, 230, 225);
+          doc.line(margenX, y + 5, anchoDerecho, y + 5);
+          y += 20;
+        }
+      }
+
+      // Marcadores del lector de PDF (panel lateral en Adobe Reader, Chrome, Vista previa de
+      // Mac, etc.) — la misma navegación por categoría que el índice, pero accesible desde ahí
+      // sin tener que volver a la primera página.
+      categoriasIndice.forEach(categoria => {
+        doc.outline.add(null, categoria, { pageNumber: categoriaPaginaMap[categoria] + desplazamiento });
       });
 
       doc.save(`catalogo-nicom-${new Date().toISOString().slice(0, 10)}.pdf`);
