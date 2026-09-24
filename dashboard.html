@@ -288,7 +288,7 @@
 
     <div class="panel">
       <h2>Condiciones de venta predeterminadas</h2>
-      <div class="hint" style="margin-top:0;">Este texto se precarga solo en "Descripción de la publicación" de cada producto <b>nuevo</b> (no toca los productos que ya guardaste) — así no tenés que reescribir lo mismo cada vez. Lo podés editar por producto si ese caso es distinto, y podés cambiar este predeterminado cuando quieras.</div>
+      <div class="hint" style="margin-top:0;">Esto se precarga en los campos de cada producto <b>nuevo</b> (no toca los productos que ya guardaste) — así no tenés que reescribir lo mismo cada vez. Lo podés editar por producto si ese caso es distinto, y podés cambiar estos predeterminados cuando quieras.</div>
       <div class="grid-form" style="margin-top:14px;">
         <div>
           <label for="cfg-envio">Forma de envío</label>
@@ -301,6 +301,11 @@
         <div>
           <label for="cfg-horario">Horario de atención</label>
           <input type="text" id="cfg-horario" placeholder="Ej: Lunes a viernes, 9am - 5pm">
+        </div>
+        <div style="grid-column: 1 / -1;">
+          <label for="cfg-descripcion">Descripción predeterminada</label>
+          <textarea id="cfg-descripcion" rows="3" placeholder="Ej: Garantía de 30 días, producto nuevo y sellado, entrega en Caracas..."></textarea>
+          <div class="hint" style="margin-top:4px;">Se precarga arriba de todo en "Descripción de la publicación" de cada producto nuevo. Cuando uses "✨ Generar con IA", la sugerencia se agrega DEBAJO de este texto — no lo borra.</div>
         </div>
         <button class="add" onclick="guardarConfiguracionVentas()">Guardar predeterminados</button>
       </div>
@@ -768,7 +773,7 @@
   // se precarga en "Forma de envío / Condiciones de pago / Horario de atención" cada vez que se
   // abre el formulario para un producto NUEVO. No se aplica al editar un producto existente,
   // porque ese producto ya tiene sus propios valores guardados (que pueden ser distintos).
-  let configuracionVentasCache = { forma_envio_default: '', condiciones_pago_default: '', horario_atencion_default: '' };
+  let configuracionVentasCache = { forma_envio_default: '', condiciones_pago_default: '', horario_atencion_default: '', descripcion_default: '' };
 
   async function cargarConfiguracionVentas() {
     const { data } = await supabase.from('configuracion_ventas').select('*').maybeSingle();
@@ -776,12 +781,14 @@
       configuracionVentasCache = {
         forma_envio_default: data.forma_envio_default || '',
         condiciones_pago_default: data.condiciones_pago_default || '',
-        horario_atencion_default: data.horario_atencion_default || ''
+        horario_atencion_default: data.horario_atencion_default || '',
+        descripcion_default: data.descripcion_default || ''
       };
     }
     document.getElementById('cfg-envio').value = configuracionVentasCache.forma_envio_default;
     document.getElementById('cfg-pago').value = configuracionVentasCache.condiciones_pago_default;
     document.getElementById('cfg-horario').value = configuracionVentasCache.horario_atencion_default;
+    document.getElementById('cfg-descripcion').value = configuracionVentasCache.descripcion_default;
   }
 
   window.guardarConfiguracionVentas = async function() {
@@ -789,16 +796,17 @@
     const forma_envio_default = document.getElementById('cfg-envio').value.trim();
     const condiciones_pago_default = document.getElementById('cfg-pago').value.trim();
     const horario_atencion_default = document.getElementById('cfg-horario').value.trim();
+    const descripcion_default = document.getElementById('cfg-descripcion').value.trim();
 
     const { error } = await supabase.from('configuracion_ventas')
-      .upsert({ forma_envio_default, condiciones_pago_default, horario_atencion_default, updated_at: new Date().toISOString() });
+      .upsert({ forma_envio_default, condiciones_pago_default, horario_atencion_default, descripcion_default, updated_at: new Date().toISOString() });
 
     if (error) {
       msg.style.color = 'var(--rust)';
       msg.textContent = 'Error al guardar: ' + error.message;
       return;
     }
-    configuracionVentasCache = { forma_envio_default, condiciones_pago_default, horario_atencion_default };
+    configuracionVentasCache = { forma_envio_default, condiciones_pago_default, horario_atencion_default, descripcion_default };
     msg.style.color = 'var(--teal)';
     msg.textContent = 'Guardado — de ahora en más, los productos nuevos arrancan con este texto.';
     // Si el formulario está en modo "producto nuevo" (no editando uno existente), se actualiza
@@ -806,15 +814,17 @@
     if (editandoProductoId === null) aplicarPredeterminadosVenta();
   };
 
-  // Solo toca los 3 campos si están vacíos, para no pisar algo que el usuario ya haya escrito
+  // Solo toca los campos si están vacíos, para no pisar algo que el usuario ya haya escrito
   // en esta misma sesión antes de guardar los predeterminados.
   function aplicarPredeterminadosVenta() {
     const envio = document.getElementById('prod-envio');
     const pago = document.getElementById('prod-pago');
     const horario = document.getElementById('prod-horario');
+    const descripcion = document.getElementById('prod-descripcion');
     if (envio && !envio.value) envio.value = configuracionVentasCache.forma_envio_default;
     if (pago && !pago.value) pago.value = configuracionVentasCache.condiciones_pago_default;
     if (horario && !horario.value) horario.value = configuracionVentasCache.horario_atencion_default;
+    if (descripcion && !descripcion.value) descripcion.value = configuracionVentasCache.descripcion_default;
   }
 
   let productosCache = {};
@@ -1381,7 +1391,7 @@
     sincronizarGanancia('prod', 'usd');
     actualizarPrevisualizacionFotos();
     renderizarListaCaracteristicas([]);
-    aplicarPredeterminadosVenta(); // vuelve a precargar envío/pago/horario para el próximo producto
+    aplicarPredeterminadosVenta(); // vuelve a precargar envío/pago/horario/descripción para el próximo producto
   };
 
   // Arma la "Descripción de la publicación" con IA, a partir del nombre, la marca, el SKU y la
@@ -1391,6 +1401,13 @@
   // arriba (nombre y categoría). La llamada real a la IA vive en la función de Supabase
   // "generar-descripcion-ia", que a su vez le pide explícitamente que no invente specs ni
   // garantías que no vengan en estos datos.
+  //
+  // La descripción predeterminada (configurada en "Condiciones de venta predeterminadas") NO se
+  // reemplaza: la sugerencia de la IA se agrega DEBAJO de ese texto, separada por este marcador.
+  // Si se genera de nuevo, se reemplaza solo la parte de abajo (todo lo que esté a partir del
+  // marcador) para no ir acumulando sugerencias viejas una debajo de la otra.
+  const MARCADOR_SUGERENCIA_IA = '\n\n--- Sugerencia de la IA (edítala o bórrala como quieras) ---\n';
+
   window.generarDescripcionIA = async function() {
     const btn = document.getElementById('btn-generar-descripcion');
     const msg = document.getElementById('msg-descripcion-ia');
@@ -1406,7 +1423,11 @@
     const productoExistente = editandoProductoId ? productosCache[editandoProductoId] : null;
     const sku = productoExistente?.sku || '';
     const marca = productoExistente?.especificaciones?.marca || '';
-    const descripcion_actual = document.getElementById('prod-descripcion').value.trim();
+    // La base es lo que haya escrito o precargado ARRIBA del marcador (la descripción
+    // predeterminada, o lo que el usuario haya tocado) — se descarta cualquier sugerencia de la
+    // IA de una corrida anterior, para no mandarle a la IA su propio texto como si fuera "lo que
+    // ya está puesto".
+    const descripcion_base = document.getElementById('prod-descripcion').value.split(MARCADOR_SUGERENCIA_IA)[0].trim();
 
     btn.disabled = true;
     btn.textContent = 'Generando...';
@@ -1415,7 +1436,7 @@
 
     try {
       const { data, error } = await supabase.functions.invoke('generar-descripcion-ia', {
-        body: { nombre, marca, sku, categoria, descripcion_actual }
+        body: { nombre, marca, sku, categoria, descripcion_actual: descripcion_base }
       });
 
       if (error) {
@@ -1429,7 +1450,9 @@
         return;
       }
 
-      document.getElementById('prod-descripcion').value = data.descripcion;
+      document.getElementById('prod-descripcion').value = descripcion_base
+        ? (descripcion_base + MARCADOR_SUGERENCIA_IA + data.descripcion)
+        : data.descripcion;
       fusionarCaracteristicasIA(data.caracteristicas);
       msg.style.color = 'var(--teal)';
       msg.textContent = 'Listo — revísala y ajústala si hace falta antes de guardar.';
