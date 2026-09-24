@@ -354,7 +354,21 @@
 
     await cargarProductosCache();
     await cargarPublicados();
+    preseleccionarDesdeUrl();
   })();
+
+  // Si se llega acá desde el botón "Enviar a Publicación ML" del Dashboard (al editar un
+  // producto), el producto ya viene elegido en el paso 1 — así no hay que buscarlo de nuevo.
+  function preseleccionarDesdeUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const productoId = params.get('producto_id');
+    if (productoId && productosCache.some(p => p.id === productoId)) {
+      cambiarModo('publicar');
+      window.agregarParaPreparar(productoId);
+      const panel = document.getElementById('chips-seleccionados');
+      if (panel) panel.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
 
   // Alterna entre la pestaña "Publicar algo nuevo" y "Seguimiento de lo ya publicado"
   window.cambiarModo = function(modo) {

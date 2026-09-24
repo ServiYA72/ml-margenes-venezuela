@@ -447,6 +447,7 @@
         </div>
         <button class="add" id="btn-guardar-producto" onclick="crearProducto()">Agregar y calcular</button>
         <button class="add" id="btn-cancelar-edicion" onclick="cancelarEdicion()" style="display:none; background:var(--surface-2); color:var(--paper); border:1px solid var(--line);">Cancelar edición</button>
+        <button type="button" class="add" id="btn-enviar-publicacion-ml" onclick="enviarAPublicacionML()" style="display:none; background:var(--surface-2); color:var(--gold); border:1px solid var(--gold);" title="Abre Publicación ML con este producto ya elegido — no hace falta buscarlo de nuevo">🚀 Enviar a Publicación ML</button>
       </div>
       <div class="msg" id="msg-producto"></div>
     </div>
@@ -1369,6 +1370,10 @@
     document.getElementById('prod-envio').value = pub.forma_envio || '';
     document.getElementById('prod-pago').value = pub.condiciones_pago || '';
     document.getElementById('prod-horario').value = pub.horario_atencion || '';
+    // Si este producto (aunque ya existía) todavía no tiene guardado su propio texto en alguno
+    // de estos 4 campos, se completa igual con el predeterminado — no pisa nada de lo que ya
+    // tenía guardado, solo llena lo que estaba realmente vacío.
+    aplicarPredeterminadosVenta();
     document.getElementById('prod-imagenes').value = (pub.imagenes || []).join(', ');
     document.getElementById('prod-fotos-ml').value = pub.fotos_ml || '';
     actualizarPrevisualizacionFotos();
@@ -1376,7 +1381,15 @@
 
     document.getElementById('btn-guardar-producto').textContent = 'Guardar cambios';
     document.getElementById('btn-cancelar-edicion').style.display = 'inline-block';
+    document.getElementById('btn-enviar-publicacion-ml').style.display = 'inline-block';
     document.getElementById('prod-nombre').scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
+  // Lleva este producto (ya guardado, se está editando) directo a "Publicación ML" con el
+  // producto ya elegido en el paso 1 — así no hay que ir hasta allá a buscarlo de nuevo.
+  window.enviarAPublicacionML = function() {
+    if (!editandoProductoId) return;
+    window.location.href = 'publicaciones-ml.html?producto_id=' + encodeURIComponent(editandoProductoId);
   };
 
   window.cancelarEdicion = function() {
@@ -1384,6 +1397,7 @@
     document.getElementById('titulo-form-producto').textContent = 'Nuevo producto';
     document.getElementById('btn-guardar-producto').textContent = 'Agregar y calcular';
     document.getElementById('btn-cancelar-edicion').style.display = 'none';
+    document.getElementById('btn-enviar-publicacion-ml').style.display = 'none';
     ['prod-nombre','prod-categoria','prod-costo','prod-descripcion','prod-envio','prod-pago','prod-horario','prod-imagenes','prod-fotos-ml']
       .forEach(id => document.getElementById(id).value = '');
     document.getElementById('prod-valor-ganancia').value = 30;
