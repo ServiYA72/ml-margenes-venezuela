@@ -259,6 +259,7 @@
           <li>Entra a Mercado Libre → Publicar → Masivamente → <b>sube esta misma planilla</b>.</li>
         </ol>
         <div class="hint" style="margin-top:12px; margin-bottom:0;">Se ve igual que la planilla original de Mercado Libre (mismos colores y formato) — solo dejamos a la vista las columnas que hay que llenar (unas 20 de más de 100). Si alguna celda aparece en rosado, es la propia Mercado Libre avisando que ahí falta algo obligatorio. Para ver las columnas ocultas: selecciona todas las columnas (clic en la esquina de arriba a la izquierda) → clic derecho → "Mostrar columnas".</div>
+        <div class="hint" style="margin-top:10px; margin-bottom:0; color:var(--gold);">✅ Ya marcamos estos productos como "Publicado" en el Dashboard y abajo, en "Publicaciones vinculadas" — no hace falta importar la ficha técnica de Mercado Libre para que aparezcan ahí. Si más adelante sí la importas, se completan solos el link y el ID reales de la publicación.</div>
       </div>
     </div>
   </div>
@@ -1378,10 +1379,27 @@
     enlace.remove();
     setTimeout(() => URL.revokeObjectURL(url), 4000);
 
+    // Antes, un producto solo pasaba a "Publicado" (en el Dashboard y en la lista de
+    // "Publicaciones vinculadas" de abajo) después de importar la ficha técnica que exporta
+    // Mercado Libre — un paso aparte, que además hay que esperar a que Mercado Libre procese.
+    // Como no hay forma de confirmar automáticamente que Mercado Libre ya la publicó (no se usa
+    // la API de Mercado Libre en este sistema), se toma como señal el momento en que generas esta
+    // planilla para subirla — es la acción real de "publicar" de tu lado. El link y el ID reales
+    // de la publicación se completan solos más adelante si importas esa ficha técnica; mientras
+    // tanto, el producto ya se ve como publicado sin depender de ese segundo paso.
+    const { error: errMarcarPublicado } = await supabase
+      .from('publicaciones')
+      .update({ estado: 'publicado' })
+      .in('producto_id', idsSeleccionados);
+    if (errMarcarPublicado) {
+      console.error('No se pudo marcar como publicado tras generar la planilla:', errMarcarPublicado.message);
+    }
+
     msg.textContent = '';
     document.getElementById('rg-nombre-archivo').textContent = nombreArchivo;
     document.getElementById('resultado-generado').style.display = 'block';
     document.getElementById('resultado-generado').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    await cargarPublicados();
   };
 
   // Cerrar sugerencias al hacer clic afuera

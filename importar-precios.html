@@ -180,6 +180,11 @@
         <select id="map-costo"></select>
       </div>
       <div>
+        <label for="map-stock">Columna de stock / existencias (opcional)</label>
+        <select id="map-stock"></select>
+        <div class="hint" style="margin-top:6px;">Si el proveedor la trae, se guarda para poder ver y filtrar por stock en el Dashboard — así sabes antes de publicar en Mercado Libre si de verdad hay existencia.</div>
+      </div>
+      <div>
         <label for="map-categoria">Columna de categoría (opcional)</label>
         <select id="map-categoria" onchange="advertirSiCategoriaNumerica()"></select>
         <div class="hint" id="aviso-categoria-numerica" style="margin-top:6px; color:var(--rust); display:none;"></div>
@@ -284,6 +289,9 @@
   const PISTAS_CODIGO = ['codigo', 'sku', 'referencia', 'cod'];
   const PISTAS_MARCA = ['marca', 'brand'];
   const PISTAS_DESCRIPCION = ['descripcion', 'detalle', 'especificacion', 'caracteristica', 'informacion'];
+  // "existente" antes que "existencia" no hace falta porque includes() ya cubre ambas —
+  // se deja "disponib" sin acento/plural para enganchar "Disponible" y "Disponibilidad" a la vez.
+  const PISTAS_STOCK = ['stock', 'existencia', 'cantidad', 'disponib', 'inventario', 'unidades', 'qty', 'existente'];
 
   // Reglas de clasificación automática por categoría: se evalúan en orden y gana la primera
   // que encuentre alguna de sus palabras clave en el nombre + descripción + marca del producto.
@@ -396,6 +404,19 @@
       return parseFloat(partes.join(''));
     }
     return parseFloat(partes[0] + '.' + partes[1]);
+  }
+
+  // El stock viene en formatos muy distintos según el proveedor: "10", "10.0", "N/D", "Sí",
+  // "Agotado", vacío... Solo se toma como stock real un número entero no negativo; cualquier
+  // otra cosa se deja como "desconocido" (null) en vez de asumir 0 — así un texto como "N/D" no
+  // hace que el producto se vea como agotado por error.
+  function parseStock(raw) {
+    if (raw === null || raw === undefined) return null;
+    const texto = String(raw).trim();
+    if (texto === '') return null;
+    const n = parseNumeroLocal(texto);
+    if (isNaN(n) || n < 0) return null;
+    return Math.round(n);
   }
 
   function mejorCoincidencia(headers, pistas) {
@@ -626,6 +647,7 @@
 
     const selNombre = document.getElementById('map-nombre');
     const selCosto = document.getElementById('map-costo');
+    const selStock = document.getElementById('map-stock');
     const selCategoria = document.getElementById('map-categoria');
     const selCodigo = document.getElementById('map-codigo');
     const selMarca = document.getElementById('map-marca');
@@ -639,6 +661,7 @@
 
     selNombre.innerHTML = opciones(false);
     selCosto.innerHTML = opciones(false);
+    selStock.innerHTML = opciones(true);
     selCategoria.innerHTML = opciones(true);
     selCodigo.innerHTML = opciones(true);
     selMarca.innerHTML = opciones(true);
@@ -646,6 +669,7 @@
 
     const guessNombre = mejorCoincidencia(encabezados, PISTAS_NOMBRE) || encabezados[0];
     const guessCosto = mejorCoincidencia(encabezados, PISTAS_COSTO) || encabezados[1] || encabezados[0];
+    const guessStock = mejorCoincidencia(encabezados, PISTAS_STOCK);
     const guessCategoria = mejorCoincidencia(encabezados, PISTAS_CATEGORIA);
     const guessCodigo = mejorCoincidencia(encabezados, PISTAS_CODIGO);
     const guessMarca = mejorCoincidencia(encabezados, PISTAS_MARCA);
@@ -655,6 +679,7 @@
 
     selNombre.value = guessNombre;
     selCosto.value = guessCosto;
+    if (guessStock) selStock.value = guessStock;
     if (guessCategoria) selCategoria.value = guessCategoria;
     if (guessCodigo) selCodigo.value = guessCodigo;
     if (guessMarca) selMarca.value = guessMarca;
@@ -667,6 +692,7 @@
     if (recordado) {
       if (recordado.nombre && encabezados.includes(recordado.nombre)) selNombre.value = recordado.nombre;
       if (recordado.costo && encabezados.includes(recordado.costo)) selCosto.value = recordado.costo;
+      if (recordado.stock && encabezados.includes(recordado.stock)) selStock.value = recordado.stock;
       if (recordado.categoria && encabezados.includes(recordado.categoria)) selCategoria.value = recordado.categoria;
       if (recordado.codigo && encabezados.includes(recordado.codigo)) selCodigo.value = recordado.codigo;
       if (recordado.marca && encabezados.includes(recordado.marca)) selMarca.value = recordado.marca;
@@ -718,6 +744,7 @@
   window.generarVistaPrevia = async function() {
     const colNombre = document.getElementById('map-nombre').value;
     const colCosto = document.getElementById('map-costo').value;
+    const colStock = document.getElementById('map-stock').value;
     const colCategoria = document.getElementById('map-categoria').value;
     const colCodigo = document.getElementById('map-codigo').value;
     const colMarca = document.getElementById('map-marca').value;
@@ -726,7 +753,7 @@
     const proveedorId = document.getElementById('proveedor').value;
     if (proveedorId) {
       guardarMapeoRecordado(proveedorId, {
-        nombre: colNombre, costo: colCosto, categoria: colCategoria, codigo: colCodigo, marca: colMarca, descripcion: colDescripcion
+        nombre: colNombre, costo: colCosto, stock: colStock, categoria: colCategoria, codigo: colCodigo, marca: colMarca, descripcion: colDescripcion
       });
     }
 
@@ -736,19 +763,21 @@
 
     // --- Anti-duplicados: traemos lo que ya existe en el sistema para este proveedor,
     // para no volver a insertar lo mismo si el archivo se sube dos veces o repite productos ya cargados.
-    const skusExistentes = new Set();
-    const nombresExistentes = new Set();
+    // También se guarda el id de cada uno (mapaExistentes) — no solo si existe o no — para poder
+    // actualizarle el stock más abajo cuando el proveedor manda una lista nueva del mismo producto.
+    const mapaExistentes = new Map(); // clave (sku:xxx o nombre:xxx) -> id del producto ya cargado
     if (proveedorId) {
       const { data: existentes } = await supabase
         .from('productos')
-        .select('sku, nombre')
+        .select('id, sku, nombre')
         .eq('proveedor_id', proveedorId);
       (existentes || []).forEach(p => {
-        if (p.sku) skusExistentes.add(normalizeKey(p.sku));
-        if (p.nombre) nombresExistentes.add(normalizeKey(p.nombre));
+        if (p.sku) mapaExistentes.set('sku:' + normalizeKey(p.sku), p.id);
+        if (p.nombre) mapaExistentes.set('nombre:' + normalizeKey(p.nombre), p.id);
       });
     }
     const clavesEnEsteArchivo = new Set();
+    let hayDuplicadosConStock = false;
 
     filasValidas = [];
     const panel = document.getElementById('panel-preview');
@@ -768,6 +797,7 @@
             <th>Código</th><th>Marca</th><th style="min-width:200px;">Producto</th>
             <th style="min-width:220px;">Descripción</th>
             <th style="min-width:170px;">Categoría</th>
+            <th class="num">Stock</th>
             <th class="num">Costo</th>
             <th class="num">Precio efectivo</th>
             <th class="num">Ganancia deseada</th>
@@ -778,6 +808,12 @@
         </thead>
         <tbody id="preview-body"></tbody>
       </table>
+      </div>
+      <div id="bloque-actualizar-stock" style="display:none; margin-top:14px;">
+        <label style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:400; text-transform:none; letter-spacing:normal; color:var(--paper);">
+          <input type="checkbox" id="chk-actualizar-stock-existentes" style="width:auto;">
+          Actualizar el stock de los productos que ya existen con el de esta lista (no toca su nombre, precio, categoría ni descripción — solo el stock)
+        </label>
       </div>
       <button class="primary" id="btn-confirmar" onclick="confirmarImportacion()">Cargar productos al sistema</button>
       <div class="msg" id="msg-import"></div>
@@ -799,6 +835,7 @@
       const marca = colMarca ? row[colMarca] : '';
       const descripcion = colDescripcion ? String(row[colDescripcion] || '').trim() : '';
       const costo = parseNumeroLocal(row[colCosto]);
+      const stock = colStock ? parseStock(row[colStock]) : null;
 
       const tr = document.createElement('tr');
 
@@ -810,7 +847,7 @@
       // texto en el PDF también mencionara a la(s) variante(s) sin precio.
       if (!nombre) {
         tr.className = 'row-error';
-        tr.innerHTML = `<td></td><td colspan="2">${escapeHtml(String(codigo || ''))}</td><td colspan="7">Fila omitida: falta el nombre del producto</td>`;
+        tr.innerHTML = `<td></td><td colspan="2">${escapeHtml(String(codigo || ''))}</td><td colspan="8">Fila omitida: falta el nombre del producto</td>`;
         tbody.appendChild(tr);
         continue;
       }
@@ -827,10 +864,11 @@
       // (marca + nombre), que es tal como se guardó en productos.nombre la vez anterior.
       const codigoNorm = codigo ? normalizeKey(String(codigo)) : '';
       const claveDuplicado = codigoNorm ? ('sku:' + codigoNorm) : ('nombre:' + normalizeKey(nombreFinal));
-      const yaExiste = (codigoNorm && skusExistentes.has(codigoNorm)) ||
-                        (!codigoNorm && nombresExistentes.has(normalizeKey(nombreFinal))) ||
-                        clavesEnEsteArchivo.has(claveDuplicado);
+      const idProductoExistente = mapaExistentes.get(claveDuplicado) || null;
+      const yaExiste = !!idProductoExistente || clavesEnEsteArchivo.has(claveDuplicado);
       clavesEnEsteArchivo.add(claveDuplicado);
+
+      if (yaExiste && idProductoExistente && stock !== null) hayDuplicadosConStock = true;
 
       const idx = indiceFila++;
 
@@ -846,7 +884,7 @@
           <td>${escapeHtml(String(marca || ''))}</td>
           <td>${escapeHtml(String(nombre))}</td>
           <td class="celda-descripcion" title="${escapeHtml(descripcion)}">${escapeHtml(descripcion)}</td>
-          <td colspan="6" style="text-align:left; color:var(--muted);">Sin precio del proveedor — no se importa</td>
+          <td colspan="7" style="text-align:left; color:var(--muted);">Sin precio del proveedor — no se importa</td>
         `;
         tbody.appendChild(tr);
         continue;
@@ -872,7 +910,7 @@
       const precioBcvBs = precioEfectivo * tasaBinance;
       const precioBcvUsdEquiv = precioEfectivo * (tasaBinance / tasaBCV);
 
-      filasValidas.push({ idx, nombre: nombreFinal, categoria: categoriaFinal, descripcion, costo, precioEfectivo, gananciaDeseada, comisionMlUsd, gananciaNetaUsd, precioBcvUsdEquiv, precioBcvBs, codigo, marca, omitir: yaExiste, sinPrecio: false });
+      filasValidas.push({ idx, nombre: nombreFinal, categoria: categoriaFinal, descripcion, costo, stock, precioEfectivo, gananciaDeseada, comisionMlUsd, gananciaNetaUsd, precioBcvUsdEquiv, precioBcvBs, codigo, marca, omitir: yaExiste, idProductoExistente, sinPrecio: false });
 
       if (yaExiste) tr.className = 'row-duplicado';
       tr.innerHTML = `
@@ -882,6 +920,7 @@
         <td>${escapeHtml(String(nombre))}</td>
         <td class="celda-descripcion" title="${escapeHtml(descripcion)}">${escapeHtml(descripcion)}</td>
         <td><input class="input-categoria-fila" list="lista-categorias-import" value="${escapeHtml(categoriaFinal)}" oninput="actualizarCategoriaFilaImport(${idx}, this.value)"></td>
+        <td class="num">${stock !== null ? stock : '—'}</td>
         <td class="num">$${costo.toFixed(2)}</td>
         <td class="num" style="color:var(--gold)">$${precioEfectivo.toFixed(2)}</td>
         <td class="num">$${gananciaDeseada.toFixed(2)}</td>
@@ -890,6 +929,10 @@
         <td class="num">Bs ${precioBcvBs.toLocaleString('es-VE', {maximumFractionDigits: 0})}</td>
       `;
       tbody.appendChild(tr);
+    }
+
+    if (hayDuplicadosConStock) {
+      document.getElementById('bloque-actualizar-stock').style.display = 'block';
     }
 
     if (omitidosSinPrecioPreview > 0) {
@@ -926,17 +969,29 @@
     const aInsertar = filasValidas.filter(f => !f.omitir);
     const omitidos = filasValidas.length - aInsertar.length;
 
-    if (aInsertar.length === 0) {
+    // Los que "ya existen" (misma SKU o nombre para este proveedor) nunca se insertan de nuevo —
+    // pero si el visitante marcó la casilla y esta lista trae stock, sí se les actualiza SOLO el
+    // stock, para que una lista de precios refrescada del mismo proveedor sirva también para
+    // mantener el stock al día sin duplicar productos ni tocar precio/nombre/descripción.
+    const chkActualizarStock = document.getElementById('chk-actualizar-stock-existentes');
+    const actualizarStockExistentes = !!(chkActualizarStock && chkActualizarStock.checked);
+    const aActualizarStock = actualizarStockExistentes
+      ? filasValidas.filter(f => f.omitir && f.idProductoExistente && f.stock !== null)
+      : [];
+
+    if (aInsertar.length === 0 && aActualizarStock.length === 0) {
       msg.className = 'msg err';
       msg.textContent = `Nada que cargar: los ${omitidos} producto(s) de este archivo ya existen para este proveedor.`;
       return;
     }
 
     btn.disabled = true;
-    btn.textContent = `Cargando 0 / ${aInsertar.length}...`;
+    const totalPasos = aInsertar.length + aActualizarStock.length;
+    btn.textContent = `Cargando 0 / ${totalPasos}...`;
 
     const { data: { session } } = await supabase.auth.getSession();
     let cargados = 0;
+    let progreso = 0;
 
     // A este punto filasValidas ya solo contiene variantes con precio válido del proveedor
     // (las "no disponibles" se descartaron desde la vista previa y nunca llegan aquí).
@@ -958,6 +1013,7 @@
           descripcion: fila.descripcion || null,
           modo_ganancia: modo,
           comision_ml_pct: comision,
+          stock: fila.stock,
           precio_efectivo_usd: fila.precioEfectivo.toFixed(2),
           precio_bcv_usd_equiv: fila.precioBcvUsdEquiv.toFixed(2),
           precio_bcv_bs: fila.precioBcvBs.toFixed(2),
@@ -968,17 +1024,33 @@
         });
         cargados++;
       }
-      btn.textContent = `Cargando ${cargados} / ${aInsertar.length}...`;
+      progreso++;
+      btn.textContent = `Cargando ${progreso} / ${totalPasos}...`;
+    }
+
+    let stockActualizados = 0;
+    for (const fila of aActualizarStock) {
+      const { error: errStock } = await supabase
+        .from('publicaciones')
+        .update({ stock: fila.stock })
+        .eq('producto_id', fila.idProductoExistente);
+      if (!errStock) stockActualizados++;
+      progreso++;
+      btn.textContent = `Cargando ${progreso} / ${totalPasos}...`;
     }
 
     btn.disabled = false;
     btn.textContent = 'Cargar productos al sistema';
     msg.className = 'msg ok';
-    msg.textContent = omitidos > 0
-      ? `Listo: ${cargados} producto(s) nuevo(s) cargado(s). ${omitidos} omitido(s) por ya existir para este proveedor. Puedes verlos en dashboard.html.`
-      : `Listo: ${cargados} de ${aInsertar.length} productos cargados. Puedes verlos en dashboard.html.`;
+    const partes = [];
+    if (cargados > 0) partes.push(`${cargados} producto(s) nuevo(s) cargado(s)`);
+    if (stockActualizados > 0) partes.push(`stock actualizado en ${stockActualizados} producto(s) ya existente(s)`);
+    const otrosOmitidos = omitidos - aActualizarStock.length;
+    if (otrosOmitidos > 0) partes.push(`${otrosOmitidos} omitido(s) por ya existir (sin stock que actualizar)`);
+    msg.textContent = (partes.length > 0 ? `Listo: ${partes.join('. ')}.` : 'No se cargó ni actualizó nada.') + ' Puedes verlos en dashboard.html.';
     filasValidas = [];
     document.getElementById('preview-body').innerHTML = '';
+    document.getElementById('bloque-actualizar-stock').style.display = 'none';
   };
 
   const dropzone = document.getElementById('dropzone');
