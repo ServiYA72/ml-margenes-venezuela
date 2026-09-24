@@ -333,17 +333,49 @@
   </div>
 
   <div class="panel">
-    <h2>5. Condiciones</h2>
+    <h2>5. Condiciones de la oferta</h2>
     <div class="grid-form">
       <div>
-        <label for="cot-validez">Validez de la cotización (días)</label>
-        <input type="number" id="cot-validez" value="7" min="1">
+        <label for="cot-validez">Validez de la oferta</label>
+        <div style="display:flex; gap:8px;">
+          <input type="number" id="cot-validez" value="7" min="1" style="flex:1;">
+          <select id="cot-validez-unidad" style="flex:1;">
+            <option value="dias">Día(s)</option>
+            <option value="semanas">Semana(s)</option>
+            <option value="meses">Mes(es)</option>
+            <option value="anios">Año(s)</option>
+          </select>
+        </div>
       </div>
       <div>
-        <label for="cot-condiciones-pago">Condiciones de pago</label>
-        <input type="text" id="cot-condiciones-pago" placeholder="Ej: 50% de anticipo, resto contra entrega">
+        <label for="cot-forma-pago-pct">Forma de pago — % al aprobar el presupuesto</label>
+        <input type="number" id="cot-forma-pago-pct" value="100" min="0" max="100" oninput="actualizarPreviewFormaPago()">
+        <div class="hint" id="preview-forma-pago" style="margin-top:6px;"></div>
+      </div>
+      <div>
+        <label for="cot-tiempo-entrega">Tiempo de entrega (opcional)</label>
+        <div style="display:flex; gap:8px;">
+          <input type="number" id="cot-tiempo-entrega" min="0" placeholder="Ej: 3" style="flex:1;">
+          <select id="cot-tiempo-entrega-unidad" style="flex:1;">
+            <option value="dias">Día(s)</option>
+            <option value="semanas">Semana(s)</option>
+            <option value="meses">Mes(es)</option>
+          </select>
+        </div>
+      </div>
+      <div>
+        <label for="cot-garantia">Garantía (opcional)</label>
+        <div style="display:flex; gap:8px;">
+          <input type="number" id="cot-garantia" min="0" placeholder="Ej: 6" style="flex:1;">
+          <select id="cot-garantia-unidad" style="flex:1;">
+            <option value="dias">Día(s)</option>
+            <option value="meses">Mes(es)</option>
+            <option value="anios">Año(s)</option>
+          </select>
+        </div>
       </div>
     </div>
+    <div class="hint" style="margin-top:0;">El STOCK se agrega solo al PDF, tomado directo del sistema, para los productos cotizados que ya tengan existencia registrada — no hace falta escribirlo aquí.</div>
     <label for="cot-notas">Notas (opcional, aparecen en el PDF)</label>
     <textarea id="cot-notas" rows="2" placeholder="Ej: precios sujetos a disponibilidad de inventario"></textarea>
 
@@ -402,6 +434,48 @@
 
   function normalizarTexto(str) {
     return String(str || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  }
+
+  // ---------- Condiciones de la oferta (validez, forma de pago, entrega, garantía, stock) ----------
+  const ETIQUETAS_UNIDAD = {
+    dias: ['día', 'días'], semanas: ['semana', 'semanas'], meses: ['mes', 'meses'], anios: ['año', 'años']
+  };
+  function formatUnidadTiempo(valor, unidad) {
+    const n = parseInt(valor, 10);
+    if (!n || n <= 0) return '';
+    const [singular, plural] = ETIQUETAS_UNIDAD[unidad] || ETIQUETAS_UNIDAD.dias;
+    return `${n} ${n === 1 ? singular : plural}`;
+  }
+
+  // Regla pedida: si el cliente paga el 100% al aprobar, se dice así de simple; si paga menos,
+  // el resto se entiende pagadero contra entrega — para no tener que escribir la condición de
+  // pago a mano cada vez ni arriesgarse a que quede ambigua en el PDF.
+  function textoFormaPago(pctCrudo) {
+    const pct = Math.max(0, Math.min(100, parseInt(pctCrudo, 10) || 0));
+    if (pct >= 100) return '100% al momento de la aprobación del Presupuesto.';
+    if (pct <= 0) return '100% a la entrega.';
+    return `${pct}% al momento de la aprobación del Presupuesto y ${100 - pct}% a la entrega.`;
+  }
+
+  window.actualizarPreviewFormaPago = function() {
+    const pct = document.getElementById('cot-forma-pago-pct').value;
+    document.getElementById('preview-forma-pago').textContent = 'Se imprimirá: "' + textoFormaPago(pct) + '"';
+  };
+
+  // STOCK: nunca se escribe a mano — se arma solo con lo que ya haya en el sistema para los
+  // productos vinculados de esta cotización (los ítems libres, sin producto_id, no aplican).
+  // Si ningún ítem tiene stock registrado, se omite la línea completa en vez de mostrar vacío.
+  function lineaStockCotizacion(items) {
+    const partes = [];
+    (items || []).forEach(it => {
+      if (!it.producto_id) return;
+      const p = productosCache[it.producto_id];
+      const stock = p?.pub?.stock;
+      if (stock === null || stock === undefined) return;
+      const nombreCorto = String(it.descripcion || p?.nombre || '').slice(0, 42);
+      partes.push(stock > 0 ? `${nombreCorto} (${stock} disp.)` : `${nombreCorto} (agotado)`);
+    });
+    return partes.length > 0 ? partes.join('  ·  ') : null;
   }
 
   async function initSesion() {
@@ -1017,7 +1091,13 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
       cliente_telefono: document.getElementById('cot-cliente-telefono').value.trim() || null,
       cliente_email: document.getElementById('cot-cliente-email').value.trim() || null,
       validez_dias: parseInt(document.getElementById('cot-validez').value) || 7,
-      condiciones_pago: document.getElementById('cot-condiciones-pago').value.trim() || null,
+      validez_unidad: document.getElementById('cot-validez-unidad').value,
+      forma_pago_pct: Math.max(0, Math.min(100, parseInt(document.getElementById('cot-forma-pago-pct').value, 10) || 0)),
+      condiciones_pago: textoFormaPago(document.getElementById('cot-forma-pago-pct').value),
+      tiempo_entrega_valor: parseInt(document.getElementById('cot-tiempo-entrega').value, 10) || null,
+      tiempo_entrega_unidad: document.getElementById('cot-tiempo-entrega-unidad').value,
+      garantia_valor: parseInt(document.getElementById('cot-garantia').value, 10) || null,
+      garantia_unidad: document.getElementById('cot-garantia-unidad').value,
       notas: document.getElementById('cot-notas').value.trim() || null,
       subtotal: subtotal.toFixed(2),
       total: total.toFixed(2),
@@ -1118,7 +1198,13 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
     document.getElementById('libre-tipo').value = 'libre';
     actualizarUiItemLibre();
     document.getElementById('cot-validez').value = 7;
-    document.getElementById('cot-condiciones-pago').value = '';
+    document.getElementById('cot-validez-unidad').value = 'dias';
+    document.getElementById('cot-forma-pago-pct').value = 100;
+    actualizarPreviewFormaPago();
+    document.getElementById('cot-tiempo-entrega').value = '';
+    document.getElementById('cot-tiempo-entrega-unidad').value = 'dias';
+    document.getElementById('cot-garantia').value = '';
+    document.getElementById('cot-garantia-unidad').value = 'meses';
     document.getElementById('cot-notas').value = '';
     document.getElementById('acciones-post-guardado').style.display = 'none';
     document.getElementById('msg-cotizacion').textContent = '';
@@ -1160,7 +1246,13 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
     document.getElementById('cot-cliente-telefono').value = cot.cliente_telefono || '';
     document.getElementById('cot-cliente-email').value = cot.cliente_email || '';
     document.getElementById('cot-validez').value = cot.validez_dias || 7;
-    document.getElementById('cot-condiciones-pago').value = cot.condiciones_pago || '';
+    document.getElementById('cot-validez-unidad').value = cot.validez_unidad || 'dias';
+    document.getElementById('cot-forma-pago-pct').value = (cot.forma_pago_pct === null || cot.forma_pago_pct === undefined) ? 100 : cot.forma_pago_pct;
+    actualizarPreviewFormaPago();
+    document.getElementById('cot-tiempo-entrega').value = cot.tiempo_entrega_valor || '';
+    document.getElementById('cot-tiempo-entrega-unidad').value = cot.tiempo_entrega_unidad || 'dias';
+    document.getElementById('cot-garantia').value = cot.garantia_valor || '';
+    document.getElementById('cot-garantia-unidad').value = cot.garantia_unidad || 'meses';
     document.getElementById('cot-notas').value = cot.notas || '';
 
     itemsCotizacion = (itemsDb || []).map(it => {
@@ -1591,6 +1683,7 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
     await initSesion();
     await Promise.all([cargarTasas(), cargarClientes(), cargarProductos(), cargarProveedores(), cargarHistorial()]);
     renderizarTablaItems();
+    actualizarPreviewFormaPago();
   })();
 </script>
 
