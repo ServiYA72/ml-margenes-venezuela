@@ -131,6 +131,43 @@
     gap: 14px;
     align-items: end;
   }
+  /* Subtítulos que dividen el formulario de producto en grupos cortos (datos, precio,
+     descripción, condiciones, fotos) en vez de un solo bloque largo de campos. */
+  .subseccion-titulo {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    font-weight: 600;
+    margin: 22px 0 12px 0;
+    padding-top: 18px;
+    border-top: 1px solid var(--line);
+  }
+  .subseccion-titulo:first-child { margin-top: 0; padding-top: 0; border-top: none; }
+  /* Cabecera clicable reutilizada por los paneles plegables (condiciones/márgenes arriba,
+     herramientas de mantenimiento abajo) — mismo lenguaje visual que ya existía para
+     "Zona de limpieza" / "Productos sin categoría" / "Gestionar categorías". */
+  .panel-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+  }
+  .panel-toggle-icono { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .badge-contador {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 16px;
+    height: 16px;
+    padding: 0 5px;
+    border-radius: 8px;
+    background: var(--gold);
+    color: var(--ink);
+    font-size: 10.5px;
+    font-weight: 700;
+    margin-left: 6px;
+  }
   label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
   input, select, textarea {
     width: 100%;
@@ -287,8 +324,12 @@
   <section class="view" id="view-productos">
 
     <div class="panel">
-      <h2>Condiciones de venta predeterminadas</h2>
-      <div class="hint" style="margin-top:0;">Esto se precarga en los campos de cada producto <b>nuevo</b> (no toca los productos que ya guardaste) — así no tenés que reescribir lo mismo cada vez. Lo podés editar por producto si ese caso es distinto, y podés cambiar estos predeterminados cuando quieras.</div>
+      <div class="panel-toggle" onclick="toggleCondicionesVenta()">
+        <h2 style="margin:0;">Condiciones de venta predeterminadas</h2>
+        <span id="icono-condiciones-venta" class="panel-toggle-icono">Mostrar ▾</span>
+      </div>
+      <div id="contenido-condiciones-venta" style="display:none;">
+      <div class="hint" style="margin-top:14px;">Esto se precarga en los campos de cada producto <b>nuevo</b> (no toca los productos que ya guardaste) — así no tenés que reescribir lo mismo cada vez. Lo podés editar por producto si ese caso es distinto, y podés cambiar estos predeterminados cuando quieras.</div>
       <div class="grid-form" style="margin-top:14px;">
         <div>
           <label for="cfg-envio">Forma de envío</label>
@@ -310,10 +351,15 @@
         <button class="add" onclick="guardarConfiguracionVentas()">Guardar predeterminados</button>
       </div>
       <div class="msg" id="msg-configuracion-ventas"></div>
+      </div>
     </div>
 
     <div class="panel">
-      <h2>Márgenes automáticos por categoría</h2>
+      <div class="panel-toggle" onclick="toggleMargenesCategoria()">
+        <h2 style="margin:0;">Márgenes automáticos por categoría</h2>
+        <span id="icono-margenes-categoria" class="panel-toggle-icono">Mostrar ▾</span>
+      </div>
+      <div id="contenido-margenes-categoria" style="display:none; margin-top:14px;">
       <div class="grid-form">
         <div>
           <label for="cat-nombre">Categoría</label>
@@ -334,10 +380,13 @@
       </div>
       <div class="msg" id="msg-categoria"></div>
       <div id="lista-margenes-categoria" style="margin-top:14px; display:flex; gap:8px; flex-wrap:wrap;"></div>
+      </div>
     </div>
 
     <div class="panel">
       <h2 id="titulo-form-producto">Nuevo producto</h2>
+
+      <div class="subseccion-titulo">Datos básicos</div>
       <div class="grid-form">
         <div>
           <label for="prod-proveedor">Proveedor</label>
@@ -352,6 +401,10 @@
           <input type="text" id="prod-categoria" placeholder="Ej: Almacenamiento" list="lista-categorias" onchange="aplicarMargenPorCategoria('prod')">
           <datalist id="lista-categorias"></datalist>
         </div>
+      </div>
+
+      <div class="subseccion-titulo">Precio y ganancia</div>
+      <div class="grid-form">
         <div>
           <label for="prod-costo">Costo proveedor (USD)</label>
           <input type="number" step="0.01" id="prod-costo" placeholder="157.00" oninput="sincronizarGanancia('prod','usd')">
@@ -386,7 +439,8 @@
       </div>
       <div id="comparacion-comisiones" style="display:none; margin-top:14px; padding:12px 14px; background:var(--surface-2); border:1px solid var(--line);"></div>
 
-      <div class="grid-form" style="margin-top:18px; padding-top:18px; border-top:1px solid var(--line);">
+      <div class="subseccion-titulo">Descripción y características</div>
+      <div class="grid-form">
         <div style="grid-column: 1 / -1;">
           <label for="prod-descripcion">Descripción de la publicación</label>
           <textarea id="prod-descripcion" rows="4" placeholder="Especificaciones, garantía, qué incluye..."></textarea>
@@ -402,6 +456,10 @@
           <button type="button" onclick="agregarFilaCaracteristica()" style="margin-top:8px; padding:7px 12px; font-size:12.5px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line); cursor:pointer;">+ Agregar característica</button>
           <div class="hint" style="margin-top:6px;">Se completan solas con "✨ Generar con IA" arriba (incluye la Marca), o agrégalas/edítalas a mano. Se guardan con el producto y se usan para intentar rellenar las columnas técnicas del Excel de Mercado Libre.</div>
         </div>
+      </div>
+
+      <div class="subseccion-titulo">Condición y venta</div>
+      <div class="grid-form">
         <div>
           <label for="prod-condicion">Condición</label>
           <select id="prod-condicion">
@@ -425,6 +483,10 @@
           <label for="prod-horario">Horario de atención</label>
           <input type="text" id="prod-horario" placeholder="Ej: Lunes a viernes, 9am - 5pm">
         </div>
+      </div>
+
+      <div class="subseccion-titulo">Fotos</div>
+      <div class="grid-form">
         <div style="grid-column: 1 / -1;">
           <label for="prod-imagenes">Imágenes (URLs separadas por coma)</label>
           <input type="text" id="prod-imagenes" placeholder="https://... , https://..." oninput="actualizarPrevisualizacionFotos()">
@@ -445,9 +507,12 @@
           </div>
           <div class="hint" style="margin-top:6px; color:var(--gold);">Mercado Libre exige que las fotos de la planilla vengan de <em>su propio</em> Gestor de fotos — una URL de este sistema (u otra externa) no sirve, aunque sea una imagen válida, y por eso la planilla sale rechazada como "vacía". Pasos: 1) Abre el Gestor de fotos con el botón de arriba. 2) Crea un grupo de fotos para este producto y sube las mismas imágenes. 3) Presiona "Copiar URLs" y pégalas aquí. Son válidas solo por 2 días — si tardas más en subir la planilla a Mercado Libre, genera las URLs de nuevo antes de publicar.</div>
         </div>
-        <button class="add" id="btn-guardar-producto" onclick="crearProducto()">Agregar y calcular</button>
-        <button class="add" id="btn-cancelar-edicion" onclick="cancelarEdicion()" style="display:none; background:var(--surface-2); color:var(--paper); border:1px solid var(--line);">Cancelar edición</button>
-        <button type="button" class="add" id="btn-enviar-publicacion-ml" onclick="enviarAPublicacionML()" style="display:none; background:var(--surface-2); color:var(--gold); border:1px solid var(--gold);" title="Abre Publicación ML con este producto ya elegido — no hace falta buscarlo de nuevo">🚀 Enviar a Publicación ML</button>
+      </div>
+
+      <div style="display:flex; gap:12px; flex-wrap:wrap; margin-top:20px; padding-top:18px; border-top:1px solid var(--line);">
+        <button class="add" id="btn-guardar-producto" onclick="crearProducto()" style="margin-top:0;">Agregar y calcular</button>
+        <button class="add" id="btn-cancelar-edicion" onclick="cancelarEdicion()" style="display:none; margin-top:0; background:var(--surface-2); color:var(--paper); border:1px solid var(--line);">Cancelar edición</button>
+        <button type="button" class="add" id="btn-enviar-publicacion-ml" onclick="enviarAPublicacionML()" style="display:none; margin-top:0; background:var(--surface-2); color:var(--gold); border:1px solid var(--gold);" title="Abre Publicación ML con este producto ya elegido — no hace falta buscarlo de nuevo">🚀 Enviar a Publicación ML</button>
       </div>
       <div class="msg" id="msg-producto"></div>
     </div>
@@ -473,11 +538,19 @@
       </div>
       <div class="msg" id="msg-bulk"></div>
 
-      <div style="display:flex; gap:12px; align-items:end; flex-wrap:wrap; margin-bottom:16px;">
+      <div style="display:flex; gap:12px; align-items:end; flex-wrap:wrap; margin-bottom:0;">
         <div style="flex:1; min-width:220px;">
           <label for="filtro-busqueda" style="display:block; font-size:12px; color:var(--muted); margin-bottom:6px;">Buscar por nombre, código, marca o característica</label>
           <input type="text" id="filtro-busqueda" placeholder="Ej: SSD, RGB, HIKSEMI, RG-AP180..." oninput="aplicarFiltrosProductos()" style="width:100%; background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:9px 10px; font-size:14px;">
         </div>
+        <button type="button" class="add" id="btn-toggle-filtros" style="padding:9px 14px; font-size:12.5px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line);" onclick="toggleFiltrosAvanzados()">
+          <span id="icono-filtros-avanzados">Más filtros ▾</span><span id="badge-filtros-activos" class="badge-contador" style="display:none;"></span>
+        </button>
+        <div id="contador-resultados" style="font-size:12px; color:var(--muted); padding-bottom:10px;"></div>
+        <button class="add" style="padding:9px 14px; font-size:12.5px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line);" onclick="limpiarFiltrosProductos()">Limpiar filtros</button>
+      </div>
+
+      <div id="fila-filtros-avanzados" style="display:none; gap:12px; align-items:end; flex-wrap:wrap; margin-top:14px; padding-top:14px; border-top:1px dashed var(--line);">
         <div>
           <label for="filtro-precio" style="display:block; font-size:12px; color:var(--muted); margin-bottom:6px;">Rango de precio (Ref. BCV)</label>
           <select id="filtro-precio" onchange="aplicarFiltrosProductos()" style="background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:9px 10px; font-size:14px;">
@@ -533,8 +606,6 @@
             <option value="sin-dato">⚪ Sin dato de stock</option>
           </select>
         </div>
-        <div id="contador-resultados" style="font-size:12px; color:var(--muted); padding-bottom:10px;"></div>
-        <button class="add" style="padding:9px 14px; font-size:12.5px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line);" onclick="limpiarFiltrosProductos()">Limpiar filtros</button>
       </div>
       </div>
 
@@ -563,56 +634,60 @@
       <div id="paginacion-productos"></div>
     </div>
 
-    <div class="panel" style="padding: 12px 22px;">
-      <div style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;" onclick="toggleZonaLimpieza()">
-        <span style="font-size:12.5px; color:var(--muted);">⚠ Zona de limpieza de base de datos</span>
-        <span id="icono-limpieza" style="font-size:12px; color:var(--muted);">Mostrar ▾</span>
-      </div>
-      <div id="contenido-limpieza" style="display:none; margin-top:14px;">
-      <div class="hint" style="margin-top:0;">Borra productos y sus publicaciones de forma permanente, de un proveedor específico o de todos. Antes de borrar se descarga un respaldo automático y queda un registro de quién lo hizo, cuándo y cuántos productos.</div>
-      <div style="display:flex; gap:12px; align-items:end; flex-wrap:wrap; margin-top:14px;">
-        <div>
-          <label for="limpieza-proveedor" style="display:block; font-size:12px; color:var(--muted); margin-bottom:6px;">Proveedor a limpiar</label>
-          <select id="limpieza-proveedor" style="background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:9px 10px; font-size:14px; min-width:240px;">
-            <option value="">Todos los proveedores (TODO el catálogo)</option>
-          </select>
+    <div class="panel" style="padding: 16px 22px;">
+      <div style="font-size:12.5px; color:var(--muted); font-weight:600; text-transform:uppercase; letter-spacing:0.04em; margin-bottom:4px;">🛠 Herramientas y mantenimiento</div>
+
+      <div style="padding:10px 0; border-bottom:1px solid var(--line);">
+        <div style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;" onclick="toggleZonaLimpieza()">
+          <span style="font-size:12.5px; color:var(--muted);">⚠ Zona de limpieza de base de datos</span>
+          <span id="icono-limpieza" style="font-size:12px; color:var(--muted);">Mostrar ▾</span>
         </div>
-        <button class="add" style="padding:9px 16px; font-size:13px; background:var(--rust); color:var(--paper);" onclick="ejecutarLimpieza()">Limpiar base de datos</button>
-        <button class="add" style="padding:9px 16px; font-size:13px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line);" onclick="verHistorialLimpieza()">Ver historial de limpiezas</button>
-      </div>
-      <div class="msg" id="msg-limpieza"></div>
-      <div id="historial-limpieza" style="display:none; margin-top:14px; font-size:12.5px; color:var(--muted); line-height:1.8;"></div>
-      </div>
-    </div>
-
-    <div class="panel" style="padding: 12px 22px;">
-      <div style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;" onclick="toggleProductosSinCategoria()">
-        <span style="font-size:12.5px; color:var(--muted);">📦 Productos sin categoría <span id="conteo-sin-categoria" style="color:var(--rust);"></span></span>
-        <span id="icono-sin-categoria" style="font-size:12px; color:var(--muted);">Mostrar ▾</span>
-      </div>
-      <div id="contenido-sin-categoria" style="display:none; margin-top:14px;">
-        <div class="hint" style="margin-top:0;">Productos que todavía no tienen categoría asignada. Haz clic en uno para abrirlo completo — nombre, descripción, precio, imágenes — revisarlo con calma y asignarle su categoría correspondiente.</div>
-        <div id="lista-sin-categoria" style="max-height: 320px; overflow-y: auto; border: 1px solid var(--line); margin-top: 12px;"></div>
-      </div>
-    </div>
-
-    <div class="panel" style="padding: 12px 22px;">
-      <div style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;" onclick="toggleGestionCategorias()">
-        <span style="font-size:12.5px; color:var(--muted);">🏷 Gestionar categorías</span>
-        <span id="icono-categorias" style="font-size:12px; color:var(--muted);">Mostrar ▾</span>
-      </div>
-      <div id="contenido-categorias" style="display:none; margin-top:14px;">
-        <div class="hint" style="margin-top:0;">Categorías que hay hoy en el catálogo (por ejemplo, valores numéricos sueltos que quedaron de una importación con la columna mal detectada). Selecciona las que no te interesan y vacíalas — los productos NO se borran, solo quedan sin categoría — o renómbralas todas de una vez a un nombre correcto.</div>
-        <div id="lista-gestion-categorias" style="max-height: 260px; overflow-y: auto; border: 1px solid var(--line); margin-top: 12px;"></div>
-        <div style="display:flex; gap:10px; align-items:end; flex-wrap:wrap; margin-top:14px;">
-          <button class="add" style="padding:9px 16px; font-size:13px; background:var(--rust); color:var(--paper);" onclick="vaciarCategoriasSeleccionadas()">Vaciar seleccionadas (quitar categoría)</button>
+        <div id="contenido-limpieza" style="display:none; margin-top:14px;">
+        <div class="hint" style="margin-top:0;">Borra productos y sus publicaciones de forma permanente, de un proveedor específico o de todos. Antes de borrar se descarga un respaldo automático y queda un registro de quién lo hizo, cuándo y cuántos productos.</div>
+        <div style="display:flex; gap:12px; align-items:end; flex-wrap:wrap; margin-top:14px;">
           <div>
-            <label for="categoria-nuevo-nombre" style="display:block; font-size:12px; color:var(--muted); margin-bottom:6px;">Renombrar seleccionadas a</label>
-            <input type="text" id="categoria-nuevo-nombre" placeholder="Ej: Redes" style="background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:9px 10px; font-size:14px; min-width:200px;">
+            <label for="limpieza-proveedor" style="display:block; font-size:12px; color:var(--muted); margin-bottom:6px;">Proveedor a limpiar</label>
+            <select id="limpieza-proveedor" style="background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:9px 10px; font-size:14px; min-width:240px;">
+              <option value="">Todos los proveedores (TODO el catálogo)</option>
+            </select>
           </div>
-          <button class="add" style="padding:9px 16px; font-size:13px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line);" onclick="renombrarCategoriasSeleccionadas()">Renombrar seleccionadas</button>
+          <button class="add" style="padding:9px 16px; font-size:13px; background:var(--rust); color:var(--paper);" onclick="ejecutarLimpieza()">Limpiar base de datos</button>
+          <button class="add" style="padding:9px 16px; font-size:13px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line);" onclick="verHistorialLimpieza()">Ver historial de limpiezas</button>
         </div>
-        <div class="msg" id="msg-categorias"></div>
+        <div class="msg" id="msg-limpieza"></div>
+        <div id="historial-limpieza" style="display:none; margin-top:14px; font-size:12.5px; color:var(--muted); line-height:1.8;"></div>
+        </div>
+      </div>
+
+      <div style="padding:10px 0; border-bottom:1px solid var(--line);">
+        <div style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;" onclick="toggleProductosSinCategoria()">
+          <span style="font-size:12.5px; color:var(--muted);">📦 Productos sin categoría <span id="conteo-sin-categoria" style="color:var(--rust);"></span></span>
+          <span id="icono-sin-categoria" style="font-size:12px; color:var(--muted);">Mostrar ▾</span>
+        </div>
+        <div id="contenido-sin-categoria" style="display:none; margin-top:14px;">
+          <div class="hint" style="margin-top:0;">Productos que todavía no tienen categoría asignada. Haz clic en uno para abrirlo completo — nombre, descripción, precio, imágenes — revisarlo con calma y asignarle su categoría correspondiente.</div>
+          <div id="lista-sin-categoria" style="max-height: 320px; overflow-y: auto; border: 1px solid var(--line); margin-top: 12px;"></div>
+        </div>
+      </div>
+
+      <div style="padding:10px 0;">
+        <div style="display:flex; align-items:center; justify-content:space-between; cursor:pointer;" onclick="toggleGestionCategorias()">
+          <span style="font-size:12.5px; color:var(--muted);">🏷 Gestionar categorías</span>
+          <span id="icono-categorias" style="font-size:12px; color:var(--muted);">Mostrar ▾</span>
+        </div>
+        <div id="contenido-categorias" style="display:none; margin-top:14px;">
+          <div class="hint" style="margin-top:0;">Categorías que hay hoy en el catálogo (por ejemplo, valores numéricos sueltos que quedaron de una importación con la columna mal detectada). Selecciona las que no te interesan y vacíalas — los productos NO se borran, solo quedan sin categoría — o renómbralas todas de una vez a un nombre correcto.</div>
+          <div id="lista-gestion-categorias" style="max-height: 260px; overflow-y: auto; border: 1px solid var(--line); margin-top: 12px;"></div>
+          <div style="display:flex; gap:10px; align-items:end; flex-wrap:wrap; margin-top:14px;">
+            <button class="add" style="padding:9px 16px; font-size:13px; background:var(--rust); color:var(--paper);" onclick="vaciarCategoriasSeleccionadas()">Vaciar seleccionadas (quitar categoría)</button>
+            <div>
+              <label for="categoria-nuevo-nombre" style="display:block; font-size:12px; color:var(--muted); margin-bottom:6px;">Renombrar seleccionadas a</label>
+              <input type="text" id="categoria-nuevo-nombre" placeholder="Ej: Redes" style="background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:9px 10px; font-size:14px; min-width:200px;">
+            </div>
+            <button class="add" style="padding:9px 16px; font-size:13px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line);" onclick="renombrarCategoriasSeleccionadas()">Renombrar seleccionadas</button>
+          </div>
+          <div class="msg" id="msg-categorias"></div>
+        </div>
       </div>
     </div>
   </section>
@@ -969,6 +1044,22 @@
     }).join('');
   }
 
+  window.toggleCondicionesVenta = function() {
+    const cont = document.getElementById('contenido-condiciones-venta');
+    const icono = document.getElementById('icono-condiciones-venta');
+    const abierta = cont.style.display === 'block';
+    cont.style.display = abierta ? 'none' : 'block';
+    icono.textContent = abierta ? 'Mostrar ▾' : 'Ocultar ▴';
+  };
+
+  window.toggleMargenesCategoria = function() {
+    const cont = document.getElementById('contenido-margenes-categoria');
+    const icono = document.getElementById('icono-margenes-categoria');
+    const abierta = cont.style.display === 'block';
+    cont.style.display = abierta ? 'none' : 'block';
+    icono.textContent = abierta ? 'Mostrar ▾' : 'Ocultar ▴';
+  };
+
   window.toggleProductosSinCategoria = function() {
     const cont = document.getElementById('contenido-sin-categoria');
     const icono = document.getElementById('icono-sin-categoria');
@@ -995,6 +1086,7 @@
     paginaActualProductos = 1;
     renderizarTablaProductos();
     guardarEstadoTablaProductos();
+    actualizarBadgeFiltros();
   };
 
   // El filtro de proveedor/búsqueda/precio/costo queda guardado en este navegador (localStorage)
@@ -1011,7 +1103,29 @@
     paginaActualProductos = 1;
     renderizarTablaProductos();
     guardarEstadoTablaProductos();
+    actualizarBadgeFiltros();
   };
+
+  // El buscador queda siempre visible; el resto de los filtros (precio, costo, proveedor,
+  // categoría, estado y stock) se ocultan detrás de "Más filtros" para que la barra no se vea
+  // recargada — la burbuja del botón muestra cuántos de esos filtros están activos.
+  window.toggleFiltrosAvanzados = function(forzarAbrir) {
+    const cont = document.getElementById('fila-filtros-avanzados');
+    const icono = document.getElementById('icono-filtros-avanzados');
+    const abierta = cont.style.display === 'flex';
+    const nuevoEstado = forzarAbrir === true ? true : !abierta;
+    cont.style.display = nuevoEstado ? 'flex' : 'none';
+    icono.textContent = nuevoEstado ? 'Ocultar filtros ▴' : 'Más filtros ▾';
+  };
+
+  function actualizarBadgeFiltros() {
+    const campos = ['filtro-precio', 'filtro-costo', 'filtro-proveedor', 'filtro-categoria', 'filtro-estado-pub', 'filtro-stock'];
+    const activos = campos.filter(id => document.getElementById(id)?.value).length;
+    const badge = document.getElementById('badge-filtros-activos');
+    if (!badge) return;
+    badge.textContent = activos > 0 ? String(activos) : '';
+    badge.style.display = activos > 0 ? 'inline-flex' : 'none';
+  }
 
   // Recalcula las categorías disponibles en el filtro a partir de lo que hay realmente
   // cargado en el catálogo (incluye las asignadas a mano y las clasificadas automáticamente
@@ -1185,6 +1299,7 @@
       document.getElementById('filtro-categoria').value = '';
       document.getElementById('filtro-estado-pub').value = '';
       document.getElementById('filtro-stock').value = '';
+      actualizarBadgeFiltros();
       const filtradosSinFiltro = obtenerProductosFiltrados();
       const indice2 = filtradosSinFiltro.findIndex(p => p.id === id);
       paginaActualProductos = indice2 === -1 ? 1 : Math.floor(indice2 / 100) + 1;
@@ -2544,6 +2659,13 @@ RESULTADOS DEL CÁLCULO DE PRECIO
         if (estadoGuardado.stock) document.getElementById('filtro-stock').value = estadoGuardado.stock;
         if (estadoGuardado.categoria) categoriaGuardada = estadoGuardado.categoria;
         if (estadoGuardado.pagina) paginaActualProductos = estadoGuardado.pagina;
+        // Si algún filtro que vive detrás de "Más filtros" quedó activo de la sesión anterior,
+        // se abre esa fila de una vez — para que no parezca que el catálogo está incompleto sin
+        // que se note por qué.
+        const hayFiltroAvanzado = estadoGuardado.precio || estadoGuardado.costo || estadoGuardado.proveedor ||
+          estadoGuardado.estadoPub || estadoGuardado.stock || estadoGuardado.categoria;
+        if (hayFiltroAvanzado) window.toggleFiltrosAvanzados(true);
+        actualizarBadgeFiltros();
       }
     } catch (e) {}
 
@@ -2556,6 +2678,8 @@ RESULTADOS DEL CÁLCULO DE PRECIO
       if (Array.from(selCategoria.options).some(o => o.value === categoriaGuardada)) {
         selCategoria.value = categoriaGuardada;
         renderizarTablaProductos();
+        window.toggleFiltrosAvanzados(true);
+        actualizarBadgeFiltros();
       }
     }
 
