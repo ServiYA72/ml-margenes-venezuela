@@ -722,6 +722,7 @@
         <span class="fp-info">
           <span style="color:var(--muted)">${escapeHtml(p.categoria || '')}</span>
           <span style="color:var(--muted)">${escapeHtml(p.proveedorNombre || '')}</span>
+          ${badgeStockHtml(p.pub?.stock)}
           <span style="color:var(--gold)">costo $${parseFloat(p.costo_usd || 0).toFixed(2)}</span>
         </span>
       `;
@@ -729,6 +730,18 @@
       cont.appendChild(fila);
     });
   };
+
+  // Mismo criterio de colores/umbrales que la columna "Stock" del Dashboard (agotado ≤0, bajo
+  // 1-3, disponible >3) — para que el número se lea igual en los dos lados del sistema. Se
+  // muestra directo en la lista de búsqueda para no tener que elegir el producto a ciegas y
+  // enterarse recién después de que no hay existencia.
+  function badgeStockHtml(stock) {
+    if (stock === null || stock === undefined) return '';
+    let color = 'var(--teal)', etiqueta = 'disp.';
+    if (stock <= 0) { color = 'var(--rust)'; etiqueta = 'agotado'; }
+    else if (stock <= 3) { color = 'var(--gold)'; etiqueta = 'bajo'; }
+    return `<span style="color:${color}; font-weight:600;" title="Stock cargado desde Importar precios / Dashboard">📦 ${stock} ${etiqueta}</span>`;
+  }
 
   window.actualizarPrevioBs = function() {
     const precio = parseFloat(document.getElementById('pe-precio').value) || 0;
@@ -774,7 +787,10 @@
     const avisos = [];
     if (p.activo === false) avisos.push('Este producto está marcado como inactivo en el catálogo.');
     const stock = p.pub?.stock;
-    if (stock != null && stock <= 0) avisos.push('No hay existencia registrada para este producto.');
+    if (stock != null) {
+      if (stock <= 0) avisos.push('⚠ No hay existencia registrada para este producto (stock 0).');
+      else if (stock <= 3) avisos.push(`⚠ Queda poco stock: ${stock} unidad(es).`);
+    }
     document.getElementById('pe-aviso').textContent = avisos.join('  ');
   };
 
@@ -786,6 +802,17 @@
     if (!cantidad || cantidad <= 0 || isNaN(precioUnitario) || precioUnitario < 0) {
       alert('Revisa la cantidad y el precio unitario.');
       return;
+    }
+    // Aviso final antes de cotizar cantidades que superan lo que hay registrado en stock —
+    // no bloquea (puede ser que ya venga en camino), pero evita agregarlo sin darse cuenta.
+    const stockDisponible = p.pub?.stock;
+    if (stockDisponible != null && cantidad > stockDisponible) {
+      const continuar = confirm(
+        stockDisponible <= 0
+          ? `"${p.nombre}" figura sin existencia (stock 0). ¿Agregar de todas formas a la cotización?`
+          : `Solo hay ${stockDisponible} unidad(es) en stock de "${p.nombre}" y estás cotizando ${cantidad}. ¿Agregar de todas formas?`
+      );
+      if (!continuar) return;
     }
     itemsCotizacion.push({
       producto_id: p.id,
@@ -1312,18 +1339,24 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
     // (ITEM | MARCA | CODIGO | CANT. | DESCRIPCION | PRECIO...): se agregan Ítem/Marca/Código
     // — Marca y Código salen del producto vinculado (productosCache), sin tocar el cálculo de
     // precios, que sigue siendo el mismo de siempre ($ efectivo / Bs pagando en bolívares).
+    // Anchos re-repartidos para dar más aire a las columnas en bolívares — con montos altos
+    // (la moneda venezolana maneja cifras largas) el ancho anterior se quedaba corto y el
+    // texto se salía encima de la columna siguiente. Se le quitó ese espacio a Marca/Código/
+    // Descripción, que de todas formas ya se truncan o se ajustan solos si no caben.
     const columnas = [
       { titulo: 'Ítem', ancho: 16, align: 'center' },
-      { titulo: 'Marca', ancho: 46, align: 'left', angosta: true },
-      { titulo: 'Código', ancho: 44, align: 'left', angosta: true },
-      { titulo: 'Cant.', ancho: 24, align: 'center' },
-      { titulo: 'Descripción', ancho: 152, align: 'left', wrap: true },
-      { titulo: '$ Efectivo', ancho: 55, align: 'right' },
-      { titulo: 'Bs (pago Bs)', ancho: 76, align: 'right' },
-      { titulo: 'Subt. $', ancho: 47, align: 'right' },
-      { titulo: 'Subt. Bs', ancho: 55, align: 'right' }
+      { titulo: 'Marca', ancho: 40, align: 'left', angosta: true },
+      { titulo: 'Código', ancho: 38, align: 'left', angosta: true },
+      { titulo: 'Cant.', ancho: 22, align: 'center' },
+      { titulo: 'Descripción', ancho: 138, align: 'left', wrap: true },
+      { titulo: '$ Efectivo', ancho: 50, align: 'right' },
+      { titulo: 'Bs (pago Bs)', ancho: 96, align: 'right' },
+      { titulo: 'Subt. $', ancho: 42, align: 'right' },
+      { titulo: 'Subt. Bs', ancho: 73, align: 'right' }
     ];
     const idxDescripcion = columnas.findIndex(c => c.wrap);
+    const tamañoBase = 8.5;
+    const tamañoMinimo = 6;
 
     // Recorta con "…" el texto de una columna angosta (Marca / Código) para que nunca se
     // encime con la columna siguiente, en vez de dejarlo desbordar.
@@ -1334,8 +1367,20 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
       while (t.length > 1 && doc.getTextWidth(t + '…') > anchoMax) t = t.slice(0, -1);
       return t + '…';
     }
+    // Para las columnas numéricas (cantidad, precios, subtotales) nunca se trunca — perder un
+    // dígito de un precio es mucho peor que un texto chico — en vez de eso, si el número no cabe
+    // al tamaño normal, se va reduciendo el tamaño de letra SOLO de esa celda hasta que quepa
+    // (con un piso legible de 6pt). Así, sin importar qué tan grande sea el monto, nunca se
+    // encima con la columna de al lado.
+    function tamañoQueCabe(texto, anchoMax) {
+      doc.setFontSize(tamañoBase);
+      const anchoNormal = doc.getTextWidth(String(texto ?? ''));
+      if (anchoNormal <= anchoMax) return tamañoBase;
+      return Math.max(tamañoMinimo, tamañoBase * (anchoMax / anchoNormal));
+    }
+
     const padding = 5;
-    const altoLinea = 11;
+    const altoLinea = 10;
     const altoFilaMin = altoLinea + padding * 2;
     const yTope = 50;
     const yPie = 740;
@@ -1344,7 +1389,7 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
       doc.setFillColor(22, 36, 31);
       doc.rect(margenX, y, bordeDerecho - margenX, altoFilaMin, 'F');
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(7.5);
+      doc.setFontSize(7);
       doc.setTextColor(237, 232, 222);
       let x = margenX;
       columnas.forEach(col => {
@@ -1355,19 +1400,20 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
         doc.text(col.titulo, tx, y + altoFilaMin - padding - 2, { align: col.align });
         x += col.ancho;
       });
-      doc.setFontSize(9);
+      doc.setFontSize(tamañoBase);
       doc.setTextColor(20, 30, 26);
       return y + altoFilaMin;
     }
 
     let y = dibujarEncabezado(startY);
     doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
+    doc.setFontSize(tamañoBase);
 
     filas.forEach((fila, idx) => {
       // [item, marca, codigo, cantidad, descripcion, precioUsd, precioBs, subtotalUsd, subtotalBs]
       const descripcion = fila[idxDescripcion];
       const anchoTextoDesc = columnas[idxDescripcion].ancho - padding * 2;
+      doc.setFontSize(tamañoBase);
       const lineasDesc = doc.splitTextToSize(String(descripcion ?? ''), anchoTextoDesc);
       const altoFila = Math.max(altoFilaMin, lineasDesc.length * altoLinea + padding * 2);
 
@@ -1387,15 +1433,27 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
         return String(v ?? '');
       });
       let x = margenX;
+      const yTexto = y + padding + 7;
       columnas.forEach((col, i) => {
         let tx;
         if (col.align === 'right') tx = x + col.ancho - padding;
         else if (col.align === 'center') tx = x + col.ancho / 2;
         else tx = x + padding;
-        const yTexto = y + padding + 8;
-        doc.text(valores[i], tx, yTexto, i === idxDescripcion ? undefined : { align: col.align });
+
+        if (i === idxDescripcion) {
+          doc.setFontSize(tamañoBase);
+          doc.text(valores[i], tx, yTexto);
+        } else if (col.angosta) {
+          doc.setFontSize(tamañoBase);
+          doc.text(valores[i], tx, yTexto, { align: col.align });
+        } else {
+          const anchoDisponible = col.ancho - padding * 2;
+          doc.setFontSize(tamañoQueCabe(valores[i], anchoDisponible));
+          doc.text(valores[i], tx, yTexto, { align: col.align });
+        }
         x += col.ancho;
       });
+      doc.setFontSize(tamañoBase);
 
       doc.setDrawColor(220, 220, 220);
       doc.line(margenX, y + altoFila, bordeDerecho, y + altoFila);
@@ -1424,16 +1482,17 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
       catch (e) { console.error('No se pudo dibujar el logo en el PDF:', e); }
     }
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(20);
+    doc.setFontSize(15);
     doc.setTextColor(20, 30, 26);
     doc.text('COTIZACIÓN', 555, y, { align: 'right' });
-    doc.setFontSize(11);
+    doc.setFontSize(9);
     doc.setFont('helvetica', 'normal');
-    doc.text(`N° ${String(cot.numero).padStart(4, '0')}`, 555, y + 18, { align: 'right' });
-    doc.text(`Fecha: ${cot.fecha || new Date().toISOString().slice(0, 10)}`, 555, y + 34, { align: 'right' });
-    doc.text(`Válida por ${cot.validez_dias || 7} día(s)`, 555, y + 50, { align: 'right' });
+    doc.setTextColor(90, 100, 95);
+    doc.text(`N° ${String(cot.numero).padStart(4, '0')}`, 555, y + 15, { align: 'right' });
+    doc.text(`Fecha: ${cot.fecha || new Date().toISOString().slice(0, 10)}`, 555, y + 27, { align: 'right' });
+    doc.setTextColor(20, 30, 26);
 
-    y += 60;
+    y += 44;
     doc.setDrawColor(200, 200, 200);
     doc.line(margenX, y, 555, y);
     y += 20;
@@ -1497,9 +1556,22 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
     // cada una con su propio total, así que van en bloques separados y bien rotulados (nunca
     // un solo texto largo "$... Bs..." que además se encimaba con la etiqueta al no caber
     // en el espacio entre "Total" y el borde).
-    const cajaAncho = 230, cajaX = 555 - cajaAncho, cajaPad = 12, cajaAlto = 88;
+    // Etiqueta y monto van en líneas separadas (no en la misma fila) para que un monto en
+    // bolívares grande (Bs suele tener muchas más cifras que $) nunca se encime con su
+    // etiqueta; además el monto reduce su tamaño automáticamente si aun así no cabe en el
+    // ancho de la caja, en vez de desbordarse.
+    const cajaAncho = 230, cajaX = 555 - cajaAncho, cajaPad = 12, cajaAlto = 124;
     doc.setFillColor(244, 242, 236);
     doc.roundedRect(cajaX, yFinal, cajaAncho, cajaAlto, 4, 4, 'F');
+
+    const anchoValorMax = cajaAncho - cajaPad * 2;
+    function tamañoQueCabeEnCaja(texto, tamañoBase) {
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(tamañoBase);
+      const ancho = doc.getTextWidth(String(texto));
+      if (ancho <= anchoValorMax) return tamañoBase;
+      return Math.max(9, tamañoBase * (anchoValorMax / ancho));
+    }
 
     let yCaja = yFinal + 16;
     doc.setFont('helvetica', 'bold');
@@ -1512,11 +1584,14 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
     doc.setFontSize(9.5);
     doc.setTextColor(90, 100, 95);
     doc.text('Pagando en efectivo ($)', cajaX + cajaPad, yCaja);
+    yCaja += 17;
+    const valorUSD = '$' + total.toFixed(2);
+    const tamUSD = tamañoQueCabeEnCaja(valorUSD, 16);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(15);
+    doc.setFontSize(tamUSD);
     doc.setTextColor(20, 30, 26);
-    doc.text('$' + total.toFixed(2), 555 - cajaPad, yCaja + 1, { align: 'right' });
-    yCaja += 22;
+    doc.text(valorUSD, 555 - cajaPad, yCaja, { align: 'right' });
+    yCaja += 16;
 
     doc.setDrawColor(205, 198, 178);
     doc.line(cajaX + cajaPad, yCaja, 555 - cajaPad, yCaja);
@@ -1526,10 +1601,13 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
     doc.setFontSize(9.5);
     doc.setTextColor(90, 100, 95);
     doc.text('Pagando en bolívares (Bs)', cajaX + cajaPad, yCaja);
+    yCaja += 17;
+    const valorBs = fmtBsPdf(totalBs);
+    const tamBs = tamañoQueCabeEnCaja(valorBs, 16);
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(15);
+    doc.setFontSize(tamBs);
     doc.setTextColor(160, 128, 26);
-    doc.text(fmtBsPdf(totalBs), 555 - cajaPad, yCaja + 1, { align: 'right' });
+    doc.text(valorBs, 555 - cajaPad, yCaja, { align: 'right' });
     doc.setTextColor(20, 30, 26);
 
     yFinal += cajaAlto + 18;
@@ -1540,14 +1618,63 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
     if (cot.tasa_binance_usada) { doc.text(`El precio en bolívares se calculó con la tasa Binance del día: Bs ${Number(cot.tasa_binance_usada).toFixed(2)} por USD.`, margenX, yFinal); yFinal += 16; }
     doc.setTextColor(20, 30, 26);
 
-    doc.setFontSize(10);
-    if (cot.condiciones_pago) { doc.text('Condiciones de pago: ' + cot.condiciones_pago, margenX, yFinal); yFinal += 16; }
+    yFinal = dibujarCondicionesOferta(doc, cot, margenX, yFinal);
+
     if (cot.notas) {
+      if (yFinal > 700) { doc.addPage(); yFinal = 60; }
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(20, 30, 26);
       const notasWrap = doc.splitTextToSize('Notas: ' + cot.notas, 515);
       doc.text(notasWrap, margenX, yFinal);
     }
 
     return doc;
+  }
+
+  // Dibuja el bloque "CONDICIONES DE LA OFERTA" (validez, forma de pago, tiempo de entrega,
+  // garantía y stock) reemplazando la antigua línea suelta de "Condiciones de pago". Tiempo de
+  // entrega y garantía solo se imprimen si se cargaron; stock solo si hay dato en algún ítem
+  // (se saca de la base de productos, nunca se escribe a mano).
+  function dibujarCondicionesOferta(doc, cot, margenX, yInicio) {
+    const lineas = [];
+    const validezTxt = formatUnidadTiempo(cot.validez_dias, cot.validez_unidad || 'dias');
+    lineas.push(['VALIDEZ DE LA OFERTA:', validezTxt || `${cot.validez_dias || 7} día(s)`]);
+    lineas.push(['FORMA DE PAGO:', cot.condiciones_pago || textoFormaPago(cot.forma_pago_pct)]);
+    const entregaTxt = formatUnidadTiempo(cot.tiempo_entrega_valor, cot.tiempo_entrega_unidad);
+    if (entregaTxt) lineas.push(['TIEMPO DE ENTREGA:', entregaTxt]);
+    const garantiaTxt = formatUnidadTiempo(cot.garantia_valor, cot.garantia_unidad);
+    if (garantiaTxt) lineas.push(['GARANTÍA:', garantiaTxt]);
+    const stockTxt = lineaStockCotizacion(cot.items);
+    if (stockTxt) lineas.push(['STOCK:', stockTxt]);
+
+    let y = yInicio;
+    if (y > 620) { doc.addPage(); y = 60; }
+
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(9.5);
+    doc.setTextColor(110, 120, 114);
+    doc.text('CONDICIONES DE LA OFERTA', margenX, y);
+    y += 6;
+    doc.setDrawColor(220, 220, 210);
+    doc.line(margenX, y, 555, y);
+    y += 15;
+
+    const anchoEtiqueta = 118;
+    lineas.forEach(([etiqueta, valor]) => {
+      if (y > 720) { doc.addPage(); y = 60; }
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(9);
+      doc.setTextColor(90, 100, 95);
+      doc.text(etiqueta, margenX, y);
+      doc.setFont('helvetica', 'normal');
+      doc.setTextColor(20, 30, 26);
+      const valorWrap = doc.splitTextToSize(String(valor), 515 - anchoEtiqueta);
+      doc.text(valorWrap, margenX + anchoEtiqueta, y);
+      y += 12.5 * valorWrap.length + 6;
+    });
+
+    return y + 4;
   }
 
   function nombreArchivoPDF(cot) {
