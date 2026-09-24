@@ -181,8 +181,9 @@
       </div>
       <div>
         <label for="map-stock">Columna de stock / existencias (opcional)</label>
-        <select id="map-stock"></select>
+        <select id="map-stock" onchange="advertirStockColumna()"></select>
         <div class="hint" style="margin-top:6px;">Si el proveedor la trae, se guarda para poder ver y filtrar por stock en el Dashboard — así sabes antes de publicar en Mercado Libre si de verdad hay existencia.</div>
+        <div class="hint" id="aviso-stock-columna" style="margin-top:6px; color:var(--gold); display:none;"></div>
       </div>
       <div>
         <label for="map-categoria">Columna de categoría (opcional)</label>
@@ -268,6 +269,7 @@
 
   let filasCrudas = [];
   let encabezados = [];
+  let candidatosStockDetectados = [];
 
   function normalizeKey(k) {
     return k.toString().trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
@@ -291,7 +293,15 @@
   const PISTAS_DESCRIPCION = ['descripcion', 'detalle', 'especificacion', 'caracteristica', 'informacion'];
   // "existente" antes que "existencia" no hace falta porque includes() ya cubre ambas —
   // se deja "disponib" sin acento/plural para enganchar "Disponible" y "Disponibilidad" a la vez.
-  const PISTAS_STOCK = ['stock', 'existencia', 'cantidad', 'disponib', 'inventario', 'unidades', 'qty', 'existente'];
+  // "cantidad" queda de últimas a propósito: es la pista más genérica y la que más se presta a
+  // enganchar una columna que NO es el inventario real (cantidad por caja, cantidad mínima de
+  // pedido, cantidad de fotos...) — mejor que gane primero cualquier pista más específica.
+  const PISTAS_STOCK = ['existencia', 'disponib', 'stock', 'inventario', 'unidades', 'qty', 'existente', 'cantidad'];
+
+  // Encabezados que, aunque contengan una pista de stock, casi nunca son el inventario real
+  // (son cantidades de empaque, mínimos de pedido, etc.) — se descartan del auto-detectado para
+  // no repetir el error de tomar "1 unidad por caja" como si fuera "180 en existencia".
+  const EXCLUSIONES_STOCK = ['caja', 'bulto', 'empaque', 'paquete', 'embalaje', 'minimo', 'maximo', 'pedido', 'presentacion', 'contenido', 'master'];
 
   // Reglas de clasificación automática por categoría: se evalúan en orden y gana la primera
   // que encuentre alguna de sus palabras clave en el nombre + descripción + marca del producto.
@@ -425,6 +435,18 @@
       if (match) return match;
     }
     return null;
+  }
+
+  // Todos los encabezados que parecen ser de stock (no solo el primero), excluyendo los que
+  // suenan a empaque/mínimo de pedido en vez de existencia real. Se usa tanto para el
+  // auto-detectado como para avisar si hay más de una columna candidata y conviene revisar
+  // cuál es la correcta a mano.
+  function candidatosStock(headers) {
+    return headers.filter(h => {
+      const norm = normalizeKey(h);
+      if (EXCLUSIONES_STOCK.some(ex => norm.includes(ex))) return false;
+      return PISTAS_STOCK.some(pista => norm.includes(pista));
+    });
   }
 
   function claveMapeo(proveedorId) {
@@ -669,7 +691,8 @@
 
     const guessNombre = mejorCoincidencia(encabezados, PISTAS_NOMBRE) || encabezados[0];
     const guessCosto = mejorCoincidencia(encabezados, PISTAS_COSTO) || encabezados[1] || encabezados[0];
-    const guessStock = mejorCoincidencia(encabezados, PISTAS_STOCK);
+    candidatosStockDetectados = candidatosStock(encabezados);
+    const guessStock = candidatosStockDetectados[0] || null;
     const guessCategoria = mejorCoincidencia(encabezados, PISTAS_CATEGORIA);
     const guessCodigo = mejorCoincidencia(encabezados, PISTAS_CODIGO);
     const guessMarca = mejorCoincidencia(encabezados, PISTAS_MARCA);
@@ -702,7 +725,40 @@
     document.getElementById('panel-mapeo').style.display = 'block';
     document.getElementById('panel-preview').style.display = 'none';
     advertirSiCategoriaNumerica();
+    advertirStockColumna();
   }
+
+  // Avisa si (a) hay más de una columna candidata a ser el stock real — para que se revise cuál
+  // es la correcta a mano en vez de confiar ciegamente en el auto-detectado — o (b) los valores
+  // de la columna elegida se ven sospechosos (por ejemplo, casi todas las filas en exactamente
+  // "1", típico de una columna de "unidades por empaque" o un indicador sí/no, no del inventario
+  // real). Así se detecta ANTES de cargar, en vez de enterarse después con el catálogo ya mal.
+  window.advertirStockColumna = function() {
+    const aviso = document.getElementById('aviso-stock-columna');
+    const col = document.getElementById('map-stock').value;
+    if (!col || filasCrudas.length === 0) { aviso.style.display = 'none'; return; }
+
+    const otrasCandidatas = candidatosStockDetectados.filter(h => h !== col);
+    const muestra = filasCrudas.slice(0, 50).map(r => parseStock(r[col])).filter(v => v !== null);
+
+    const mensajes = [];
+    if (muestra.length >= 5) {
+      const cuantosSonUno = muestra.filter(v => v === 1).length;
+      if (cuantosSonUno / muestra.length >= 0.8) {
+        mensajes.push(`Ojo: casi todas las filas de "${col}" traen exactamente 1 — es la señal típica de una columna de "unidades por empaque" o un indicador sí/no, no el inventario real. Revisa si el proveedor trae otra columna con la existencia real.`);
+      }
+    }
+    if (otrasCandidatas.length > 0) {
+      mensajes.push(`También se detectaron estas columnas que podrían ser el stock: ${otrasCandidatas.join(', ')} — si el número no coincide con lo que trae la lista del proveedor, prueba cambiar aquí arriba.`);
+    }
+
+    if (mensajes.length > 0) {
+      aviso.style.display = 'block';
+      aviso.textContent = mensajes.join(' ');
+    } else {
+      aviso.style.display = 'none';
+    }
+  };
 
   // Muestra un aviso si la columna elegida como "categoría" trae, en su mayoría, valores
   // numéricos — señal casi segura de que se mapeó la columna equivocada (ej. un precio,
@@ -835,7 +891,14 @@
       const marca = colMarca ? row[colMarca] : '';
       const descripcion = colDescripcion ? String(row[colDescripcion] || '').trim() : '';
       const costo = parseNumeroLocal(row[colCosto]);
-      const stock = colStock ? parseStock(row[colStock]) : null;
+      // Si la lista del proveedor no trae stock (ni columna de stock, ni la celda de esta fila
+      // trae un número) NO se deja como "sin dato" silencioso — se asume 1 por precaución, para
+      // que Cotizaciones siempre muestre la advertencia de "verificar existencia antes de
+      // cotizar" en vez de cotizar como si hubiera inventario ilimitado. stockReal (el valor
+      // genuino, o null si no había) se guarda aparte para no pisar un stock real ya cargado
+      // cuando se reimporta la misma lista solo para actualizar precios.
+      const stockReal = colStock ? parseStock(row[colStock]) : null;
+      const stock = stockReal !== null ? stockReal : 1;
 
       const tr = document.createElement('tr');
 
@@ -868,7 +931,7 @@
       const yaExiste = !!idProductoExistente || clavesEnEsteArchivo.has(claveDuplicado);
       clavesEnEsteArchivo.add(claveDuplicado);
 
-      if (yaExiste && idProductoExistente && stock !== null) hayDuplicadosConStock = true;
+      if (yaExiste && idProductoExistente && stockReal !== null) hayDuplicadosConStock = true;
 
       const idx = indiceFila++;
 
@@ -910,7 +973,7 @@
       const precioBcvBs = precioEfectivo * tasaBinance;
       const precioBcvUsdEquiv = precioEfectivo * (tasaBinance / tasaBCV);
 
-      filasValidas.push({ idx, nombre: nombreFinal, categoria: categoriaFinal, descripcion, costo, stock, precioEfectivo, gananciaDeseada, comisionMlUsd, gananciaNetaUsd, precioBcvUsdEquiv, precioBcvBs, codigo, marca, omitir: yaExiste, idProductoExistente, sinPrecio: false });
+      filasValidas.push({ idx, nombre: nombreFinal, categoria: categoriaFinal, descripcion, costo, stock, stockReal, precioEfectivo, gananciaDeseada, comisionMlUsd, gananciaNetaUsd, precioBcvUsdEquiv, precioBcvBs, codigo, marca, omitir: yaExiste, idProductoExistente, sinPrecio: false });
 
       if (yaExiste) tr.className = 'row-duplicado';
       tr.innerHTML = `
@@ -920,7 +983,7 @@
         <td>${escapeHtml(String(nombre))}</td>
         <td class="celda-descripcion" title="${escapeHtml(descripcion)}">${escapeHtml(descripcion)}</td>
         <td><input class="input-categoria-fila" list="lista-categorias-import" value="${escapeHtml(categoriaFinal)}" oninput="actualizarCategoriaFilaImport(${idx}, this.value)"></td>
-        <td class="num">${stock !== null ? stock : '—'}</td>
+        <td class="num">${stockReal !== null ? stock : `<span style="color:var(--gold);" title="La lista no trae stock para este producto — se dejó en 1 por precaución para que Cotizaciones avise antes de vender a ciegas">${stock} (sin dato)</span>`}</td>
         <td class="num">$${costo.toFixed(2)}</td>
         <td class="num" style="color:var(--gold)">$${precioEfectivo.toFixed(2)}</td>
         <td class="num">$${gananciaDeseada.toFixed(2)}</td>
@@ -975,8 +1038,11 @@
     // mantener el stock al día sin duplicar productos ni tocar precio/nombre/descripción.
     const chkActualizarStock = document.getElementById('chk-actualizar-stock-existentes');
     const actualizarStockExistentes = !!(chkActualizarStock && chkActualizarStock.checked);
+    // Se usa stockReal (nunca el "stock" ya con el 1 por defecto aplicado) — así una reimportación
+    // de una lista que no trae stock jamás pisa con un "1" ficticio el stock real que ya estaba
+    // guardado para un producto existente.
     const aActualizarStock = actualizarStockExistentes
-      ? filasValidas.filter(f => f.omitir && f.idProductoExistente && f.stock !== null)
+      ? filasValidas.filter(f => f.omitir && f.idProductoExistente && f.stockReal !== null)
       : [];
 
     if (aInsertar.length === 0 && aActualizarStock.length === 0) {
@@ -1032,7 +1098,7 @@
     for (const fila of aActualizarStock) {
       const { error: errStock } = await supabase
         .from('publicaciones')
-        .update({ stock: fila.stock })
+        .update({ stock: fila.stockReal })
         .eq('producto_id', fila.idProductoExistente);
       if (!errStock) stockActualizados++;
       progreso++;
