@@ -2153,13 +2153,13 @@ RESULTADOS DEL CÁLCULO DE PRECIO
     let texto = `Hola, vi este producto en su catálogo y me interesa:\n\n${(p.nombre || '').trim()}`;
     if (p.sku) texto += `\nCódigo: ${p.sku}`;
     texto += `\n\n¿Me confirman precio y disponibilidad?`;
-    // Se usa el esquema "whatsapp://" (en vez de "https://wa.me/...") a propósito: dentro del
-    // visor de PDF del celular, el enlace "https://wa.me" a veces se abre en el navegador interno
-    // del propio visor en lugar de entregarle el enlace al sistema operativo — y ese navegador
-    // interno no siempre reconoce que WhatsApp ya está instalado, así que termina invitando a
-    // descargarlo. "whatsapp://" es un enlace directo a la app: el sistema operativo lo entrega
-    // de una vez a WhatsApp si está instalada, sin pasar por ningún navegador intermedio.
-    return `whatsapp://send?phone=${WHATSAPP_NUMERO_CATALOGO_PDF}&text=${encodeURIComponent(texto)}`;
+    // Se usa "https://wa.me/..." (el enlace oficial de WhatsApp, pensado justamente para
+    // funcionar tanto si la app está instalada como si no). Se probó cambiarlo por el esquema
+    // "whatsapp://send?..." para forzar la apertura directa de la app, pero varios visores de PDF
+    // en el celular bloquean por seguridad cualquier enlace que no empiece con http/https y
+    // simplemente no hacen nada al tocarlo — eso fue peor que el problema original, así que se
+    // volvió a este formato.
+    return `https://wa.me/${WHATSAPP_NUMERO_CATALOGO_PDF}?text=${encodeURIComponent(texto)}`;
   }
 
   window.generarCatalogoPDF = async function() {
