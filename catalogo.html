@@ -302,6 +302,12 @@
   // WhatsApp" no se muestra (para no mostrar un botón roto que no lleve a ningún lado).
   const WHATSAPP_NUMERO = '584242342204';
 
+  // Si el negocio configuró en el Dashboard ("🖼 Catálogo web") mostrar solo los productos que
+  // tienen al menos una foto cargada, este catálogo público respeta esa preferencia — por defecto
+  // se asume que sí (true), igual que el valor por defecto en la base de datos, así el catálogo
+  // nunca muestra tarjetas vacías mientras la consulta de configuración todavía está en camino.
+  let catalogoSoloConFotos = true;
+
   // En el Dashboard, la descripción guardada de un producto puede traer pegada la "descripción
   // predeterminada" (un texto genérico, igual para todo el catálogo, pensado para uso interno)
   // seguida de la que generó la IA específicamente para ese producto, separadas por este mismo
@@ -346,6 +352,20 @@
       opt.textContent = c.categoria;
       sel.appendChild(opt);
     });
+  }
+
+  // Lee la preferencia "mostrar solo productos con foto" configurada en el Dashboard. Si falla la
+  // consulta o el negocio todavía no guardó ninguna configuración, se deja el valor por defecto
+  // (true) ya asignado arriba — más seguro mientras la mayoría del catálogo no tiene fotos.
+  async function cargarConfigCatalogo() {
+    try {
+      const { data } = await supabase.from('vista_catalogo_config').select('solo_con_fotos').eq('tenant_slug', TENANT_SLUG).maybeSingle();
+      if (data && typeof data.solo_con_fotos === 'boolean') {
+        catalogoSoloConFotos = data.solo_con_fotos;
+      }
+    } catch (e) {
+      console.error('No se pudo cargar la configuración del catálogo', e);
+    }
   }
 
   // Cache de los productos ya cargados en esta página — para abrir el detalle (descripción y
@@ -631,6 +651,7 @@
     let query = supabase.from('vista_catalogo_publico').select('*', { count: 'exact' }).eq('tenant_slug', TENANT_SLUG).order('nombre');
     if (texto) query = query.or(`nombre.ilike.%${texto}%,sku.ilike.%${texto}%`);
     if (categoria) query = query.eq('categoria', categoria);
+    if (catalogoSoloConFotos) query = query.eq('tiene_fotos', true);
 
     const desde = paginaActual * TAMANO_PAGINA;
     const hasta = desde + TAMANO_PAGINA - 1;
@@ -691,7 +712,7 @@
 
   actualizarInterfazCarrito();
   cargarCategorias();
-  cargarProductos(true);
+  cargarConfigCatalogo().then(() => cargarProductos(true));
 </script>
 
 <div class="btns-scroll">

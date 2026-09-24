@@ -6,6 +6,7 @@
 <title>Nicom System — Productos</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
 <style>
   :root {
     --ink: #0F1B17;
@@ -384,6 +385,22 @@
     </div>
 
     <div class="panel">
+      <div class="panel-toggle" onclick="toggleCatalogoWeb()">
+        <h2 style="margin:0;">🖼 Catálogo web</h2>
+        <span id="icono-catalogo-web" class="panel-toggle-icono">Mostrar ▾</span>
+      </div>
+      <div id="contenido-catalogo-web" style="display:none; margin-top:14px;">
+        <div class="hint" id="conteo-fotos-catalogo" style="margin-top:0;">Cargando cuántos productos tienen fotos…</div>
+        <label style="display:flex; align-items:center; gap:10px; font-size:13.5px; color:var(--paper); margin-top:14px; cursor:pointer;">
+          <input type="checkbox" id="cfg-catalogo-solo-fotos" checked onchange="guardarCatalogoSoloFotos()" style="width:auto;">
+          Mostrar en el catálogo web (catalogo.html) solo los productos que tienen al menos una foto cargada
+        </label>
+        <div class="hint" style="margin-top:6px;">Recomendado mientras la mayoría del catálogo no tiene fotos — evita que el cliente vea tarjetas vacías. Apenas subas fotos de un producto (en su formulario, más abajo) aparece automáticamente en el catálogo web sin tener que tocar nada aquí. Desmarca esta opción cuando quieras mostrar el catálogo completo, con o sin fotos.</div>
+        <div class="msg" id="msg-catalogo-web"></div>
+      </div>
+    </div>
+
+    <div class="panel">
       <h2 id="titulo-form-producto">Nuevo producto</h2>
 
       <div class="subseccion-titulo">Datos básicos</div>
@@ -534,6 +551,7 @@
         <div style="flex:1;"></div>
         <button class="add" style="padding:9px 16px; font-size:13px; background:var(--rust); color:var(--paper);" onclick="eliminarSeleccionados()">Eliminar seleccionados</button>
         <button class="add" style="padding:9px 16px; font-size:13px; background:var(--surface-2); color:var(--rust); border:1px solid var(--rust);" onclick="eliminarTodos()">Eliminar todos</button>
+        <button class="add" id="btn-catalogo-pdf" style="padding:9px 16px; font-size:13px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line);" onclick="generarCatalogoPDF()" title="Genera un catálogo en PDF (nombre, descripción, categoría y precio) de los productos que ves filtrados ahora mismo en la tabla — no depende de que tengan fotos">📄 Catálogo en PDF</button>
         <button class="add" style="padding:9px 16px; font-size:13px; background:var(--teal); color:var(--ink);" onclick="compararSeleccionadosEnCompetencia()">Comparar en Mercado Libre →</button>
       </div>
       <div class="msg" id="msg-bulk"></div>
@@ -859,7 +877,7 @@
   // se precarga en "Forma de envío / Condiciones de pago / Horario de atención" cada vez que se
   // abre el formulario para un producto NUEVO. No se aplica al editar un producto existente,
   // porque ese producto ya tiene sus propios valores guardados (que pueden ser distintos).
-  let configuracionVentasCache = { forma_envio_default: '', condiciones_pago_default: '', horario_atencion_default: '', descripcion_default: '' };
+  let configuracionVentasCache = { forma_envio_default: '', condiciones_pago_default: '', horario_atencion_default: '', descripcion_default: '', catalogo_solo_con_fotos: true };
 
   async function cargarConfiguracionVentas() {
     const { data } = await supabase.from('configuracion_ventas').select('*').maybeSingle();
@@ -868,14 +886,38 @@
         forma_envio_default: data.forma_envio_default || '',
         condiciones_pago_default: data.condiciones_pago_default || '',
         horario_atencion_default: data.horario_atencion_default || '',
-        descripcion_default: data.descripcion_default || ''
+        descripcion_default: data.descripcion_default || '',
+        catalogo_solo_con_fotos: data.catalogo_solo_con_fotos !== false
       };
     }
     document.getElementById('cfg-envio').value = configuracionVentasCache.forma_envio_default;
     document.getElementById('cfg-pago').value = configuracionVentasCache.condiciones_pago_default;
     document.getElementById('cfg-horario').value = configuracionVentasCache.horario_atencion_default;
     document.getElementById('cfg-descripcion').value = configuracionVentasCache.descripcion_default;
+    document.getElementById('cfg-catalogo-solo-fotos').checked = configuracionVentasCache.catalogo_solo_con_fotos;
   }
+
+  // Guardado aparte de "Guardar predeterminados" (que solo aplica a productos NUEVOS): este
+  // toggle es una configuración global del Catálogo web, se guarda solo con marcar/desmarcar,
+  // sin botón adicional.
+  window.guardarCatalogoSoloFotos = async function() {
+    const chk = document.getElementById('cfg-catalogo-solo-fotos');
+    const msg = document.getElementById('msg-catalogo-web');
+    const valor = chk.checked;
+    const { error } = await supabase.from('configuracion_ventas')
+      .upsert({ ...configuracionVentasCache, catalogo_solo_con_fotos: valor, updated_at: new Date().toISOString() });
+    if (error) {
+      msg.style.color = 'var(--rust)';
+      msg.textContent = 'Error al guardar: ' + error.message;
+      chk.checked = configuracionVentasCache.catalogo_solo_con_fotos; // revertir el checkbox visualmente
+      return;
+    }
+    configuracionVentasCache.catalogo_solo_con_fotos = valor;
+    msg.style.color = 'var(--teal)';
+    msg.textContent = valor
+      ? 'Guardado — el catálogo web ya solo muestra productos con foto.'
+      : 'Guardado — el catálogo web ya muestra todos los productos, tengan foto o no.';
+  };
 
   window.guardarConfiguracionVentas = async function() {
     const msg = document.getElementById('msg-configuracion-ventas');
@@ -1059,6 +1101,33 @@
     cont.style.display = abierta ? 'none' : 'block';
     icono.textContent = abierta ? 'Mostrar ▾' : 'Ocultar ▴';
   };
+
+  window.toggleCatalogoWeb = function() {
+    const cont = document.getElementById('contenido-catalogo-web');
+    const icono = document.getElementById('icono-catalogo-web');
+    const abierta = cont.style.display === 'block';
+    cont.style.display = abierta ? 'none' : 'block';
+    icono.textContent = abierta ? 'Mostrar ▾' : 'Ocultar ▴';
+    if (!abierta) actualizarConteoFotosCatalogo();
+  };
+
+  // Cuenta, sobre lo que ya está cargado en productosCache (no hace falta pedirlo de nuevo a
+  // Supabase), cuántos productos activos tienen al menos una foto — para que la explicación de
+  // "solo con fotos" en el Catálogo web se vea con un número real en vez de en abstracto.
+  function actualizarConteoFotosCatalogo() {
+    const el = document.getElementById('conteo-fotos-catalogo');
+    if (!el) return;
+    const todos = Object.values(productosCache);
+    const conFotos = todos.filter(p => {
+      const imagenes = p.pub?.imagenes;
+      const tieneEnImagenes = Array.isArray(imagenes) && imagenes.some(i => String(i || '').trim() !== '');
+      const tieneEnFotosMl = String(p.pub?.fotos_ml || '').split(',').some(i => i.trim() !== '');
+      return tieneEnImagenes || tieneEnFotosMl;
+    }).length;
+    el.textContent = todos.length > 0
+      ? `Ahora mismo ${conFotos} de ${todos.length} producto(s) activo(s) tienen al menos una foto cargada.`
+      : '';
+  }
 
   window.toggleProductosSinCategoria = function() {
     const cont = document.getElementById('contenido-sin-categoria');
@@ -2029,6 +2098,205 @@ RESULTADOS DEL CÁLCULO DE PRECIO
   function obtenerSeleccionados() {
     return Array.from(document.querySelectorAll('.chk-producto:checked')).map(chk => chk.value);
   }
+
+  // ---------- Catálogo en PDF ----------
+  // Pensado para el vendedor mientras la mayoría del catálogo todavía no tiene fotos: un PDF de
+  // texto (nombre, código, categoría, descripción y precio) que se puede compartir sin depender
+  // de imágenes, usando los mismos filtros que ya están aplicados en la tabla de productos.
+
+  let logoBase64CacheCatalogo;
+  async function obtenerLogoBase64Catalogo() {
+    if (logoBase64CacheCatalogo !== undefined) return logoBase64CacheCatalogo;
+    const ARCHIVO_LOGO_PDF = 'logo-nicom-pdf.png';
+    try {
+      const resp = await fetch(ARCHIVO_LOGO_PDF);
+      if (!resp.ok) throw new Error(ARCHIVO_LOGO_PDF + ' respondió ' + resp.status);
+      const blob = await resp.blob();
+      const urlObjeto = URL.createObjectURL(blob);
+      const imagen = await new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = () => reject(new Error('No se pudo decodificar ' + ARCHIVO_LOGO_PDF));
+        img.src = urlObjeto;
+      });
+      const canvas = document.createElement('canvas');
+      canvas.width = imagen.naturalWidth || imagen.width;
+      canvas.height = imagen.naturalHeight || imagen.height;
+      canvas.getContext('2d').drawImage(imagen, 0, 0);
+      logoBase64CacheCatalogo = { dataUrl: canvas.toDataURL('image/png'), ancho: canvas.width, alto: canvas.height };
+      URL.revokeObjectURL(urlObjeto);
+    } catch (e) {
+      console.error('No se pudo preparar el logo para el catálogo en PDF:', e);
+      logoBase64CacheCatalogo = null;
+    }
+    return logoBase64CacheCatalogo;
+  }
+
+  // Mismo criterio que el Catálogo web (catalogo.html): si el producto usó "Generar con IA", se
+  // muestra solo la parte redactada para ese producto — no la descripción predeterminada genérica
+  // que se precarga en todos los productos nuevos. Si nunca se usó IA, no hay línea de descripción
+  // (igual que en el catálogo web), para no mostrarle al cliente el mismo texto en cada producto.
+  function descripcionParaCatalogoPdf(descripcionCompleta) {
+    const partes = (descripcionCompleta || '').split(MARCADOR_SUGERENCIA_IA);
+    return partes.length > 1 ? partes[1].trim() : '';
+  }
+
+  window.generarCatalogoPDF = async function() {
+    const btn = document.getElementById('btn-catalogo-pdf');
+    const productos = obtenerProductosFiltrados();
+    if (productos.length === 0) {
+      alert('No hay productos para incluir con los filtros actuales de la tabla.');
+      return;
+    }
+    if (productos.length > 300 && !confirm(`Vas a generar un catálogo con ${productos.length} productos — puede tardar varios segundos y ser un PDF de muchas páginas. ¿Continuar?\n\nTip: si querés un catálogo más corto, aplica un filtro (categoría, proveedor, etc.) en la tabla antes de generar.`)) {
+      return;
+    }
+
+    const textoOriginal = btn.textContent;
+    btn.disabled = true;
+    btn.textContent = 'Generando...';
+
+    try {
+      const { jsPDF } = window.jspdf;
+      const doc = new jsPDF({ unit: 'pt', format: 'letter' });
+      const logo = await obtenerLogoBase64Catalogo();
+      const margenX = 40;
+      const anchoDerecho = 555;
+      const anchoUtil = anchoDerecho - margenX;
+      let y = 50;
+
+      function nuevaPaginaSiHaceFalta(alturaNecesaria) {
+        if (y + alturaNecesaria > 760) {
+          doc.addPage();
+          y = 50;
+          return true;
+        }
+        return false;
+      }
+
+      function dibujarEncabezado(esPrimeraPagina) {
+        if (esPrimeraPagina && logo) {
+          const altoLogo = 32;
+          const anchoLogo = logo.alto ? (logo.ancho / logo.alto) * altoLogo : 100;
+          try { doc.addImage(logo.dataUrl, 'PNG', margenX, y - 22, anchoLogo, altoLogo, undefined, 'FAST'); } catch (e) {}
+        }
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(16);
+        doc.setTextColor(15, 27, 23);
+        doc.text('Catálogo de productos', anchoDerecho, y, { align: 'right' });
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.setTextColor(143, 166, 155);
+        doc.text('Nicom Tech Solutions · ' + new Date().toLocaleDateString('es-VE'), anchoDerecho, y + 13, { align: 'right' });
+        doc.setTextColor(15, 27, 23);
+        y += 30;
+        doc.setDrawColor(200, 200, 200);
+        doc.line(margenX, y, anchoDerecho, y);
+        y += 18;
+      }
+
+      dibujarEncabezado(true);
+
+      const ordenados = [...productos].sort((a, b) => {
+        const ca = a.categoria || 'Sin categoría', cb = b.categoria || 'Sin categoría';
+        if (ca !== cb) return ca.localeCompare(cb, 'es');
+        return (a.nombre || '').localeCompare(b.nombre || '', 'es');
+      });
+
+      let categoriaActual = null;
+      ordenados.forEach(p => {
+        const categoria = p.categoria || 'Sin categoría';
+        if (categoria !== categoriaActual) {
+          categoriaActual = categoria;
+          if (nuevaPaginaSiHaceFalta(34)) dibujarEncabezado(false);
+          y += 4;
+          doc.setFillColor(29, 46, 39);
+          doc.rect(margenX, y, anchoUtil, 20, 'F');
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(10.5);
+          doc.setTextColor(201, 162, 39);
+          doc.text(categoria.toUpperCase(), margenX + 8, y + 14);
+          doc.setTextColor(15, 27, 23);
+          y += 30;
+        }
+
+        const pub = p.pub || {};
+        const precioUsd = parseFloat(pub.precio_bcv_usd_equiv ?? pub.precio_efectivo_usd ?? 0) || 0;
+        const precioBs = parseFloat(pub.precio_bcv_bs ?? 0) || 0;
+        const marca = p.especificaciones?.marca ? p.especificaciones.marca + ' — ' : '';
+        const descripcion = descripcionParaCatalogoPdf(pub.descripcion);
+        const stock = pub.stock;
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10.5);
+        const nombreWrap = doc.splitTextToSize(marca + (p.nombre || ''), anchoUtil - 95).slice(0, 2);
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8.5);
+        let descWrap = descripcion ? doc.splitTextToSize(descripcion, anchoUtil) : [];
+        if (descWrap.length > 2) descWrap = [descWrap[0], descWrap[1].replace(/.{0,3}$/, '').trim() + '…'];
+
+        const altoBloque = 13 * nombreWrap.length + (p.sku ? 10 : 0) + 10.5 * descWrap.length + (stock !== null && stock !== undefined ? 10 : 0) + 18;
+        if (nuevaPaginaSiHaceFalta(altoBloque)) dibujarEncabezado(false);
+
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10.5);
+        doc.setTextColor(15, 27, 23);
+        doc.text(nombreWrap, margenX, y + 11);
+
+        doc.setFontSize(10.5);
+        doc.setTextColor(63, 167, 150);
+        doc.text('$' + precioUsd.toFixed(2), anchoDerecho, y + 11, { align: 'right' });
+        if (precioBs) {
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(8);
+          doc.setTextColor(143, 166, 155);
+          doc.text('Bs ' + precioBs.toLocaleString('es-VE', { maximumFractionDigits: 0 }), anchoDerecho, y + 22, { align: 'right' });
+        }
+        y += 13 * nombreWrap.length;
+
+        if (p.sku) {
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(7.5);
+          doc.setTextColor(143, 166, 155);
+          doc.text('Código: ' + p.sku, margenX, y + 8);
+          y += 10;
+        }
+
+        if (descWrap.length) {
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(8.5);
+          doc.setTextColor(170, 170, 160);
+          doc.text(descWrap, margenX, y + 9);
+          y += 10.5 * descWrap.length;
+        }
+
+        if (stock !== null && stock !== undefined) {
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(7.5);
+          const colorStock = stock <= 0 ? [193, 85, 59] : (stock <= 3 ? [201, 162, 39] : [143, 166, 155]);
+          doc.setTextColor(colorStock[0], colorStock[1], colorStock[2]);
+          const etiquetaStock = stock <= 0 ? 'agotado' : (stock <= 3 ? `bajo (${stock})` : `disponible (${stock})`);
+          doc.text('Stock: ' + etiquetaStock, margenX, y + 8);
+          y += 10;
+        }
+
+        doc.setTextColor(15, 27, 23);
+        doc.setDrawColor(230, 230, 225);
+        y += 6;
+        doc.line(margenX, y, anchoDerecho, y);
+        y += 10;
+      });
+
+      doc.save(`catalogo-nicom-${new Date().toISOString().slice(0, 10)}.pdf`);
+    } catch (err) {
+      console.error('Error generando el catálogo en PDF', err);
+      alert('No se pudo generar el catálogo en PDF: ' + err.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = textoOriginal;
+    }
+  };
 
   window.compararSeleccionadosEnCompetencia = function() {
     const seleccionados = obtenerSeleccionados();
