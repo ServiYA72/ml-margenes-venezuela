@@ -1022,7 +1022,7 @@
     const ids = seleccionadosPreparar.map(p => p.id);
     const { data } = await supabase
       .from('publicaciones')
-      .select('producto_id, precio_bcv_usd_equiv, stock, imagenes, descripcion')
+      .select('producto_id, precio_bcv_usd_equiv, stock, imagenes, descripcion, fotos_ml')
       .in('producto_id', ids);
     infoPrepararPorProducto = {};
     (data || []).forEach(row => { infoPrepararPorProducto[row.producto_id] = row; });
@@ -1052,10 +1052,18 @@
       const estadoFotos = numFotos > 0
         ? `<span class="chip-fotos ok">✓ ${numFotos} foto(s)</span>`
         : `<span class="chip-fotos falta">Sin fotos</span>`;
+      // Esta es la que de verdad importa para que Mercado Libre acepte la planilla: sus propias
+      // URLs del "Gestor de fotos" (ver generarPlantillaPreparar) — las fotos de arriba son solo
+      // para el Catálogo/Cotizaciones y Mercado Libre las rechaza si se usan en su planilla.
+      const tieneFotosML = !!(infoPrepararPorProducto[p.id]?.fotos_ml && infoPrepararPorProducto[p.id].fotos_ml.trim());
+      const estadoFotosML = tieneFotosML
+        ? `<span class="chip-fotos ok" title="Tiene URLs del Gestor de fotos de Mercado Libre">✓ Fotos ML</span>`
+        : `<span class="chip-fotos falta" title="Sin esto la planilla sale rechazada como &quot;vacía&quot; al subirla a Mercado Libre. Cárgalas editando este producto en el Dashboard.">⚠ Falta URLs ML</span>`;
       return `
         <div class="chip-producto">
           <span class="chip-nombre" title="${escapeHtml(p.nombre)}">${escapeHtml(p.nombre)}</span>
           ${estadoFotos}
+          ${estadoFotosML}
           <button type="button" class="chip-subir-foto" onclick="dispararSubidaFoto('${p.id}')">📷 ${numFotos > 0 ? 'Agregar' : 'Subir'} foto</button>
           <button type="button" class="chip-quitar" onclick="quitarDePreparar('${p.id}')">×</button>
         </div>`;
@@ -1128,6 +1136,17 @@
     await refrescarInfoPreparar();
     const pubPorProducto = infoPrepararPorProducto;
 
+    // Mercado Libre rechaza la planilla completa como "vacía" si el campo Fotos de un producto no
+    // trae URLs de SU PROPIO "Gestor de fotos" — una URL de este sistema (o cualquier otra externa)
+    // no sirve, aunque sea una imagen válida. Se corta acá, antes de generar nada, para no repetir
+    // ese error: mejor avisar qué producto falta que entregar una planilla que va a salir rechazada.
+    const sinFotosML = seleccionadosPreparar.filter(p => !(pubPorProducto[p.id]?.fotos_ml && pubPorProducto[p.id].fotos_ml.trim()));
+    if (sinFotosML.length > 0) {
+      msg.style.color = 'var(--rust)';
+      msg.textContent = `Falta cargar las URLs del Gestor de fotos de Mercado Libre en: ${sinFotosML.map(p => p.nombre).join(', ')}. Edítalos en el Dashboard (campo "Fotos para Mercado Libre") y vuelve a intentar — si no, Mercado Libre va a rechazar la planilla como vacía.`;
+      return;
+    }
+
     // Características técnicas de cada producto (marca, modelo, y lo que se haya generado con
     // IA o escrito a mano en el dashboard) — se usan para intentar rellenar las columnas técnicas
     // que trae esta categoría (cada categoría trae columnas distintas: RAM, Color, Voltaje...).
@@ -1191,7 +1210,11 @@
         { col: enc.col.descripcion, valor: (pub && pub.descripcion && pub.descripcion.trim()) ? pub.descripcion.trim() : (p.nombre || ''), tipo: 'texto' },
       ];
       if (pub) {
-        valores.push({ col: enc.col.fotos, valor: (pub.imagenes || []).join(', '), tipo: 'texto' });
+        // IMPORTANTE: acá va fotos_ml (las URLs que da el "Gestor de fotos" de Mercado Libre),
+        // NUNCA pub.imagenes (las fotos alojadas en este sistema, para Catálogo/Cotizaciones) —
+        // Mercado Libre no reconoce esas URLs en su planilla y la rechaza como "vacía". El chequeo
+        // de arriba ya garantiza que fotos_ml existe para todos los productos de esta tanda.
+        valores.push({ col: enc.col.fotos, valor: pub.fotos_ml.trim(), tipo: 'texto' });
         if (Number.isFinite(pub.stock)) valores.push({ col: enc.col.stock, valor: pub.stock, tipo: 'numero' });
         if (pub.precio_bcv_usd_equiv != null) valores.push({ col: enc.col.precio, valor: Number(pub.precio_bcv_usd_equiv), tipo: 'numero' });
       }

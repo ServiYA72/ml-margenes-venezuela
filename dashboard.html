@@ -429,8 +429,16 @@
             <span style="font-size:12px; color:var(--muted);">o toma una captura de pantalla y pega aquí con <strong>Ctrl+V</strong> (se abre un editor para recortar fondo/mejorarla antes de guardarla)</span>
             <span id="msg-subida-fotos" style="font-size:12px; color:var(--muted);"></span>
           </div>
-          <div class="hint" style="margin-top:6px;">Sube las fotos aquí (se alojan con link público, listas para usar también en la planilla de publicación masiva de Mercado Libre) o pega URLs de fotos ya alojadas en otro sitio, arriba.</div>
+          <div class="hint" style="margin-top:6px;">Sube las fotos aquí para usarlas en el Catálogo y las Cotizaciones. <strong>Mercado Libre no acepta estas URLs</strong> en su planilla de publicación — para eso completa el campo de abajo.</div>
           <div id="previsualizacion-fotos" style="display:flex; gap:8px; flex-wrap:wrap; margin-top:10px;"></div>
+        </div>
+        <div style="grid-column: 1 / -1; margin-top:6px; padding-top:14px; border-top:1px dashed var(--line);">
+          <label for="prod-fotos-ml">Fotos para Mercado Libre (URLs del "Gestor de fotos", separadas por coma)</label>
+          <input type="text" id="prod-fotos-ml" placeholder="Pega aquí las URLs que te dio el Gestor de fotos de Mercado Libre">
+          <div style="margin-top:8px;">
+            <a href="https://www.mercadolibre.com.ve/gestion_de_fotos?from=excel" target="_blank" rel="noopener" class="add" style="padding:7px 14px; font-size:12.5px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line); display:inline-block; margin-top:0; text-decoration:none;">🖼️ Abrir Gestor de fotos de Mercado Libre</a>
+          </div>
+          <div class="hint" style="margin-top:6px; color:var(--gold);">Mercado Libre exige que las fotos de la planilla vengan de <em>su propio</em> Gestor de fotos — una URL de este sistema (u otra externa) no sirve, aunque sea una imagen válida, y por eso la planilla sale rechazada como "vacía". Pasos: 1) Abre el Gestor de fotos con el botón de arriba. 2) Crea un grupo de fotos para este producto y sube las mismas imágenes. 3) Presiona "Copiar URLs" y pégalas aquí. Son válidas solo por 2 días — si tardas más en subir la planilla a Mercado Libre, genera las URLs de nuevo antes de publicar.</div>
         </div>
         <button class="add" id="btn-guardar-producto" onclick="crearProducto()">Agregar y calcular</button>
         <button class="add" id="btn-cancelar-edicion" onclick="cancelarEdicion()" style="display:none; background:var(--surface-2); color:var(--paper); border:1px solid var(--line);">Cancelar edición</button>
@@ -877,7 +885,7 @@
   };
 
   async function cargarProductos() {
-    const columnas = 'id, nombre, categoria, costo_usd, sku, especificaciones, proveedores(id, nombre), publicaciones(id, precio_efectivo_usd, precio_bcv_usd_equiv, precio_bcv_bs, ganancia_real_usd, comision_ml_usd, ganancia_neta_usd, modo_ganancia, margen_objetivo_pct, comision_ml_pct, descripcion, condicion, stock, forma_envio, condiciones_pago, horario_atencion, imagenes, estado)';
+    const columnas = 'id, nombre, categoria, costo_usd, sku, especificaciones, proveedores(id, nombre), publicaciones(id, precio_efectivo_usd, precio_bcv_usd_equiv, precio_bcv_bs, ganancia_real_usd, comision_ml_usd, ganancia_neta_usd, modo_ganancia, margen_objetivo_pct, comision_ml_pct, descripcion, condicion, stock, forma_envio, condiciones_pago, horario_atencion, imagenes, estado, fotos_ml)';
     const TAMANO_BLOQUE = 1000;
     let desde = 0;
     let todosLosDatos = [];
@@ -1094,7 +1102,12 @@
         borrador:  { texto: '⚪ Borrador', color: 'var(--muted)' }
       };
       const badgeEstado = ESTADOS_BADGE[estadoPub] || ESTADOS_BADGE.borrador;
-      const estadoHtml = `<span style="font-size:12px; color:${badgeEstado.color}; white-space:nowrap;">${badgeEstado.texto}</span>`;
+      // Si el producto ya está (o va a estar) en Mercado Libre pero no tiene las URLs del Gestor
+      // de fotos cargadas, avisamos aquí mismo — subir la planilla sin esto es justo lo que causa
+      // el error de "planilla vacía" al publicar, y así se detecta antes de llegar a ese paso.
+      const necesitaFotosML = (estadoPub === 'listo' || estadoPub === 'publicado') && !(pub.fotos_ml && pub.fotos_ml.trim());
+      const estadoHtml = `<span style="font-size:12px; color:${badgeEstado.color}; white-space:nowrap;">${badgeEstado.texto}</span>` +
+        (necesitaFotosML ? `<div style="font-size:11px; color:var(--rust); margin-top:3px;" title="Sin esto, Mercado Libre rechaza la planilla como &quot;vacía&quot; al publicar.">⚠ Sin fotos ML</div>` : '');
 
       tr.innerHTML = `
         <td><input type="checkbox" class="chk-producto" value="${p.id}"></td>
@@ -1347,6 +1360,7 @@
     document.getElementById('prod-pago').value = pub.condiciones_pago || '';
     document.getElementById('prod-horario').value = pub.horario_atencion || '';
     document.getElementById('prod-imagenes').value = (pub.imagenes || []).join(', ');
+    document.getElementById('prod-fotos-ml').value = pub.fotos_ml || '';
     actualizarPrevisualizacionFotos();
     renderizarListaCaracteristicas(especificacionesAPares(p.especificaciones));
 
@@ -1360,7 +1374,7 @@
     document.getElementById('titulo-form-producto').textContent = 'Nuevo producto';
     document.getElementById('btn-guardar-producto').textContent = 'Agregar y calcular';
     document.getElementById('btn-cancelar-edicion').style.display = 'none';
-    ['prod-nombre','prod-categoria','prod-costo','prod-descripcion','prod-envio','prod-pago','prod-horario','prod-imagenes']
+    ['prod-nombre','prod-categoria','prod-costo','prod-descripcion','prod-envio','prod-pago','prod-horario','prod-imagenes','prod-fotos-ml']
       .forEach(id => document.getElementById(id).value = '');
     document.getElementById('prod-valor-ganancia').value = 30;
     document.getElementById('prod-comision').value = 9;
@@ -2380,7 +2394,8 @@ RESULTADOS DEL CÁLCULO DE PRECIO
         forma_envio: document.getElementById('prod-envio').value.trim(),
         condiciones_pago: document.getElementById('prod-pago').value.trim(),
         horario_atencion: document.getElementById('prod-horario').value.trim(),
-        imagenes: imagenes
+        imagenes: imagenes,
+        fotos_ml: document.getElementById('prod-fotos-ml').value.trim() || null
       };
 
       // Al guardar, el producto pasa a la lista de "listos para publicar" — salvo que ya
