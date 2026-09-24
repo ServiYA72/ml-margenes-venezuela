@@ -2325,12 +2325,51 @@ RESULTADOS DEL CÁLCULO DE PRECIO
       // página quedó cada categoría; luego se insertan páginas nuevas al frente (doc.insertPage
       // corre todo el contenido ya dibujado hacia atrás sin tener que volver a dibujarlo) y se
       // ajustan los números de página del mapa sumándoles cuántas páginas de índice se agregaron.
+      //
+      // Este catálogo puede tener MUCHAS categorías (el usuario reportó verlas "en fila", una
+      // debajo de la otra, desperdiciando el ancho de la página) — por eso el índice se reparte
+      // en 3 columnas por página en vez de una sola lista vertical, aprovechando todo el espacio
+      // disponible y necesitando muchas menos páginas de índice.
       const categoriasIndice = Object.keys(categoriaPaginaMap);
-      const lineasPorPaginaIndice = 28;
-      const numPaginasIndice = Math.max(1, Math.ceil(categoriasIndice.length / lineasPorPaginaIndice));
+      const numColumnasIndice = 3;
+      const espacioEntreColumnas = 14;
+      const anchoColumnaIndice = (anchoUtil - espacioEntreColumnas * (numColumnasIndice - 1)) / numColumnasIndice;
+      const altoFilaIndice = 15;
+
+      const tituloIndice = 'Índice por categoría';
+      const notaIndice = 'Toca una categoría para ir directo a esa sección (o revisa los marcadores del panel lateral de tu lector de PDF). También puedes buscar cualquier producto por nombre o código con el buscador de tu lector (ícono de lupa, o Ctrl+F / Cmd+F). Cada producto tiene además un enlace para pedirlo por WhatsApp con un solo toque.';
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8.5);
+      const notaIndiceWrap = doc.splitTextToSize(notaIndice, anchoUtil);
+
+      // Cuántas filas (y por lo tanto cuántas categorías, x3 columnas) caben en la primera
+      // página del índice (que además lleva título y nota) y en las páginas siguientes.
+      const yTrasEncabezado = 50 + 48;
+      const yInicioFilasPagina1 = yTrasEncabezado + 18 + 11 * notaIndiceWrap.length + 14;
+      const yInicioFilasPaginaN = yTrasEncabezado;
+      const filasPorPagina1 = Math.max(1, Math.floor((760 - yInicioFilasPagina1) / altoFilaIndice));
+      const filasPorPaginaN = Math.max(1, Math.floor((760 - yInicioFilasPaginaN) / altoFilaIndice));
+      const itemsPorPagina1 = filasPorPagina1 * numColumnasIndice;
+      const itemsPorPaginaN = filasPorPaginaN * numColumnasIndice;
+
+      const numPaginasIndice = categoriasIndice.length <= itemsPorPagina1
+        ? 1
+        : 1 + Math.ceil((categoriasIndice.length - itemsPorPagina1) / itemsPorPaginaN);
       for (let i = 0; i < numPaginasIndice; i++) doc.insertPage(1);
       const desplazamiento = numPaginasIndice;
 
+      // Recorta el nombre de una categoría, carácter por carácter, hasta que quepa en el ancho
+      // de su columna — para que una categoría con un nombre largo no invada la columna vecina.
+      function recortarNombreCategoria(nombre, anchoMaximo) {
+        if (doc.getTextWidth(nombre) <= anchoMaximo) return nombre;
+        let recortado = nombre;
+        while (recortado.length > 1 && doc.getTextWidth(recortado + '…') > anchoMaximo) {
+          recortado = recortado.slice(0, -1);
+        }
+        return recortado + '…';
+      }
+
+      let cursorIndice = 0;
       for (let pag = 1; pag <= numPaginasIndice; pag++) {
         doc.setPage(pag);
         y = 50;
@@ -2340,34 +2379,50 @@ RESULTADOS DEL CÁLCULO DE PRECIO
           doc.setFont('helvetica', 'bold');
           doc.setFontSize(12);
           doc.setTextColor(15, 27, 23);
-          doc.text('Índice por categoría', margenX, y);
+          doc.text(tituloIndice, margenX, y);
           y += 18;
           doc.setFont('helvetica', 'normal');
           doc.setFontSize(8.5);
           doc.setTextColor(143, 166, 155);
-          const notaWrap = doc.splitTextToSize('Toca una categoría para ir directo a esa sección. También puedes buscar cualquier producto por nombre o código con el buscador de tu lector de PDF (ícono de lupa, o Ctrl+F / Cmd+F). Cada producto tiene además un enlace para pedirlo por WhatsApp con un solo toque.', anchoUtil);
-          doc.text(notaWrap, margenX, y);
-          y += 11 * notaWrap.length + 14;
+          doc.text(notaIndiceWrap, margenX, y);
+          y += 11 * notaIndiceWrap.length + 14;
         }
 
-        doc.setTextColor(15, 27, 23);
-        const desde = (pag - 1) * lineasPorPaginaIndice;
-        const hasta = Math.min(desde + lineasPorPaginaIndice, categoriasIndice.length);
-        for (let idx = desde; idx < hasta; idx++) {
-          const categoria = categoriasIndice[idx];
-          const paginaDestino = categoriaPaginaMap[categoria] + desplazamiento;
-          doc.setFont('helvetica', 'normal');
-          doc.setFontSize(10.5);
-          doc.setTextColor(15, 27, 23);
-          doc.textWithLink(categoria, margenX, y, { pageNumber: paginaDestino });
-          doc.setFont('helvetica', 'normal');
-          doc.setFontSize(9);
-          doc.setTextColor(143, 166, 155);
-          doc.text('página ' + paginaDestino, anchoDerecho, y, { align: 'right' });
-          doc.setDrawColor(230, 230, 225);
-          doc.line(margenX, y + 5, anchoDerecho, y + 5);
-          y += 20;
+        const itemsEnEstaPagina = Math.min(pag === 1 ? itemsPorPagina1 : itemsPorPaginaN, categoriasIndice.length - cursorIndice);
+        const yInicioColumnas = y;
+        const filasEnEstaPagina = Math.ceil(itemsEnEstaPagina / numColumnasIndice);
+
+        // Líneas divisorias finas entre columnas, para que se vean como columnas distribuidas
+        // en vez de texto suelto flotando en la página.
+        doc.setDrawColor(225, 225, 218);
+        for (let c = 1; c < numColumnasIndice; c++) {
+          const xDivisor = margenX + c * (anchoColumnaIndice + espacioEntreColumnas) - espacioEntreColumnas / 2;
+          doc.line(xDivisor, yInicioColumnas - 6, xDivisor, yInicioColumnas + filasEnEstaPagina * altoFilaIndice - 4);
         }
+
+        for (let j = 0; j < itemsEnEstaPagina; j++) {
+          const categoria = categoriasIndice[cursorIndice + j];
+          const paginaDestino = categoriaPaginaMap[categoria] + desplazamiento;
+          const columna = j % numColumnasIndice;
+          const fila = Math.floor(j / numColumnasIndice);
+          const xColumna = margenX + columna * (anchoColumnaIndice + espacioEntreColumnas);
+          const yFila = yInicioColumnas + fila * altoFilaIndice;
+
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(8.5);
+          doc.setTextColor(63, 167, 150);
+          doc.text(recortarNombreCategoria(categoria, anchoColumnaIndice - 22), xColumna, yFila);
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(7.5);
+          doc.setTextColor(143, 166, 155);
+          doc.text(String(paginaDestino), xColumna + anchoColumnaIndice, yFila, { align: 'right' });
+
+          // Zona clicable de toda la celda (no solo el texto) — más fácil de tocar desde el
+          // celular que apuntarle justo al nombre de la categoría.
+          doc.link(xColumna - 2, yFila - 10, anchoColumnaIndice + 4, altoFilaIndice, { pageNumber: paginaDestino });
+        }
+
+        cursorIndice += itemsEnEstaPagina;
       }
 
       // Marcadores del lector de PDF (panel lateral en Adobe Reader, Chrome, Vista previa de
