@@ -242,7 +242,7 @@
           <input type="number" step="0.01" id="pe-precio" oninput="actualizarPrevioBs()">
         </div>
         <div>
-          <label>Precio en Bs si paga en bolívares (tasa Binance de hoy)</label>
+          <label>Precio en Bs si paga en bolívares (tasa BCV de hoy)</label>
           <input type="text" id="pe-precio-bs" readonly style="background:var(--surface); color:var(--teal);">
         </div>
       </div>
@@ -398,6 +398,13 @@
 
     <div id="acciones-post-guardado" style="display:none; margin-top:16px; padding-top:16px; border-top:1px solid var(--line);">
       <div class="hint" style="margin-top:0;">Cotización guardada — ahora puedes descargarla o compartirla. Esta es una aplicación sin servidor de correo propio, así que no es técnicamente posible adjuntar el PDF de forma 100% automática dentro de WhatsApp o el correo: al hacer clic el PDF se descarga y a la vez se abre WhatsApp o tu correo con el mensaje ya escrito — solo falta que selecciones el archivo recién descargado y lo adjuntes antes de enviar.</div>
+      <div style="margin:12px 0;">
+        <label for="pdf-modo-pago" style="display:block; font-size:12px; color:var(--muted); margin-bottom:6px;">Cómo va a pagar el cliente (elige antes de imprimir/enviar — se puede cambiar y volver a generar las veces que haga falta)</label>
+        <select id="pdf-modo-pago" style="max-width:520px;">
+          <option value="ambos">Aún no sabe — mostrar $ y Bs (a tasa BCV) para que elija</option>
+          <option value="usd">Efectivo en $ / Binance / Zelle — mostrar solo el precio en $</option>
+        </select>
+      </div>
       <button class="secondary" style="margin-left:0;" onclick="descargarPDF()">Descargar PDF</button>
       <button class="secondary" onclick="enviarPorWhatsApp()">Enviar por WhatsApp</button>
       <button class="secondary" onclick="enviarPorCorreo()">Enviar por correo</button>
@@ -475,22 +482,6 @@
     document.getElementById('preview-forma-pago').textContent = 'Se imprimirá: "' + textoFormaPago(pct) + '"';
   };
 
-  // STOCK: nunca se escribe a mano — se arma solo con lo que ya haya en el sistema para los
-  // productos vinculados de esta cotización (los ítems libres, sin producto_id, no aplican).
-  // Si ningún ítem tiene stock registrado, se omite la línea completa en vez de mostrar vacío.
-  function lineaStockCotizacion(items) {
-    const partes = [];
-    (items || []).forEach(it => {
-      if (!it.producto_id) return;
-      const p = productosCache[it.producto_id];
-      const stock = p?.pub?.stock;
-      if (stock === null || stock === undefined) return;
-      const nombreCorto = String(it.descripcion || p?.nombre || '').slice(0, 42);
-      partes.push(stock > 0 ? `${nombreCorto} (${stock} disp.)` : `${nombreCorto} (agotado)`);
-    });
-    return partes.length > 0 ? partes.join('  ·  ') : null;
-  }
-
   async function initSesion() {
     const { data: { session } } = await supabase.auth.getSession();
     const who = document.getElementById('who');
@@ -515,10 +506,14 @@
   // Cotizaciones SIEMPRE se cobran sin comisión de Mercado Libre (es venta directa, fuera
   // de ML), pero se ofrecen 2 formas de pago con 2 precios distintos — igual que se maneja
   // el negocio en la práctica:
-  //  • Efectivo en $ (dólares en mano): precio = costo + margen, tal cual, SIN brecha.
-  //  • Pago en Bs (bolívares): hay que cobrar más, porque esos bolívares luego se compran
-  //    en USDT vía Binance a una tasa peor que la BCV — así que el precio en Bs se calcula
-  //    con la tasa BINANCE de hoy (no la BCV) para que el margen en $ se preserve igual.
+  //  • Efectivo en $ (dólares en mano, Binance o Zelle): precio = costo + margen, sin brecha.
+  //  • Pago en Bs (bolívares): el mismo precio en $, convertido a la tasa BCV oficial del
+  //    día — nunca a la tasa Binance. El documento que recibe el cliente no puede reflejar
+  //    ni insinuar de dónde sale la conversión real (esa operación no se expone nunca en un
+  //    papel), así que toda cifra en bolívares que vea el cliente se cotiza siempre a BCV.
+  //    tasaBinance se sigue cargando y usando SOLO en el desglose interno (nunca se imprime)
+  //    para que el vendedor pueda verificar cuánto le queda de margen real si el cliente paga
+  //    en bolívares.
   function calcularPrecioSinComision(costoUsd, margenUsd) {
     if (!tasaBCV || !tasaBinance) return null;
     const costo = parseFloat(costoUsd) || 0;
@@ -526,8 +521,8 @@
     const precioEfectivo = costo + margen; // precio en $ efectivo — sin comisión, sin brecha
     return {
       costo, margenUsd: margen, precioEfectivo,
-      precioUsd: precioEfectivo,               // lo que se cobra al cliente si paga en $ efectivo
-      precioBs: precioEfectivo * tasaBinance    // lo que se cobra en Bs si paga en bolívares
+      precioUsd: precioEfectivo,           // lo que se cobra al cliente si paga en $ efectivo
+      precioBs: precioEfectivo * tasaBCV   // lo que se cobra en Bs si paga en bolívares — a tasa BCV
     };
   }
 
@@ -763,7 +758,7 @@
   window.actualizarPrevioBs = function() {
     const precio = parseFloat(document.getElementById('pe-precio').value) || 0;
     const campoBs = document.getElementById('pe-precio-bs');
-    campoBs.value = tasaBinance ? 'Bs ' + (precio * tasaBinance).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'Sin tasa cargada';
+    campoBs.value = tasaBCV ? 'Bs ' + (precio * tasaBCV).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'Sin tasa cargada';
   };
 
   window.actualizarUiItemLibre = function() {
@@ -885,7 +880,7 @@
       producto_id: p.id,
       descripcion: p.nombre,
       cantidad, precioUnitario,
-      precioUnitarioBs: tasaBinance ? precioUnitario * tasaBinance : 0,
+      precioUnitarioBs: tasaBCV ? precioUnitario * tasaBCV : 0,
       costoOriginal: parseFloat(p.costo_usd || 0),
       tipoItem: 'producto',
       avisos: []
@@ -916,7 +911,7 @@
     }
     itemsCotizacion.push({
       producto_id: null, descripcion, cantidad, precioUnitario,
-      precioUnitarioBs: tasaBinance ? precioUnitario * tasaBinance : 0,
+      precioUnitarioBs: tasaBCV ? precioUnitario * tasaBCV : 0,
       costoOriginal: costo, tipoItem, avisos: []
     });
     renderizarTablaItems();
@@ -944,7 +939,7 @@
     if (campo === 'cantidad') item.cantidad = parseFloat(valor) || 0;
     if (campo === 'precioUnitario') {
       item.precioUnitario = parseFloat(valor) || 0;
-      item.precioUnitarioBs = tasaBinance ? item.precioUnitario * tasaBinance : item.precioUnitarioBs;
+      item.precioUnitarioBs = tasaBCV ? item.precioUnitario * tasaBCV : item.precioUnitarioBs;
     }
     actualizarFilaCalculada(idx);
     actualizarTotalesEnPantalla();
@@ -999,31 +994,41 @@
       const precioBs = it.precioUnitarioBs || 0;
       let texto = `PRECIO A COBRAR AL CLIENTE (elige el cliente):
 • Efectivo en $ (dólares en mano, sin brecha): $${it.precioUnitario.toFixed(2)}
-• Pago en Bs (bolívares, a la tasa Binance de hoy): ${fmtBs(precioBs)}
+• Pago en Bs (bolívares, a la tasa BCV de hoy): ${fmtBs(precioBs)}
 
 DESGLOSE:
 • Costo del proveedor: $${d.costo.toFixed(2)}
 • Margen de ganancia: $${d.margenUsd.toFixed(2)}  (${margenPct.toFixed(1)}% sobre el costo)
 • Comisión de Mercado Libre: no se aplica (0%) — venta directa, fuera de Mercado Libre.`;
       if (tasaBCV && tasaBinance) {
-        texto += `\n\nVERIFICACIÓN SI EL CLIENTE PAGA EN BOLÍVARES:
-• Cobras: ${fmtBs(precioBs)}
-• Compras USDT en Binance a ${tasaBinance.toFixed(2)}: obtienes exactamente $${d.precioEfectivo.toFixed(2)}
-• Margen preservado: $${d.margenUsd.toFixed(2)} (igual que si te hubiera pagado en efectivo)
-• Referencia BCV del día (${tasaBCV.toFixed(2)}): este mismo precio equivale a $${(precioBs / tasaBCV).toFixed(2)} — solo informativo, no es lo que se cobra.`;
+        // Solo para uso interno del vendedor (nunca se imprime ni se le muestra al cliente):
+        // si el cliente paga en Bs a tasa BCV y ese dinero luego se cambia a USDT en Binance
+        // (a una tasa normalmente más alta que la BCV), el margen real en $ puede quedar por
+        // debajo del que se ve arriba — esta cuenta es para que el vendedor lo tenga claro.
+        const obtenidoEnBinance = precioBs / tasaBinance;
+        const diferencia = d.precioEfectivo - obtenidoEnBinance;
+        const notaDif = Math.abs(diferencia) < 0.01
+          ? 'Coincide con el margen en $ efectivo.'
+          : diferencia > 0
+            ? `$${diferencia.toFixed(2)} MENOS que el margen en $ efectivo (la BCV está por debajo de la Binance hoy).`
+            : `$${Math.abs(diferencia).toFixed(2)} MÁS que el margen en $ efectivo (la BCV está por encima de la Binance hoy).`;
+        texto += `\n\nSOLO PARA TI — si ese dinero en Bs lo cambias a USDT en Binance (uso interno, nunca se imprime):
+• Cobras (a tasa BCV): ${fmtBs(precioBs)}
+• Cambias a USDT en Binance a ${tasaBinance.toFixed(2)}: obtienes $${obtenidoEnBinance.toFixed(2)}
+• Diferencia frente al margen en $ efectivo: ${notaDif}`;
       }
       return texto;
     }
     // Ítem libre / mano de obra técnica: el precio en $ que se escribe a mano YA es el
     // precio "efectivo"; el precio en Bs (si el cliente paga en bolívares) se calcula igual
-    // que en catálogo, a la tasa Binance de hoy, para que la ganancia en $ se preserve.
+    // que en catálogo, a la tasa BCV de hoy.
     const ganancia = it.precioUnitario - costo;
     const margenPct = it.precioUnitario > 0 ? (ganancia / it.precioUnitario * 100) : 0;
     const esManoDeObra = it.tipoItem === 'mano_obra';
     return `${esManoDeObra ? 'Mano de obra técnica' : 'Ítem libre'}
 PRECIO A COBRAR AL CLIENTE (elige el cliente):
 • Efectivo en $: $${it.precioUnitario.toFixed(2)}
-• Pago en Bs (a la tasa Binance de hoy): ${fmtBs(it.precioUnitarioBs || 0)}
+• Pago en Bs (a la tasa BCV de hoy): ${fmtBs(it.precioUnitarioBs || 0)}
 
 ${costo > 0 ? `Costo (pagado a técnico/proveedor externo): $${costo.toFixed(2)}` : 'Costo: $0.00 — ' + (esManoDeObra ? 'mano de obra propia, sin subcontratar (100% de ganancia)' : 'sin costo registrado')}
 Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
@@ -1356,9 +1361,10 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
         cantidad: parseFloat(it.cantidad),
         precioUnitario: parseFloat(it.precio_unitario),
         // El precio en $ efectivo ya cotizado se respeta; el precio en Bs (pago en bolívares)
-        // se recalcula con la tasa BINANCE de HOY, por eso puede diferir del que se guardó
-        // originalmente — es justamente lo que protege el margen si la tasa se movió.
-        precioUnitarioBs: tasaBinance ? parseFloat(it.precio_unitario) * tasaBinance : parseFloat(it.precio_unitario_bs || 0),
+        // se recalcula con la tasa BCV de HOY, por eso puede diferir del que se guardó
+        // originalmente — la cifra en bolívares siempre sigue la tasa BCV del momento en que
+        // se imprime, nunca una tasa congelada del día en que se guardó.
+        precioUnitarioBs: tasaBCV ? parseFloat(it.precio_unitario) * tasaBCV : parseFloat(it.precio_unitario_bs || 0),
         costoOriginal: it.costo_original_usd != null ? parseFloat(it.costo_original_usd) : null,
         // Cotizaciones guardadas antes de esta columna no tienen tipo_item: se infiere
         // 'producto' si viene del catálogo, o 'libre' por defecto (nunca se pierde el ítem).
@@ -1389,7 +1395,7 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
 
     const huboAvisos = itemsCotizacion.some(it => it.avisos.length > 0);
     msg.className = 'msg ok';
-    msg.textContent = `Retomando cotización N° ${cot.numero} — el subtotal y total en Bs se recalcularon a la tasa de hoy (BCV ${tasaBCV?.toFixed(2) ?? '—'} · Binance ${tasaBinance?.toFixed(2) ?? '—'}).` +
+    msg.textContent = `Retomando cotización N° ${cot.numero} — el subtotal y total en Bs se recalcularon a la tasa BCV de hoy (Bs ${tasaBCV?.toFixed(2) ?? '—'} por USD).` +
       (huboAvisos ? ' Hay avisos de catálogo en algunos ítems — revísalos en la tabla de arriba.' : '');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -1400,7 +1406,7 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
   // de jsPDF y, si por lo que sea (red lenta, bloqueador, caché del navegador) no llega a
   // registrarse a tiempo, "doc.autoTable is not a function" hacía fallar TODO el PDF. Con
   // esto la generación del PDF ya no depende de ese segundo script.
-  function dibujarTablaItemsPDF(doc, filas, startY, margenX) {
+  function dibujarTablaItemsPDF(doc, filas, startY, margenX, columnasPersonalizadas) {
     const bordeDerecho = 555;
     // Orden y columnas inspirados en el modelo de "Propuesta Económica" en Excel de Nicom
     // (ITEM | MARCA | CODIGO | CANT. | DESCRIPCION | PRECIO...): se agregan Ítem/Marca/Código
@@ -1410,7 +1416,9 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
     // (la moneda venezolana maneja cifras largas) el ancho anterior se quedaba corto y el
     // texto se salía encima de la columna siguiente. Se le quitó ese espacio a Marca/Código/
     // Descripción, que de todas formas ya se truncan o se ajustan solos si no caben.
-    const columnas = [
+    // "columnasPersonalizadas" permite dibujar la tabla en modo "solo $" (sin las columnas en
+    // bolívares) reutilizando exactamente la misma función — ver COLUMNAS_PDF_USD en construirPDF.
+    const columnas = columnasPersonalizadas || [
       { titulo: 'Ítem', ancho: 16, align: 'center' },
       { titulo: 'Marca', ancho: 40, align: 'left', angosta: true },
       { titulo: 'Código', ancho: 38, align: 'left', angosta: true },
@@ -1532,7 +1540,30 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
     return y;
   }
 
-  async function construirPDF(cot) {
+  // Columnas de la tabla cuando el cliente va a pagar en $ (efectivo, Binance o Zelle): se
+  // quitan las 2 columnas en bolívares y se reparte ese ancho entre Descripción y las columnas
+  // en $ que quedan — el ancho total sigue sumando 515 (igual que el modo "ambos"), para no
+  // tocar nada del resto del layout del PDF.
+  const COLUMNAS_PDF_USD = [
+    { titulo: 'Ítem', ancho: 20, align: 'center' },
+    { titulo: 'Marca', ancho: 55, align: 'left', angosta: true },
+    { titulo: 'Código', ancho: 55, align: 'left', angosta: true },
+    { titulo: 'Cant.', ancho: 26, align: 'center' },
+    { titulo: 'Descripción', ancho: 250, align: 'left', wrap: true },
+    { titulo: '$ Unitario', ancho: 60, align: 'right' },
+    { titulo: 'Subt. $', ancho: 49, align: 'right' }
+  ];
+
+  // "modo" decide qué moneda(s) se imprimen — ver el selector "Cómo va a pagar el cliente" en
+  // el panel de después de guardar:
+  //  • 'ambos' (por defecto): $ y Bs, con el Bs siempre a la tasa BCV del momento en que se
+  //    genera el PDF (nunca una tasa congelada ni la tasa Binance).
+  //  • 'usd': solo $ — para cuando ya se sabe que el cliente paga en efectivo, Binance o Zelle
+  //    y no hace falta mostrarle ninguna cifra en bolívares.
+  // En los dos casos el cálculo de fondo es el mismo (tasaBCV vive en itemsCotizacion desde que
+  // se agregó cada ítem, o se recalculó al "retomar" la cotización) — "modo" solo decide qué se
+  // dibuja en el PDF, nunca cambia cuánto se le cobra al cliente.
+  async function construirPDF(cot, modo = 'ambos') {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ unit: 'pt', format: 'letter' });
     const empresa = obtenerDatosEmpresa();
@@ -1595,6 +1626,17 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
       const p = it.producto_id ? productosCache[it.producto_id] : null;
       const codigo = p?.sku || '';
       const marca = p?.especificaciones?.marca || '';
+      if (modo === 'usd') {
+        return [
+          String(idx + 1),
+          marca,
+          codigo,
+          String(it.cantidad),
+          it.descripcion,
+          '$' + precioUnit.toFixed(2),
+          '$' + (it.cantidad * precioUnit).toFixed(2)
+        ];
+      }
       return [
         String(idx + 1),
         marca,
@@ -1608,7 +1650,7 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
       ];
     });
 
-    const yTrasTabla = dibujarTablaItemsPDF(doc, filas, y, margenX);
+    const yTrasTabla = dibujarTablaItemsPDF(doc, filas, y, margenX, modo === 'usd' ? COLUMNAS_PDF_USD : undefined);
 
     let yFinal = yTrasTabla + 24;
     // Si la tabla llegó muy abajo (cotización con muchos ítems), abrimos página nueva
@@ -1627,7 +1669,8 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
     // bolívares grande (Bs suele tener muchas más cifras que $) nunca se encime con su
     // etiqueta; además el monto reduce su tamaño automáticamente si aun así no cabe en el
     // ancho de la caja, en vez de desbordarse.
-    const cajaAncho = 230, cajaX = 555 - cajaAncho, cajaPad = 12, cajaAlto = 124;
+    const cajaAncho = 230, cajaX = 555 - cajaAncho, cajaPad = 12;
+    const cajaAlto = modo === 'usd' ? 62 : 124;
     doc.setFillColor(244, 242, 236);
     doc.roundedRect(cajaX, yFinal, cajaAncho, cajaAlto, 4, 4, 'F');
 
@@ -1641,49 +1684,79 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
     }
 
     let yCaja = yFinal + 16;
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
-    doc.setTextColor(110, 120, 114);
-    doc.text('TOTAL — EL CLIENTE ELIGE CÓMO PAGAR', cajaX + cajaPad, yCaja);
-    yCaja += 17;
+    if (modo === 'usd') {
+      // Un solo monto en $ — el cliente ya definió que paga en efectivo, Binance o Zelle, así
+      // que no hace falta mostrarle ninguna opción de pago ni cifra en bolívares.
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      doc.setTextColor(110, 120, 114);
+      doc.text('TOTAL A PAGAR', cajaX + cajaPad, yCaja);
+      yCaja += 17;
+      const valorUSD = '$' + total.toFixed(2);
+      const tamUSD = tamañoQueCabeEnCaja(valorUSD, 20);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(tamUSD);
+      doc.setTextColor(20, 30, 26);
+      doc.text(valorUSD, 555 - cajaPad, yCaja + 6, { align: 'right' });
+    } else {
+      // Caja de resumen: NO son el mismo monto en 2 monedas — son 2 formas de pago distintas,
+      // cada una con su propio total, así que van en bloques separados y bien rotulados (nunca
+      // un solo texto largo "$... Bs..." que además se encimaba con la etiqueta al no caber
+      // en el espacio entre "Total" y el borde).
+      // Etiqueta y monto van en líneas separadas (no en la misma fila) para que un monto en
+      // bolívares grande (Bs suele tener muchas más cifras que $) nunca se encime con su
+      // etiqueta; además el monto reduce su tamaño automáticamente si aun así no cabe en el
+      // ancho de la caja, en vez de desbordarse.
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      doc.setTextColor(110, 120, 114);
+      doc.text('TOTAL — EL CLIENTE ELIGE CÓMO PAGAR', cajaX + cajaPad, yCaja);
+      yCaja += 17;
 
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9.5);
-    doc.setTextColor(90, 100, 95);
-    doc.text('Pagando en efectivo ($)', cajaX + cajaPad, yCaja);
-    yCaja += 17;
-    const valorUSD = '$' + total.toFixed(2);
-    const tamUSD = tamañoQueCabeEnCaja(valorUSD, 16);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(tamUSD);
-    doc.setTextColor(20, 30, 26);
-    doc.text(valorUSD, 555 - cajaPad, yCaja, { align: 'right' });
-    yCaja += 16;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9.5);
+      doc.setTextColor(90, 100, 95);
+      doc.text('Pagando en efectivo ($)', cajaX + cajaPad, yCaja);
+      yCaja += 17;
+      const valorUSD = '$' + total.toFixed(2);
+      const tamUSD = tamañoQueCabeEnCaja(valorUSD, 16);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(tamUSD);
+      doc.setTextColor(20, 30, 26);
+      doc.text(valorUSD, 555 - cajaPad, yCaja, { align: 'right' });
+      yCaja += 16;
 
-    doc.setDrawColor(205, 198, 178);
-    doc.line(cajaX + cajaPad, yCaja, 555 - cajaPad, yCaja);
-    yCaja += 17;
+      doc.setDrawColor(205, 198, 178);
+      doc.line(cajaX + cajaPad, yCaja, 555 - cajaPad, yCaja);
+      yCaja += 17;
 
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9.5);
-    doc.setTextColor(90, 100, 95);
-    doc.text('Pagando en bolívares (Bs)', cajaX + cajaPad, yCaja);
-    yCaja += 17;
-    const valorBs = fmtBsPdf(totalBs);
-    const tamBs = tamañoQueCabeEnCaja(valorBs, 16);
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(tamBs);
-    doc.setTextColor(160, 128, 26);
-    doc.text(valorBs, 555 - cajaPad, yCaja, { align: 'right' });
-    doc.setTextColor(20, 30, 26);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9.5);
+      doc.setTextColor(90, 100, 95);
+      doc.text('Pagando en bolívares (Bs)', cajaX + cajaPad, yCaja);
+      yCaja += 17;
+      const valorBs = fmtBsPdf(totalBs);
+      const tamBs = tamañoQueCabeEnCaja(valorBs, 16);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(tamBs);
+      doc.setTextColor(160, 128, 26);
+      doc.text(valorBs, 555 - cajaPad, yCaja, { align: 'right' });
+      doc.setTextColor(20, 30, 26);
+    }
 
     yFinal += cajaAlto + 18;
 
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(9);
-    doc.setTextColor(120, 120, 120);
-    if (cot.tasa_binance_usada) { doc.text(`El precio en bolívares se calculó con la tasa Binance del día: Bs ${Number(cot.tasa_binance_usada).toFixed(2)} por USD.`, margenX, yFinal); yFinal += 16; }
-    doc.setTextColor(20, 30, 26);
+    // Nunca se menciona de dónde sale la conversión real (esa operación no se expone en el
+    // PDF) — el documento solo dice que el bolívar se cotiza a la tasa BCV, que es la tasa
+    // oficial y pública. En modo "solo $" no hay ninguna cifra en bolívares, así que tampoco
+    // hace falta esta línea.
+    if (modo !== 'usd') {
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(120, 120, 120);
+      if (cot.tasa_bcv_usada) { doc.text(`Cotización a tasa BCV — precio en bolívares calculado a Bs ${Number(cot.tasa_bcv_usada).toFixed(2)} por USD.`, margenX, yFinal); yFinal += 16; }
+      doc.setTextColor(20, 30, 26);
+    }
 
     yFinal = dibujarCondicionesOferta(doc, cot, margenX, yFinal);
 
@@ -1699,10 +1772,11 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
     return doc;
   }
 
-  // Dibuja el bloque "CONDICIONES DE LA OFERTA" (validez, forma de pago, tiempo de entrega,
-  // garantía y stock) reemplazando la antigua línea suelta de "Condiciones de pago". Tiempo de
-  // entrega y garantía solo se imprimen si se cargaron; stock solo si hay dato en algún ítem
-  // (se saca de la base de productos, nunca se escribe a mano).
+  // Dibuja el bloque "CONDICIONES DE LA OFERTA" (validez, forma de pago, tiempo de entrega y
+  // garantía) reemplazando la antigua línea suelta de "Condiciones de pago". Tiempo de entrega
+  // y garantía solo se imprimen si se cargaron. El stock NUNCA se imprime aquí — es un dato
+  // solo referencial para cotizar internamente (se muestra en pantalla al elegir el producto),
+  // no algo que deba figurar en el PDF que recibe el cliente.
   function dibujarCondicionesOferta(doc, cot, margenX, yInicio) {
     const lineas = [];
     const validezTxt = formatUnidadTiempo(cot.validez_dias, cot.validez_unidad || 'dias');
@@ -1712,8 +1786,6 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
     if (entregaTxt) lineas.push(['TIEMPO DE ENTREGA:', entregaTxt]);
     const garantiaTxt = formatUnidadTiempo(cot.garantia_valor, cot.garantia_unidad);
     if (garantiaTxt) lineas.push(['GARANTÍA:', garantiaTxt]);
-    const stockTxt = lineaStockCotizacion(cot.items);
-    if (stockTxt) lineas.push(['STOCK:', stockTxt]);
 
     let y = yInicio;
     if (y > 620) { doc.addPage(); y = 60; }
@@ -1749,10 +1821,17 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
     return `cotizacion-${String(cot.numero).padStart(4, '0')}-${cliente}.pdf`;
   }
 
+  // Lee el selector "Cómo va a pagar el cliente" — se puede cambiar y reimprimir las veces que
+  // haga falta, incluso después de retomar la cotización para modificarla; siempre usa la tasa
+  // BCV del momento en que se genera el PDF (ver comentario en construirPDF).
+  function modoPdfSeleccionado() {
+    return document.getElementById('pdf-modo-pago')?.value === 'usd' ? 'usd' : 'ambos';
+  }
+
   window.descargarPDF = async function() {
     if (!cotizacionGuardada) return;
     try {
-      const doc = await construirPDF(cotizacionGuardada);
+      const doc = await construirPDF(cotizacionGuardada, modoPdfSeleccionado());
       doc.save(nombreArchivoPDF(cotizacionGuardada));
     } catch (err) {
       console.error('Error generando el PDF', err);
@@ -1768,7 +1847,8 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
     return digitos;
   }
 
-  function totalConBsTexto(cot) {
+  function totalConBsTexto(cot, modo) {
+    if (modo === 'usd') return '$' + Number(cot.total).toFixed(2);
     return '$' + Number(cot.total).toFixed(2) + (cot.total_bs ? ' (' + fmtBs(Number(cot.total_bs)) + ')' : '');
   }
 
@@ -1783,13 +1863,14 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
       alert('Este cliente no tiene teléfono guardado en la cotización. Agrégalo en el paso 1 y vuelve a guardar.');
       return;
     }
+    const modo = modoPdfSeleccionado();
     const numero = normalizarTelefonoVE(cotizacionGuardada.cliente_telefono);
-    const mensaje = `Hola ${cotizacionGuardada.cliente_nombre}, te comparto la cotización N° ${cotizacionGuardada.numero} de Nicom Tech Solutions por ${totalConBsTexto(cotizacionGuardada)}. Te acabo de descargar el PDF — solo debo adjuntarlo aquí antes de enviar.`;
+    const mensaje = `Hola ${cotizacionGuardada.cliente_nombre}, te comparto la cotización N° ${cotizacionGuardada.numero} de Nicom Tech Solutions por ${totalConBsTexto(cotizacionGuardada, modo)}. Te acabo de descargar el PDF — solo debo adjuntarlo aquí antes de enviar.`;
     const ventana = window.open(`https://wa.me/${numero}?text=${encodeURIComponent(mensaje)}`, '_blank');
     if (!ventana) {
       alert('Tu navegador bloqueó la ventana de WhatsApp. Permite ventanas emergentes para este sitio e inténtalo de nuevo.');
     }
-    construirPDF(cotizacionGuardada)
+    construirPDF(cotizacionGuardada, modo)
       .then(doc => doc.save(nombreArchivoPDF(cotizacionGuardada)))
       .catch(err => { console.error('Error generando el PDF', err); alert('Se abrió WhatsApp, pero hubo un error generando el PDF: ' + err.message); });
   };
@@ -1800,10 +1881,11 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
       alert('Este cliente no tiene correo guardado en la cotización. Agrégalo en el paso 1 y vuelve a guardar.');
       return;
     }
+    const modo = modoPdfSeleccionado();
     const asunto = `Cotización N° ${cotizacionGuardada.numero} — Nicom Tech Solutions`;
-    const cuerpo = `Hola ${cotizacionGuardada.cliente_nombre},\n\nAdjunto la cotización N° ${cotizacionGuardada.numero} por ${totalConBsTexto(cotizacionGuardada)}.\nEl PDF se acaba de descargar en tu equipo — adjúntalo aquí antes de enviar.\n\nSaludos,\nNicom Tech Solutions`;
+    const cuerpo = `Hola ${cotizacionGuardada.cliente_nombre},\n\nAdjunto la cotización N° ${cotizacionGuardada.numero} por ${totalConBsTexto(cotizacionGuardada, modo)}.\nEl PDF se acaba de descargar en tu equipo — adjúntalo aquí antes de enviar.\n\nSaludos,\nNicom Tech Solutions`;
     window.location.href = `mailto:${encodeURIComponent(cotizacionGuardada.cliente_email)}?subject=${encodeURIComponent(asunto)}&body=${encodeURIComponent(cuerpo)}`;
-    construirPDF(cotizacionGuardada)
+    construirPDF(cotizacionGuardada, modo)
       .then(doc => doc.save(nombreArchivoPDF(cotizacionGuardada)))
       .catch(err => { console.error('Error generando el PDF', err); alert('Se abrió tu correo, pero hubo un error generando el PDF: ' + err.message); });
   };
@@ -1840,7 +1922,8 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
         <td><select class="estado-select" onchange="actualizarEstadoCotizacion('${c.id}', this.value)">${opciones}</select></td>
         <td>
           <button class="secondary" style="margin:0 0 6px 0; padding:5px 10px; font-size:11px;" onclick="retomarCotizacion('${c.id}')">Retomar</button>
-          <button class="secondary" style="margin:0; padding:5px 10px; font-size:11px;" onclick="regenerarPDFHistorial('${c.id}')">PDF</button>
+          <button class="secondary" style="margin:0 0 6px 0; padding:5px 10px; font-size:11px;" onclick="regenerarPDFHistorial('${c.id}', 'ambos')">PDF ($ y Bs)</button>
+          <button class="secondary" style="margin:0; padding:5px 10px; font-size:11px;" onclick="regenerarPDFHistorial('${c.id}', 'usd')">PDF (solo $)</button>
         </td>
       `;
       tbody.appendChild(tr);
@@ -1851,20 +1934,33 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
     await supabase.from('cotizaciones').update({ estado, updated_at: new Date().toISOString() }).eq('id', id);
   };
 
-  window.regenerarPDFHistorial = async function(id) {
+  window.regenerarPDFHistorial = async function(id, modo = 'ambos') {
     try {
       const { data: cot } = await supabase.from('cotizaciones').select('*').eq('id', id).single();
       const { data: items } = await supabase.from('cotizacion_items').select('*').eq('cotizacion_id', id).order('orden');
       if (!cot) return;
+      // Igual que al "retomar": el Bs de cada ítem (y por lo tanto el subtotal y total en Bs)
+      // siempre se recalculan a la tasa BCV del momento en que se reimprime, nunca a la tasa
+      // congelada del día en que se guardó — solo si no hay tasa BCV cargada ahora mismo se
+      // usa lo que quedó guardado como respaldo, para que el PDF nunca quede en blanco.
+      const itemsRecalculados = (items || []).map(it => ({
+        producto_id: it.producto_id,
+        descripcion: it.descripcion,
+        cantidad: parseFloat(it.cantidad),
+        precioUnitario: parseFloat(it.precio_unitario),
+        precioUnitarioBs: tasaBCV ? parseFloat(it.precio_unitario) * tasaBCV : parseFloat(it.precio_unitario_bs || 0)
+      }));
+      const totalRecalculado = itemsRecalculados.reduce((acc, it) => acc + it.cantidad * it.precioUnitario, 0);
+      const totalBsRecalculado = itemsRecalculados.reduce((acc, it) => acc + it.cantidad * it.precioUnitarioBs, 0);
       const doc = await construirPDF({
         ...cot,
-        items: (items || []).map(it => ({
-          descripcion: it.descripcion,
-          cantidad: parseFloat(it.cantidad),
-          precioUnitario: parseFloat(it.precio_unitario),
-          precioUnitarioBs: parseFloat(it.precio_unitario_bs || 0)
-        }))
-      });
+        subtotal: totalRecalculado,
+        total: totalRecalculado,
+        subtotal_bs: totalBsRecalculado,
+        total_bs: totalBsRecalculado,
+        tasa_bcv_usada: tasaBCV || cot.tasa_bcv_usada,
+        items: itemsRecalculados
+      }, modo);
       doc.save(nombreArchivoPDF(cot));
     } catch (err) {
       console.error('Error generando el PDF', err);
