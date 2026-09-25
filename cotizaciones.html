@@ -322,7 +322,6 @@
         <tr><td>Subtotal — $ a tasa BCV</td><td class="num bs" id="txt-subtotal-bs">$0.00</td></tr>
         <tr class="total"><td>Total — si paga efectivo $</td><td class="num" id="txt-total">$0.00</td></tr>
         <tr><td>Total — $ a tasa BCV</td><td class="num bs" id="txt-total-bs">$0.00</td></tr>
-        <tr><td style="color:var(--muted); font-size:12px;">Referencia — monto a cancelar en Bs (tasa BCV del momento)</td><td class="num bs" id="txt-total-bs-ves" style="color:var(--muted); font-size:12px;">Bs 0,00</td></tr>
       </table>
     </div>
 
@@ -406,6 +405,7 @@
           <option value="usd">Efectivo en $ / Binance / Zelle — mostrar solo el precio en $ efectivo</option>
         </select>
       </div>
+      <div class="hint" id="ref-bcv-post-guardado" style="margin:0 0 12px 0; color:var(--gold); font-weight:600;"></div>
       <button class="secondary" style="margin-left:0;" onclick="descargarPDF()">Descargar PDF</button>
       <button class="secondary" onclick="enviarPorWhatsApp()">Enviar por WhatsApp</button>
       <button class="secondary" onclick="enviarPorCorreo()">Enviar por correo</button>
@@ -1103,9 +1103,6 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
     document.getElementById('txt-subtotal-bs').textContent = '$' + subtotalConBrecha.toFixed(2);
     document.getElementById('txt-total').textContent = '$' + total.toFixed(2);
     document.getElementById('txt-total-bs').textContent = '$' + totalConBrecha.toFixed(2);
-    // Referencia interna en bolívares (nunca reemplaza al $, que sigue siendo el precio que
-    // se cobra) — el monto que efectivamente hay que cobrar/cambiar en Bs a la tasa BCV de hoy.
-    document.getElementById('txt-total-bs-ves').textContent = tasaBCV ? fmtBs(totalConBrecha * tasaBCV) : 'Sin tasa cargada';
 
     const g = calcularGananciaGeneral();
     document.getElementById('txt-costo-total').textContent = '$' + g.costoTotal.toFixed(2);
@@ -1300,6 +1297,7 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
 
     cotizacionGuardada = { ...cabecera, id: cotizacion.id, numero: cotizacion.numero, fecha: cotizacion.fecha, items: itemsCotizacion.map(it => ({ ...it })) };
     document.getElementById('acciones-post-guardado').style.display = 'block';
+    actualizarRefBcvPostGuardado();
 
     cargarHistorial();
   };
@@ -1722,7 +1720,7 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
     // etiqueta; además el monto reduce su tamaño automáticamente si aun así no cabe en el
     // ancho de la caja, en vez de desbordarse.
     const cajaAncho = 230, cajaX = 555 - cajaAncho, cajaPad = 12;
-    const cajaAlto = modo === 'usd' ? 62 : 140;
+    const cajaAlto = modo === 'usd' ? 62 : 124;
     doc.setFillColor(244, 242, 236);
     doc.roundedRect(cajaX, yFinal, cajaAncho, cajaAlto, 4, 4, 'F');
 
@@ -1794,22 +1792,6 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
       doc.setTextColor(160, 128, 26);
       doc.text(valorBrecha, 555 - cajaPad, yCaja, { align: 'right' });
       doc.setTextColor(20, 30, 26);
-
-      // Referencia en bolívares a la tasa BCV del momento — se imprime más chico y con
-      // "Aprox." (nunca el símbolo "≈": la fuente Helvetica estándar de jsPDF no lo tiene y lo
-      // dibuja como un carácter roto) porque el monto principal para el cliente sigue siendo
-      // el de arriba en $; el número en Bs puede ser bastante largo, así que también reduce su
-      // tamaño de letra si hace falta para nunca desbordar el ancho de la caja.
-      if (tasaBCV) {
-        yCaja += 15;
-        const valorBs = 'Aprox. ' + fmtBs(totalConBrecha * tasaBCV) + ' (tasa BCV)';
-        const tamBs = tamañoQueCabeEnCaja(valorBs, 9.5);
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(tamBs);
-        doc.setTextColor(120, 120, 120);
-        doc.text(valorBs, 555 - cajaPad, yCaja, { align: 'right' });
-        doc.setTextColor(20, 30, 26);
-      }
     }
 
     yFinal += cajaAlto + 18;
@@ -1894,6 +1876,20 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
   // Binance del momento en que se genera el PDF (ver comentario en construirPDF).
   function modoPdfSeleccionado() {
     return document.getElementById('pdf-modo-pago')?.value === 'usd' ? 'usd' : 'ambos';
+  }
+
+  // Referencia rápida en $ a tasa BCV, justo donde se decide cómo imprimir el PDF — para que
+  // no haya que subir a la tabla de ítems a ver el total. Nunca se imprime en el PDF (eso ya
+  // lo cubre la caja "Transferencia, tarjeta u otro medio" del PDF en modo 'ambos'); esto es
+  // solo para que el vendedor lo tenga a la vista al momento de decidir/enviar.
+  function actualizarRefBcvPostGuardado() {
+    const el = document.getElementById('ref-bcv-post-guardado');
+    if (!el) return;
+    if (!cotizacionGuardada) { el.textContent = ''; return; }
+    const totalConBrecha = (cotizacionGuardada.items || []).reduce(
+      (acc, it) => acc + (it.cantidad || 0) * (it.precioConBrecha || 0), 0
+    );
+    el.textContent = `$ REF a BCV: $${totalConBrecha.toFixed(2)}`;
   }
 
   window.descargarPDF = async function() {
