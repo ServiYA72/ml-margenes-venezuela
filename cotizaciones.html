@@ -242,7 +242,7 @@
           <input type="number" step="0.01" id="pe-precio" oninput="actualizarPrevioBs()">
         </div>
         <div>
-          <label>Precio en $ con brecha cambiaria aplicada (transferencia, tarjeta u otro medio no efectivo)</label>
+          <label>Precio en $ a tasa BCV del momento (transferencia, tarjeta u otro medio no efectivo)</label>
           <input type="text" id="pe-precio-brecha" readonly style="background:var(--surface); color:var(--teal);">
         </div>
       </div>
@@ -305,9 +305,9 @@
           <th style="min-width:200px;">Descripción</th>
           <th class="num" style="width:70px;">Cant.</th>
           <th class="num" style="width:110px;">$ efectivo unit.</th>
-          <th class="num bs" style="width:130px;">$ con brecha unit.</th>
+          <th class="num bs" style="width:130px;">$ a tasa BCV unit.</th>
           <th class="num" style="width:100px;">Subtotal $ efectivo</th>
-          <th class="num bs" style="width:120px;">Subt. $ con brecha</th>
+          <th class="num bs" style="width:120px;">Subt. $ a tasa BCV</th>
           <th style="width:140px;"></th>
         </tr>
       </thead>
@@ -319,9 +319,10 @@
     <div class="totales-box">
       <table>
         <tr><td>Subtotal — si paga efectivo $</td><td class="num" id="txt-subtotal">$0.00</td></tr>
-        <tr><td>Subtotal — con brecha cambiaria ($)</td><td class="num bs" id="txt-subtotal-bs">$0.00</td></tr>
+        <tr><td>Subtotal — $ a tasa BCV</td><td class="num bs" id="txt-subtotal-bs">$0.00</td></tr>
         <tr class="total"><td>Total — si paga efectivo $</td><td class="num" id="txt-total">$0.00</td></tr>
-        <tr><td>Total — con brecha cambiaria ($)</td><td class="num bs" id="txt-total-bs">$0.00</td></tr>
+        <tr><td>Total — $ a tasa BCV</td><td class="num bs" id="txt-total-bs">$0.00</td></tr>
+        <tr><td style="color:var(--muted); font-size:12px;">Referencia — monto a cancelar en Bs (tasa BCV del momento)</td><td class="num bs" id="txt-total-bs-ves" style="color:var(--muted); font-size:12px;">Bs 0,00</td></tr>
       </table>
     </div>
 
@@ -417,7 +418,7 @@
     <table id="tabla-historial">
       <thead>
         <tr>
-          <th>N°</th><th>Cliente</th><th>Fecha</th><th class="num">Total $ efectivo</th><th class="num bs">Total $ c/brecha</th><th>Estado</th><th></th>
+          <th>N°</th><th>Cliente</th><th>Fecha</th><th class="num">Total $ efectivo</th><th class="num bs">Total $ a tasa BCV</th><th>Estado</th><th></th>
         </tr>
       </thead>
       <tbody></tbody>
@@ -1102,6 +1103,9 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
     document.getElementById('txt-subtotal-bs').textContent = '$' + subtotalConBrecha.toFixed(2);
     document.getElementById('txt-total').textContent = '$' + total.toFixed(2);
     document.getElementById('txt-total-bs').textContent = '$' + totalConBrecha.toFixed(2);
+    // Referencia interna en bolívares (nunca reemplaza al $, que sigue siendo el precio que
+    // se cobra) — el monto que efectivamente hay que cobrar/cambiar en Bs a la tasa BCV de hoy.
+    document.getElementById('txt-total-bs-ves').textContent = tasaBCV ? fmtBs(totalConBrecha * tasaBCV) : 'Sin tasa cargada';
 
     const g = calcularGananciaGeneral();
     document.getElementById('txt-costo-total').textContent = '$' + g.costoTotal.toFixed(2);
@@ -1439,21 +1443,19 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
     // Orden y columnas inspirados en el modelo de "Propuesta Económica" en Excel de Nicom
     // (ITEM | MARCA | CODIGO | CANT. | DESCRIPCION | PRECIO...): se agregan Ítem/Marca/Código
     // — Marca y Código salen del producto vinculado (productosCache), sin tocar el cálculo de
-    // precios. Ambos precios (efectivo y con brecha) van SIEMPRE en dólares — el PDF nunca
-    // muestra cifras en bolívares ni nombra su origen.
-    // "columnasPersonalizadas" permite dibujar la tabla en modo "solo $ efectivo" (sin la
-    // segunda columna en $) reutilizando exactamente la misma función — ver COLUMNAS_PDF_USD
-    // en construirPDF.
+    // precios. El precio impreso por ítem va siempre en dólares, referenciado a tasa BCV — el
+    // PDF nunca muestra cifras en bolívares por ítem ni nombra "Binance" en ningún lado (el
+    // total sí trae, aparte, una referencia en Bs — ver construirPDF).
+    // "columnasPersonalizadas" permite dibujar la tabla en modo "solo $ efectivo" reutilizando
+    // exactamente la misma función — ver COLUMNAS_PDF_USD / COLUMNAS_PDF_BCV en construirPDF.
     const columnas = columnasPersonalizadas || [
-      { titulo: 'Ítem', ancho: 16, align: 'center' },
-      { titulo: 'Marca', ancho: 46, align: 'left', angosta: true },
-      { titulo: 'Código', ancho: 44, align: 'left', angosta: true },
+      { titulo: 'Ítem', ancho: 20, align: 'center' },
+      { titulo: 'Marca', ancho: 50, align: 'left', angosta: true },
+      { titulo: 'Código', ancho: 50, align: 'left', angosta: true },
       { titulo: 'Cant.', ancho: 24, align: 'center' },
-      { titulo: 'Descripción', ancho: 165, align: 'left', wrap: true },
-      { titulo: '$ Efectivo', ancho: 58, align: 'right' },
-      { titulo: '$ c/Brecha', ancho: 58, align: 'right' },
-      { titulo: 'Subt. $ Ef.', ancho: 52, align: 'right' },
-      { titulo: 'Subt. $ Br.', ancho: 52, align: 'right' }
+      { titulo: 'Descripción', ancho: 235, align: 'left', wrap: true },
+      { titulo: '$ a tasa BCV', ancho: 70, align: 'right' },
+      { titulo: 'Subt. $ BCV', ancho: 66, align: 'right' }
     ];
     const idxDescripcion = columnas.findIndex(c => c.wrap);
     const tamañoBase = 8.5;
@@ -1581,14 +1583,29 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
     { titulo: 'Subt. $', ancho: 49, align: 'right' }
   ];
 
-  // "modo" decide cuántos precios se imprimen — ver el selector "Cómo va a pagar el cliente"
-  // en el panel de después de guardar. Los dos precios están SIEMPRE en dólares — el PDF
-  // nunca muestra ninguna cifra en bolívares ni nombra "Binance" ni "BCV" en ningún lado:
-  //  • 'ambos' (por defecto): 2 columnas en $ — "$ Efectivo" (pago directo en dólares) y
-  //    "$ c/Brecha" (transferencia, tarjeta u otro medio no efectivo), recalculado siempre a
-  //    la tasa del momento en que se genera el PDF (nunca una tasa congelada).
-  //  • 'usd': solo la columna "$ Efectivo" — para cuando ya se sabe que el cliente paga en
-  //    efectivo, Binance P2P o Zelle y no hace falta mostrarle el segundo precio.
+  // Columnas del modo "ambos": ya NO se imprime el precio "efectivo" por ítem (solo aparece,
+  // resumido, en la caja de totales) — cada línea muestra únicamente el precio de referencia
+  // a tasa BCV, para no saturar la tabla con 2 precios por fila. Mismo ancho total (515).
+  const COLUMNAS_PDF_BCV = [
+    { titulo: 'Ítem', ancho: 20, align: 'center' },
+    { titulo: 'Marca', ancho: 50, align: 'left', angosta: true },
+    { titulo: 'Código', ancho: 50, align: 'left', angosta: true },
+    { titulo: 'Cant.', ancho: 24, align: 'center' },
+    { titulo: 'Descripción', ancho: 235, align: 'left', wrap: true },
+    { titulo: '$ a tasa BCV', ancho: 70, align: 'right' },
+    { titulo: 'Subt. $ BCV', ancho: 66, align: 'right' }
+  ];
+
+  // "modo" decide qué se imprime — ver el selector "Cómo va a pagar el cliente" en el panel
+  // de después de guardar. El PDF nunca nombra "Binance" en ningún lado (la tasa BCV sí se
+  // menciona: es pública y oficial, así que no hay problema en referenciarla):
+  //  • 'ambos' (por defecto): la tabla de ítems solo imprime el precio de referencia "$ a tasa
+  //    BCV" por línea (ya no imprime el precio "efectivo" por ítem); la caja de totales sí
+  //    resume los 2: "Efectivo" y "Transferencia, tarjeta u otro medio" (este último con su
+  //    referencia en bolívares a tasa BCV debajo, más chica). Todo recalculado siempre a la
+  //    tasa del momento en que se genera el PDF (nunca una tasa congelada).
+  //  • 'usd': tabla y totales solo en $ efectivo — para cuando ya se sabe que el cliente paga
+  //    en efectivo, Binance P2P o Zelle y no hace falta mostrarle el segundo precio.
   // En los dos casos el cálculo de fondo es el mismo (precioConBrecha vive en itemsCotizacion
   // desde que se agregó cada ítem, o se recalculó al "retomar" la cotización) — "modo" solo
   // decide qué se dibuja en el PDF, nunca cambia cuánto se le cobra al cliente.
@@ -1666,20 +1683,21 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
           '$' + (it.cantidad * precioUnit).toFixed(2)
         ];
       }
+      // Modo 'ambos': por ítem solo se imprime el precio de referencia a tasa BCV (el precio
+      // "efectivo" ya no va en la tabla — se muestra resumido, una sola vez, en la caja de
+      // totales de abajo).
       return [
         String(idx + 1),
         marca,
         codigo,
         String(it.cantidad),
         it.descripcion,
-        '$' + precioUnit.toFixed(2),
         '$' + precioBrecha.toFixed(2),
-        '$' + (it.cantidad * precioUnit).toFixed(2),
         '$' + (it.cantidad * precioBrecha).toFixed(2)
       ];
     });
 
-    const yTrasTabla = dibujarTablaItemsPDF(doc, filas, y, margenX, modo === 'usd' ? COLUMNAS_PDF_USD : undefined);
+    const yTrasTabla = dibujarTablaItemsPDF(doc, filas, y, margenX, modo === 'usd' ? COLUMNAS_PDF_USD : COLUMNAS_PDF_BCV);
 
     let yFinal = yTrasTabla + 24;
     // Si la tabla llegó muy abajo (cotización con muchos ítems), abrimos página nueva
@@ -1704,7 +1722,7 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
     // etiqueta; además el monto reduce su tamaño automáticamente si aun así no cabe en el
     // ancho de la caja, en vez de desbordarse.
     const cajaAncho = 230, cajaX = 555 - cajaAncho, cajaPad = 12;
-    const cajaAlto = modo === 'usd' ? 62 : 124;
+    const cajaAlto = modo === 'usd' ? 62 : 140;
     doc.setFillColor(244, 242, 236);
     doc.roundedRect(cajaX, yFinal, cajaAncho, cajaAlto, 4, 4, 'F');
 
@@ -1776,21 +1794,34 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
       doc.setTextColor(160, 128, 26);
       doc.text(valorBrecha, 555 - cajaPad, yCaja, { align: 'right' });
       doc.setTextColor(20, 30, 26);
+
+      // Referencia en bolívares a la tasa BCV del momento — se imprime más chico y con
+      // "Aprox." (nunca el símbolo "≈": la fuente Helvetica estándar de jsPDF no lo tiene y lo
+      // dibuja como un carácter roto) porque el monto principal para el cliente sigue siendo
+      // el de arriba en $; el número en Bs puede ser bastante largo, así que también reduce su
+      // tamaño de letra si hace falta para nunca desbordar el ancho de la caja.
+      if (tasaBCV) {
+        yCaja += 15;
+        const valorBs = 'Aprox. ' + fmtBs(totalConBrecha * tasaBCV) + ' (tasa BCV)';
+        const tamBs = tamañoQueCabeEnCaja(valorBs, 9.5);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(tamBs);
+        doc.setTextColor(120, 120, 120);
+        doc.text(valorBs, 555 - cajaPad, yCaja, { align: 'right' });
+        doc.setTextColor(20, 30, 26);
+      }
     }
 
     yFinal += cajaAlto + 18;
 
-    // Nunca se menciona de dónde sale el segundo precio (esa operación no se expone en el
-    // PDF: no se nombra "Binance" ni "BCV" en ningún lado). Ambos precios van siempre en
-    // dólares — nunca se imprime ninguna cifra en bolívares — así que el documento no tiene
-    // que justificar ninguna tasa de cambio, solo aclarar en palabras simples por qué hay 2
-    // montos distintos. En modo "solo $ efectivo" no hay segundo precio, así que tampoco hace
-    // falta esta línea.
+    // El segundo precio se referencia explícitamente a la tasa BCV (tasa oficial y pública) —
+    // nunca se nombra "Binance" en ningún lado del PDF. En modo "solo $ efectivo" no hay
+    // segundo precio, así que tampoco hace falta esta línea.
     if (modo !== 'usd') {
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(9);
       doc.setTextColor(120, 120, 120);
-      doc.text('El precio por transferencia, tarjeta u otro medio distinto a efectivo incluye un ajuste por variación cambiaria del día.', margenX, yFinal);
+      doc.text('Precio en $ a tasa BCV VES del momento en que se realizó esta cotización.', margenX, yFinal);
       yFinal += 16;
       doc.setTextColor(20, 30, 26);
     }
