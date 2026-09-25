@@ -242,8 +242,12 @@
           <input type="number" step="0.01" id="pe-precio" oninput="actualizarPrevioBs()">
         </div>
         <div>
-          <label>Precio en Bs si paga en bolívares (tasa BCV de hoy)</label>
+          <label>Precio en Bs si paga en bolívares (tasa Binance de hoy)</label>
           <input type="text" id="pe-precio-bs" readonly style="background:var(--surface); color:var(--teal);">
+        </div>
+        <div>
+          <label>$ Binance (verificación — lo que obtienes al cambiar ese Bs a USDT)</label>
+          <input type="text" id="pe-precio-binance" readonly style="background:var(--surface); color:var(--gold);">
         </div>
       </div>
       <div class="hint" id="pe-costo-ref" style="margin-top:8px;"></div>
@@ -401,7 +405,7 @@
       <div style="margin:12px 0;">
         <label for="pdf-modo-pago" style="display:block; font-size:12px; color:var(--muted); margin-bottom:6px;">Cómo va a pagar el cliente (elige antes de imprimir/enviar — se puede cambiar y volver a generar las veces que haga falta)</label>
         <select id="pdf-modo-pago" style="max-width:520px;">
-          <option value="ambos">Aún no sabe — mostrar $ y Bs (a tasa BCV) para que elija</option>
+          <option value="ambos">Aún no sabe — mostrar $ y Bs (al cambio del día) para que elija</option>
           <option value="usd">Efectivo en $ / Binance / Zelle — mostrar solo el precio en $</option>
         </select>
       </div>
@@ -507,13 +511,14 @@
   // de ML), pero se ofrecen 2 formas de pago con 2 precios distintos — igual que se maneja
   // el negocio en la práctica:
   //  • Efectivo en $ (dólares en mano, Binance o Zelle): precio = costo + margen, sin brecha.
-  //  • Pago en Bs (bolívares): el mismo precio en $, convertido a la tasa BCV oficial del
-  //    día — nunca a la tasa Binance. El documento que recibe el cliente no puede reflejar
-  //    ni insinuar de dónde sale la conversión real (esa operación no se expone nunca en un
-  //    papel), así que toda cifra en bolívares que vea el cliente se cotiza siempre a BCV.
-  //    tasaBinance se sigue cargando y usando SOLO en el desglose interno (nunca se imprime)
-  //    para que el vendedor pueda verificar cuánto le queda de margen real si el cliente paga
-  //    en bolívares.
+  //  • Pago en Bs (bolívares): el mismo precio en $, convertido a la tasa Binance del día —
+  //    así el margen en $ queda protegido cuando esos bolívares se cambian de vuelta a USDT
+  //    (que es como el negocio los termina usando). El documento que recibe el cliente NUNCA
+  //    puede reflejar ni insinuar de dónde sale la conversión real ni nombrar "Binance" (esa
+  //    operación no se expone nunca en un papel) — el PDF solo dice "tasa de cambio del día",
+  //    sin atribuirla a BCV ni a ninguna otra fuente, para no imprimir una cifra que no es la
+  //    oficial pero tampoco delatar el mecanismo real. tasaBCV se sigue cargando y mostrando
+  //    en el indicador de tasas y se guarda de respaldo, pero ya no es la que fija el precio.
   function calcularPrecioSinComision(costoUsd, margenUsd) {
     if (!tasaBCV || !tasaBinance) return null;
     const costo = parseFloat(costoUsd) || 0;
@@ -521,8 +526,8 @@
     const precioEfectivo = costo + margen; // precio en $ efectivo — sin comisión, sin brecha
     return {
       costo, margenUsd: margen, precioEfectivo,
-      precioUsd: precioEfectivo,           // lo que se cobra al cliente si paga en $ efectivo
-      precioBs: precioEfectivo * tasaBCV   // lo que se cobra en Bs si paga en bolívares — a tasa BCV
+      precioUsd: precioEfectivo,               // lo que se cobra al cliente si paga en $ efectivo
+      precioBs: precioEfectivo * tasaBinance   // lo que se cobra en Bs si paga en bolívares — a tasa Binance
     };
   }
 
@@ -758,7 +763,18 @@
   window.actualizarPrevioBs = function() {
     const precio = parseFloat(document.getElementById('pe-precio').value) || 0;
     const campoBs = document.getElementById('pe-precio-bs');
-    campoBs.value = tasaBCV ? 'Bs ' + (precio * tasaBCV).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : 'Sin tasa cargada';
+    const campoBinance = document.getElementById('pe-precio-binance');
+    if (!tasaBinance) {
+      campoBs.value = 'Sin tasa cargada';
+      campoBinance.value = 'Sin tasa cargada';
+      return;
+    }
+    const precioBs = precio * tasaBinance;
+    campoBs.value = 'Bs ' + precioBs.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    // Verificación en vivo: al cambiar ese mismo Bs a USDT en Binance, debe recuperarse el
+    // mismo $ efectivo que se está cobrando — así el vendedor ve al momento de teclear el
+    // precio que el margen en $ queda protegido también cuando el cliente paga en bolívares.
+    campoBinance.value = '$' + (precioBs / tasaBinance).toFixed(2);
   };
 
   window.actualizarUiItemLibre = function() {
@@ -880,7 +896,7 @@
       producto_id: p.id,
       descripcion: p.nombre,
       cantidad, precioUnitario,
-      precioUnitarioBs: tasaBCV ? precioUnitario * tasaBCV : 0,
+      precioUnitarioBs: tasaBinance ? precioUnitario * tasaBinance : 0,
       costoOriginal: parseFloat(p.costo_usd || 0),
       tipoItem: 'producto',
       avisos: []
@@ -911,7 +927,7 @@
     }
     itemsCotizacion.push({
       producto_id: null, descripcion, cantidad, precioUnitario,
-      precioUnitarioBs: tasaBCV ? precioUnitario * tasaBCV : 0,
+      precioUnitarioBs: tasaBinance ? precioUnitario * tasaBinance : 0,
       costoOriginal: costo, tipoItem, avisos: []
     });
     renderizarTablaItems();
@@ -939,7 +955,7 @@
     if (campo === 'cantidad') item.cantidad = parseFloat(valor) || 0;
     if (campo === 'precioUnitario') {
       item.precioUnitario = parseFloat(valor) || 0;
-      item.precioUnitarioBs = tasaBCV ? item.precioUnitario * tasaBCV : item.precioUnitarioBs;
+      item.precioUnitarioBs = tasaBinance ? item.precioUnitario * tasaBinance : item.precioUnitarioBs;
     }
     actualizarFilaCalculada(idx);
     actualizarTotalesEnPantalla();
@@ -994,41 +1010,42 @@
       const precioBs = it.precioUnitarioBs || 0;
       let texto = `PRECIO A COBRAR AL CLIENTE (elige el cliente):
 • Efectivo en $ (dólares en mano, sin brecha): $${it.precioUnitario.toFixed(2)}
-• Pago en Bs (bolívares, a la tasa BCV de hoy): ${fmtBs(precioBs)}
+• Pago en Bs (bolívares, a la tasa Binance de hoy): ${fmtBs(precioBs)}
 
 DESGLOSE:
 • Costo del proveedor: $${d.costo.toFixed(2)}
 • Margen de ganancia: $${d.margenUsd.toFixed(2)}  (${margenPct.toFixed(1)}% sobre el costo)
 • Comisión de Mercado Libre: no se aplica (0%) — venta directa, fuera de Mercado Libre.`;
-      if (tasaBCV && tasaBinance) {
+      if (tasaBinance) {
         // Solo para uso interno del vendedor (nunca se imprime ni se le muestra al cliente):
-        // si el cliente paga en Bs a tasa BCV y ese dinero luego se cambia a USDT en Binance
-        // (a una tasa normalmente más alta que la BCV), el margen real en $ puede quedar por
-        // debajo del que se ve arriba — esta cuenta es para que el vendedor lo tenga claro.
+        // el precio en Bs ya se calculó a la tasa Binance de hoy (no a la BCV), así que al
+        // cambiar ese dinero a USDT en Binance el margen en $ queda protegido — esta cuenta
+        // confirma que la cifra en Bs de arriba realmente cuadra.
         const obtenidoEnBinance = precioBs / tasaBinance;
         const diferencia = d.precioEfectivo - obtenidoEnBinance;
         const notaDif = Math.abs(diferencia) < 0.01
-          ? 'Coincide con el margen en $ efectivo.'
-          : diferencia > 0
-            ? `$${diferencia.toFixed(2)} MENOS que el margen en $ efectivo (la BCV está por debajo de la Binance hoy).`
-            : `$${Math.abs(diferencia).toFixed(2)} MÁS que el margen en $ efectivo (la BCV está por encima de la Binance hoy).`;
-        texto += `\n\nSOLO PARA TI — si ese dinero en Bs lo cambias a USDT en Binance (uso interno, nunca se imprime):
-• Cobras (a tasa BCV): ${fmtBs(precioBs)}
+          ? 'Coincide con el margen en $ efectivo — el precio en Bs ya está protegido a tasa Binance.'
+          : `$${Math.abs(diferencia).toFixed(2)} de diferencia frente al margen en $ efectivo (revisa la tasa Binance cargada).`;
+        texto += `\n\nSOLO PARA TI — verificación (uso interno, nunca se imprime):
+• Cobras (a tasa Binance): ${fmtBs(precioBs)}
 • Cambias a USDT en Binance a ${tasaBinance.toFixed(2)}: obtienes $${obtenidoEnBinance.toFixed(2)}
-• Diferencia frente al margen en $ efectivo: ${notaDif}`;
+• ${notaDif}`;
+        if (tasaBCV) {
+          texto += `\n• Solo como referencia (no se usa para el cálculo ni se imprime): tasa BCV oficial de hoy Bs ${tasaBCV.toFixed(2)} — a esa tasa este mismo precio en $ equivaldría a ${fmtBs(d.precioEfectivo * tasaBCV)}.`;
+        }
       }
       return texto;
     }
     // Ítem libre / mano de obra técnica: el precio en $ que se escribe a mano YA es el
     // precio "efectivo"; el precio en Bs (si el cliente paga en bolívares) se calcula igual
-    // que en catálogo, a la tasa BCV de hoy.
+    // que en catálogo, a la tasa Binance de hoy.
     const ganancia = it.precioUnitario - costo;
     const margenPct = it.precioUnitario > 0 ? (ganancia / it.precioUnitario * 100) : 0;
     const esManoDeObra = it.tipoItem === 'mano_obra';
     return `${esManoDeObra ? 'Mano de obra técnica' : 'Ítem libre'}
 PRECIO A COBRAR AL CLIENTE (elige el cliente):
 • Efectivo en $: $${it.precioUnitario.toFixed(2)}
-• Pago en Bs (a la tasa BCV de hoy): ${fmtBs(it.precioUnitarioBs || 0)}
+• Pago en Bs (a la tasa Binance de hoy): ${fmtBs(it.precioUnitarioBs || 0)}
 
 ${costo > 0 ? `Costo (pagado a técnico/proveedor externo): $${costo.toFixed(2)}` : 'Costo: $0.00 — ' + (esManoDeObra ? 'mano de obra propia, sin subcontratar (100% de ganancia)' : 'sin costo registrado')}
 Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
@@ -1361,10 +1378,10 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
         cantidad: parseFloat(it.cantidad),
         precioUnitario: parseFloat(it.precio_unitario),
         // El precio en $ efectivo ya cotizado se respeta; el precio en Bs (pago en bolívares)
-        // se recalcula con la tasa BCV de HOY, por eso puede diferir del que se guardó
-        // originalmente — la cifra en bolívares siempre sigue la tasa BCV del momento en que
-        // se imprime, nunca una tasa congelada del día en que se guardó.
-        precioUnitarioBs: tasaBCV ? parseFloat(it.precio_unitario) * tasaBCV : parseFloat(it.precio_unitario_bs || 0),
+        // se recalcula con la tasa Binance de HOY, por eso puede diferir del que se guardó
+        // originalmente — la cifra en bolívares siempre sigue la tasa Binance del momento en
+        // que se imprime, nunca una tasa congelada del día en que se guardó.
+        precioUnitarioBs: tasaBinance ? parseFloat(it.precio_unitario) * tasaBinance : parseFloat(it.precio_unitario_bs || 0),
         costoOriginal: it.costo_original_usd != null ? parseFloat(it.costo_original_usd) : null,
         // Cotizaciones guardadas antes de esta columna no tienen tipo_item: se infiere
         // 'producto' si viene del catálogo, o 'libre' por defecto (nunca se pierde el ítem).
@@ -1395,7 +1412,7 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
 
     const huboAvisos = itemsCotizacion.some(it => it.avisos.length > 0);
     msg.className = 'msg ok';
-    msg.textContent = `Retomando cotización N° ${cot.numero} — el subtotal y total en Bs se recalcularon a la tasa BCV de hoy (Bs ${tasaBCV?.toFixed(2) ?? '—'} por USD).` +
+    msg.textContent = `Retomando cotización N° ${cot.numero} — el subtotal y total en Bs se recalcularon a la tasa Binance de hoy (Bs ${tasaBinance?.toFixed(2) ?? '—'} por USD).` +
       (huboAvisos ? ' Hay avisos de catálogo en algunos ítems — revísalos en la tabla de arriba.' : '');
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -1556,13 +1573,14 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
 
   // "modo" decide qué moneda(s) se imprimen — ver el selector "Cómo va a pagar el cliente" en
   // el panel de después de guardar:
-  //  • 'ambos' (por defecto): $ y Bs, con el Bs siempre a la tasa BCV del momento en que se
-  //    genera el PDF (nunca una tasa congelada ni la tasa Binance).
+  //  • 'ambos' (por defecto): $ y Bs, con el Bs siempre a la tasa Binance del momento en que
+  //    se genera el PDF (nunca una tasa congelada) — pero el PDF nunca nombra "Binance": la
+  //    nota al pie solo dice "tasa de cambio del día", sin atribuirla a ninguna fuente.
   //  • 'usd': solo $ — para cuando ya se sabe que el cliente paga en efectivo, Binance o Zelle
   //    y no hace falta mostrarle ninguna cifra en bolívares.
-  // En los dos casos el cálculo de fondo es el mismo (tasaBCV vive en itemsCotizacion desde que
-  // se agregó cada ítem, o se recalculó al "retomar" la cotización) — "modo" solo decide qué se
-  // dibuja en el PDF, nunca cambia cuánto se le cobra al cliente.
+  // En los dos casos el cálculo de fondo es el mismo (tasaBinance vive en itemsCotizacion desde
+  // que se agregó cada ítem, o se recalculó al "retomar" la cotización) — "modo" solo decide
+  // qué se dibuja en el PDF, nunca cambia cuánto se le cobra al cliente.
   async function construirPDF(cot, modo = 'ambos') {
     const { jsPDF } = window.jspdf;
     const doc = new jsPDF({ unit: 'pt', format: 'letter' });
@@ -1747,14 +1765,17 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
     yFinal += cajaAlto + 18;
 
     // Nunca se menciona de dónde sale la conversión real (esa operación no se expone en el
-    // PDF) — el documento solo dice que el bolívar se cotiza a la tasa BCV, que es la tasa
-    // oficial y pública. En modo "solo $" no hay ninguna cifra en bolívares, así que tampoco
-    // hace falta esta línea.
+    // PDF): el precio en Bs se calcula a la tasa Binance del día, pero el documento NUNCA
+    // nombra "Binance" — y tampoco dice "BCV", porque la cifra impresa ya no corresponde a la
+    // tasa oficial y decirlo sería falso. Por eso la nota es neutra: solo informa la tasa de
+    // cambio (el número) sin atribuirla a ninguna fuente. En modo "solo $" no hay ninguna
+    // cifra en bolívares, así que tampoco hace falta esta línea.
     if (modo !== 'usd') {
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(9);
       doc.setTextColor(120, 120, 120);
-      if (cot.tasa_bcv_usada) { doc.text(`Cotización a tasa BCV — precio en bolívares calculado a Bs ${Number(cot.tasa_bcv_usada).toFixed(2)} por USD.`, margenX, yFinal); yFinal += 16; }
+      const tasaParaNota = cot.tasa_binance_usada || cot.tasa_bcv_usada;
+      if (tasaParaNota) { doc.text(`Precio en bolívares calculado a la tasa de cambio del día: Bs ${Number(tasaParaNota).toFixed(2)} por USD.`, margenX, yFinal); yFinal += 16; }
       doc.setTextColor(20, 30, 26);
     }
 
@@ -1823,7 +1844,7 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
 
   // Lee el selector "Cómo va a pagar el cliente" — se puede cambiar y reimprimir las veces que
   // haga falta, incluso después de retomar la cotización para modificarla; siempre usa la tasa
-  // BCV del momento en que se genera el PDF (ver comentario en construirPDF).
+  // Binance del momento en que se genera el PDF (ver comentario en construirPDF).
   function modoPdfSeleccionado() {
     return document.getElementById('pdf-modo-pago')?.value === 'usd' ? 'usd' : 'ambos';
   }
@@ -1940,15 +1961,15 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
       const { data: items } = await supabase.from('cotizacion_items').select('*').eq('cotizacion_id', id).order('orden');
       if (!cot) return;
       // Igual que al "retomar": el Bs de cada ítem (y por lo tanto el subtotal y total en Bs)
-      // siempre se recalculan a la tasa BCV del momento en que se reimprime, nunca a la tasa
-      // congelada del día en que se guardó — solo si no hay tasa BCV cargada ahora mismo se
-      // usa lo que quedó guardado como respaldo, para que el PDF nunca quede en blanco.
+      // siempre se recalculan a la tasa Binance del momento en que se reimprime, nunca a la
+      // tasa congelada del día en que se guardó — solo si no hay tasa Binance cargada ahora
+      // mismo se usa lo que quedó guardado como respaldo, para que el PDF nunca quede en blanco.
       const itemsRecalculados = (items || []).map(it => ({
         producto_id: it.producto_id,
         descripcion: it.descripcion,
         cantidad: parseFloat(it.cantidad),
         precioUnitario: parseFloat(it.precio_unitario),
-        precioUnitarioBs: tasaBCV ? parseFloat(it.precio_unitario) * tasaBCV : parseFloat(it.precio_unitario_bs || 0)
+        precioUnitarioBs: tasaBinance ? parseFloat(it.precio_unitario) * tasaBinance : parseFloat(it.precio_unitario_bs || 0)
       }));
       const totalRecalculado = itemsRecalculados.reduce((acc, it) => acc + it.cantidad * it.precioUnitario, 0);
       const totalBsRecalculado = itemsRecalculados.reduce((acc, it) => acc + it.cantidad * it.precioUnitarioBs, 0);
@@ -1959,6 +1980,7 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
         subtotal_bs: totalBsRecalculado,
         total_bs: totalBsRecalculado,
         tasa_bcv_usada: tasaBCV || cot.tasa_bcv_usada,
+        tasa_binance_usada: tasaBinance || cot.tasa_binance_usada,
         items: itemsRecalculados
       }, modo);
       doc.save(nombreArchivoPDF(cot));
