@@ -322,6 +322,7 @@
         <tr><td>Subtotal — $ a tasa BCV</td><td class="num bs" id="txt-subtotal-bs">$0.00</td></tr>
         <tr class="total"><td>Total — si paga efectivo $</td><td class="num" id="txt-total">$0.00</td></tr>
         <tr><td>Total — $ a tasa BCV</td><td class="num bs" id="txt-total-bs">$0.00</td></tr>
+        <tr><td>Total — Bs a tasa BCV (referencia)</td><td class="num bs" id="txt-total-bs-ves">Bs 0,00</td></tr>
       </table>
     </div>
 
@@ -1103,6 +1104,7 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
     document.getElementById('txt-subtotal-bs').textContent = '$' + subtotalConBrecha.toFixed(2);
     document.getElementById('txt-total').textContent = '$' + total.toFixed(2);
     document.getElementById('txt-total-bs').textContent = '$' + totalConBrecha.toFixed(2);
+    document.getElementById('txt-total-bs-ves').textContent = fmtBs(totalConBrecha * (tasaBCV || 0));
 
     const g = calcularGananciaGeneral();
     document.getElementById('txt-costo-total').textContent = '$' + g.costoTotal.toFixed(2);
@@ -1598,10 +1600,10 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
   // de después de guardar. El PDF nunca nombra "Binance" en ningún lado (la tasa BCV sí se
   // menciona: es pública y oficial, así que no hay problema en referenciarla):
   //  • 'ambos' (por defecto): la tabla de ítems solo imprime el precio de referencia "$ a tasa
-  //    BCV" por línea (ya no imprime el precio "efectivo" por ítem); la caja de totales sí
-  //    resume los 2: "Efectivo" y "Transferencia, tarjeta u otro medio" (este último con su
-  //    referencia en bolívares a tasa BCV debajo, más chica). Todo recalculado siempre a la
-  //    tasa del momento en que se genera el PDF (nunca una tasa congelada).
+  //    BCV" por línea (ya no imprime el precio "efectivo" por ítem); la caja de totales muestra
+  //    un solo monto a pagar ("TOTAL A PAGAR", en $ a tasa BCV) con su referencia en bolívares
+  //    a tasa BCV debajo, más chica. Todo recalculado siempre a la tasa del momento en que se
+  //    genera el PDF (nunca una tasa congelada).
   //  • 'usd': tabla y totales solo en $ efectivo — para cuando ya se sabe que el cliente paga
   //    en efectivo, Binance P2P o Zelle y no hace falta mostrarle el segundo precio.
   // En los dos casos el cálculo de fondo es el mismo (precioConBrecha vive en itemsCotizacion
@@ -1720,7 +1722,7 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
     // etiqueta; además el monto reduce su tamaño automáticamente si aun así no cabe en el
     // ancho de la caja, en vez de desbordarse.
     const cajaAncho = 230, cajaX = 555 - cajaAncho, cajaPad = 12;
-    const cajaAlto = modo === 'usd' ? 62 : 124;
+    const cajaAlto = modo === 'usd' ? 62 : 96;
     doc.setFillColor(244, 242, 236);
     doc.roundedRect(cajaX, yFinal, cajaAncho, cajaAlto, 4, 4, 'F');
 
@@ -1749,48 +1751,33 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
       doc.setTextColor(20, 30, 26);
       doc.text(valorUSD, 555 - cajaPad, yCaja + 6, { align: 'right' });
     } else {
-      // Caja de resumen: NO son el mismo monto en 2 monedas — son 2 formas de pago distintas,
-      // cada una con su propio total, así que van en bloques separados y bien rotulados (nunca
-      // un solo texto largo "$... Bs..." que además se encimaba con la etiqueta al no caber
-      // en el espacio entre "Total" y el borde).
-      // Etiqueta y monto van en líneas separadas (no en la misma fila) para que un monto en
-      // bolívares grande (Bs suele tener muchas más cifras que $) nunca se encime con su
-      // etiqueta; además el monto reduce su tamaño automáticamente si aun así no cabe en el
-      // ancho de la caja, en vez de desbordarse.
+      // Un solo monto en $ (el que sí ve/paga el cliente) — sin encabezado de "elige cómo
+      // pagar" ni fila de "Efectivo": esa comparación ya no se muestra aquí. Debajo, de
+      // referencia, el equivalente en Bs a tasa BCV del momento (monto grande, por eso usa
+      // tamañoQueCabeEnCaja para reducir su tamaño automáticamente si no cabe en el ancho).
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(8);
       doc.setTextColor(110, 120, 114);
-      doc.text('TOTAL — EL CLIENTE ELIGE CÓMO PAGAR', cajaX + cajaPad, yCaja);
+      doc.text('TOTAL A PAGAR', cajaX + cajaPad, yCaja);
       yCaja += 17;
-
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(9.5);
-      doc.setTextColor(90, 100, 95);
-      doc.text('Efectivo (dólares en mano)', cajaX + cajaPad, yCaja);
-      yCaja += 17;
-      const valorUSD = '$' + total.toFixed(2);
-      const tamUSD = tamañoQueCabeEnCaja(valorUSD, 16);
+      const valorBrecha = '$' + totalConBrecha.toFixed(2);
+      const tamBrecha = tamañoQueCabeEnCaja(valorBrecha, 20);
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(tamUSD);
+      doc.setFontSize(tamBrecha);
       doc.setTextColor(20, 30, 26);
-      doc.text(valorUSD, 555 - cajaPad, yCaja, { align: 'right' });
-      yCaja += 16;
+      doc.text(valorBrecha, 555 - cajaPad, yCaja + 6, { align: 'right' });
+      yCaja += 26;
 
       doc.setDrawColor(205, 198, 178);
       doc.line(cajaX + cajaPad, yCaja, 555 - cajaPad, yCaja);
       yCaja += 17;
 
-      doc.setFont('helvetica', 'normal');
-      doc.setFontSize(9.5);
-      doc.setTextColor(90, 100, 95);
-      doc.text('Transferencia, tarjeta u otro medio', cajaX + cajaPad, yCaja);
-      yCaja += 17;
-      const valorBrecha = '$' + totalConBrecha.toFixed(2);
-      const tamBrecha = tamañoQueCabeEnCaja(valorBrecha, 16);
+      const valorBs = 'Aprox. ' + fmtBs(totalConBrecha * (tasaBCV || 0)) + ' (tasa BCV)';
+      const tamBs = tamañoQueCabeEnCaja(valorBs, 11);
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(tamBrecha);
+      doc.setFontSize(tamBs);
       doc.setTextColor(160, 128, 26);
-      doc.text(valorBrecha, 555 - cajaPad, yCaja, { align: 'right' });
+      doc.text(valorBs, 555 - cajaPad, yCaja, { align: 'right' });
       doc.setTextColor(20, 30, 26);
     }
 
@@ -1889,7 +1876,7 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
     const totalConBrecha = (cotizacionGuardada.items || []).reduce(
       (acc, it) => acc + (it.cantidad || 0) * (it.precioConBrecha || 0), 0
     );
-    el.textContent = `$ REF a BCV: $${totalConBrecha.toFixed(2)}`;
+    el.textContent = `Precio en $ BCV: $${totalConBrecha.toFixed(2)}`;
   }
 
   window.descargarPDF = async function() {
