@@ -720,6 +720,19 @@
       if (colTitulo === -1 || colSku === -1) continue;
 
       const buscar = (pred) => normFila.findIndex(pred);
+      // Antes esto exigía coincidencia EXACTA del encabezado normalizado (ej. "descripcion") y,
+      // si la columna no aparecía con ese texto exacto en una categoría particular, la búsqueda
+      // devolvía -1 en silencio — sin avisar nada — y esa columna (fotos, stock, precio,
+      // descripción, marca o modelo) simplemente no se escribía en la planilla, sin ningún error
+      // visible. Ahora, si la coincidencia exacta falla, se intenta con "empieza con" y después
+      // con "contiene" ese mismo texto — así una variación de redacción de Mercado Libre (ej.
+      // "Descripción del producto" en vez de "Descripción" a secas) todavía se reconoce.
+      const buscarConRespaldo = (textoExacto) => {
+        let idx = buscar(v => v === textoExacto);
+        if (idx === -1) idx = buscar(v => v.startsWith(textoExacto));
+        if (idx === -1) idx = buscar(v => v.includes(textoExacto));
+        return idx;
+      };
       return {
         filaEncabezado: f,
         // IMPORTANTE — antes esto era "f + 4" (apuntaba a la fila 7). Comparando el archivo XML
@@ -740,12 +753,12 @@
         col: {
           titulo: colTitulo,
           sku: colSku,
-          fotos: buscar(v => v === 'fotos'),
-          stock: buscar(v => v === 'stock'),
-          precio: buscar(v => v === 'precio'),
-          descripcion: buscar(v => v === 'descripcion'),
-          marca: buscar(v => v === 'marca'),
-          modelo: buscar(v => v === 'modelo')
+          fotos: buscarConRespaldo('fotos'),
+          stock: buscarConRespaldo('stock'),
+          precio: buscarConRespaldo('precio'),
+          descripcion: buscarConRespaldo('descripcion'),
+          marca: buscarConRespaldo('marca'),
+          modelo: buscarConRespaldo('modelo')
         }
       };
     }
@@ -1023,6 +1036,22 @@
     const corte = limpio.slice(0, maxLen);
     const ultimoEspacio = corte.lastIndexOf(' ');
     return (ultimoEspacio > 30 ? corte.slice(0, ultimoEspacio) : corte).trim();
+  }
+
+  // En el Dashboard, "publicaciones.descripcion" puede traer pegados 2 textos separados por este
+  // marcador: la descripción predeterminada (arriba) y la sugerencia de la IA para ese producto
+  // en particular (abajo) — ver MARCADOR_SUGERENCIA_IA en dashboard.html, mismo texto exacto.
+  // A diferencia del catálogo (web y PDF), que solo muestra la parte de la IA (para no repetir el
+  // mismo texto genérico en cada tarjeta), la planilla de Mercado Libre SÍ debe llevar las 2 partes
+  // juntas — es la descripción completa de ESE producto, no una vidriera de varios productos a la
+  // vez. Lo único que no debe llegar a Mercado Libre es el propio marcador ("--- Sugerencia de la
+  // IA... ---"): es un separador de uso interno para que el Dashboard sepa dónde reemplazar la
+  // sugerencia si se regenera, nunca texto pensado para que lo vea el cliente. Por eso acá se
+  // arman las 2 partes en un solo párrafo limpio, con solo un salto de línea entre ellas.
+  const MARCADOR_SUGERENCIA_IA = '\n\n--- Sugerencia de la IA (edítala o bórrala como quieras) ---\n';
+  function descripcionParaExcelML(descripcionCompleta) {
+    const texto = String(descripcionCompleta || '');
+    return texto.split(MARCADOR_SUGERENCIA_IA).map(p => p.trim()).filter(Boolean).join('\n\n');
   }
 
   window.cargarPlantillaPreparar = async function(file) {
@@ -1306,9 +1335,11 @@
         { col: enc.col.sku, valor: p.sku || '', tipo: 'texto' },
         // La descripción generada con IA (o escrita a mano) en el Dashboard se guarda en
         // publicaciones.descripcion — antes esta columna se llenaba siempre con el nombre del
-        // producto, ignorando esa descripción. Ahora usa la descripción real cuando existe, y
-        // solo cae de vuelta al nombre si el producto todavía no tiene ninguna descripción guardada.
-        { col: enc.col.descripcion, valor: (pub && pub.descripcion && pub.descripcion.trim()) ? pub.descripcion.trim() : (p.nombre || ''), tipo: 'texto' },
+        // producto, ignorando esa descripción. Ahora usa la descripción real cuando existe (la
+        // predeterminada y la de la IA juntas, limpiando el marcador interno que las separa — ver
+        // descripcionParaExcelML), y solo cae de vuelta al nombre si el producto todavía no tiene
+        // ninguna descripción guardada.
+        { col: enc.col.descripcion, valor: descripcionParaExcelML(pub && pub.descripcion) || (p.nombre || ''), tipo: 'texto' },
       ];
       if (pub) {
         // IMPORTANTE: acá va fotos_ml (las URLs que da el "Gestor de fotos" de Mercado Libre),
