@@ -722,21 +722,43 @@
 </div>
 
 <div id="modal-editor-foto" style="display:none; position:fixed; inset:0; background:rgba(15,27,23,0.85); z-index:60; align-items:center; justify-content:center; padding:24px;">
-  <div style="background:var(--surface); border:1px solid var(--line); max-width:560px; width:100%; max-height:90vh; overflow-y:auto; padding:24px;">
+  <div style="background:var(--surface); border:1px solid var(--line); max-width:600px; width:100%; max-height:90vh; overflow-y:auto; padding:24px;">
     <div style="display:flex; justify-content:space-between; align-items:start; margin-bottom:14px;">
-      <h2 style="font-family:'Fraunces',serif; font-weight:400; font-size:19px; margin:0;">Editar foto pegada</h2>
+      <h2 style="font-family:'Fraunces',serif; font-weight:400; font-size:19px; margin:0;">Editor de fotos</h2>
       <button type="button" onclick="cerrarEditorFoto()" style="background:none; border:none; color:var(--muted); font-size:20px; cursor:pointer; line-height:1;">×</button>
     </div>
-    <div style="background-image:repeating-conic-gradient(#3a3a3a 0% 25%, #2a2a2a 0% 50%); background-size:16px 16px; display:flex; align-items:center; justify-content:center; min-height:220px; border:1px solid var(--line);">
-      <canvas id="canvas-editor-foto" style="max-width:100%; max-height:400px; display:block;"></canvas>
+    <div id="contenedor-canvas-editor" style="position:relative; background-image:repeating-conic-gradient(#3a3a3a 0% 25%, #2a2a2a 0% 50%); background-size:16px 16px; display:flex; align-items:center; justify-content:center; min-height:220px; border:1px solid var(--line);">
+      <canvas id="canvas-editor-foto" style="max-width:100%; max-height:400px; display:block; touch-action:none; cursor:default;"></canvas>
+      <button type="button" id="btn-eliminar-capa" onclick="eliminarCapaSeleccionada()" title="Eliminar este elemento" style="display:none; position:absolute; width:26px; height:26px; border-radius:50%; background:var(--rust); color:var(--paper); border:2px solid var(--surface); font-size:13px; line-height:1; cursor:pointer; align-items:center; justify-content:center; padding:0; z-index:2;">🗑</button>
     </div>
+
     <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:14px;">
       <button type="button" class="btn-ia" onclick="editorQuitarFondo()">🪄 Quitar fondo</button>
       <button type="button" class="btn-ia" onclick="editorMejorarImagen()">✨ Mejorar automático</button>
       <button type="button" onclick="editorDeshacer()" style="padding:9px 14px; font-size:12.5px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line); cursor:pointer;">↩ Deshacer</button>
     </div>
-    <div id="msg-editor-foto" style="font-size:12px; color:var(--muted); margin-top:8px; min-height:14px;"></div>
-    <div class="hint" style="margin-top:6px;">"Quitar fondo" funciona mejor con fotos de fondo parejo (blanco, gris, una mesa lisa). Si el resultado no queda limpio, usa "Deshacer" e inténtalo con otra captura.</div>
+
+    <div class="subseccion-titulo" style="margin-top:16px; font-size:12px; color:var(--muted); text-transform:uppercase; letter-spacing:.03em;">Pegar algo encima de la foto</div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
+      <button type="button" onclick="document.getElementById('input-editor-agregar-imagen').click()" style="padding:9px 14px; font-size:12.5px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line); cursor:pointer;">💻 Foto de mi PC</button>
+      <input type="file" id="input-editor-agregar-imagen" accept="image/*" style="display:none;" onchange="agregarCapaImagenDesdeArchivo(this.files[0])">
+      <button type="button" onclick="editorAgregarDesdeUrl()" style="padding:9px 14px; font-size:12.5px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line); cursor:pointer;">🔗 Desde una URL</button>
+      <button type="button" onclick="editorTogglePopoverStickers()" style="padding:9px 14px; font-size:12.5px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line); cursor:pointer;">😊 Sticker</button>
+      <button type="button" onclick="editorTogglePopoverTexto()" style="padding:9px 14px; font-size:12.5px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line); cursor:pointer;">🔤 Texto</button>
+    </div>
+    <div class="hint" style="margin-top:6px;">También puedes copiar una imagen (una captura, o una foto copiada de otra página) y pegarla aquí con <strong>Ctrl+V</strong> mientras este editor está abierto. Una vez pegado, arrastra cualquier elemento para moverlo, o desde su esquina inferior derecha para cambiar su tamaño; el botón 🗑 lo quita.</div>
+
+    <div id="popover-stickers" style="display:none; gap:6px; flex-wrap:wrap; align-items:center; background:var(--surface-2); border:1px solid var(--line); padding:10px; margin-top:10px;"></div>
+    <div id="popover-texto" style="display:none; gap:8px; flex-wrap:wrap; align-items:center; background:var(--surface-2); border:1px solid var(--line); padding:10px; margin-top:10px;">
+      <input type="text" id="input-texto-nuevo" placeholder="Ej: ¡OFERTA! / NUEVO / -20%" style="flex:1; min-width:140px;">
+      <input type="color" id="input-color-texto" value="#ffffff" title="Color del texto" style="width:40px; height:38px; padding:2px; cursor:pointer;">
+      <input type="range" id="input-tamano-texto" min="16" max="140" value="40" title="Tamaño de letra" style="width:110px;">
+      <label style="display:flex; align-items:center; gap:5px; font-size:12px; color:var(--muted); margin-bottom:0; white-space:nowrap;"><input type="checkbox" id="input-negrita-texto" style="width:auto;"> Negrita</label>
+      <button type="button" class="btn-ia" style="margin-top:0;" onclick="editorAgregarTexto()">Agregar texto</button>
+    </div>
+
+    <div id="msg-editor-foto" style="font-size:12px; color:var(--muted); margin-top:10px; min-height:14px;"></div>
+    <div class="hint" style="margin-top:2px;">"Quitar fondo" y "Mejorar automático" solo afectan la foto de base, no los elementos pegados encima. "Quitar fondo" funciona mejor con fotos de fondo parejo (blanco, gris, una mesa lisa) — si el resultado no queda limpio, usa "Deshacer".</div>
     <div style="display:flex; gap:8px; margin-top:16px; justify-content:flex-end;">
       <button type="button" onclick="cerrarEditorFoto()" style="padding:9px 16px; font-size:13px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line); cursor:pointer;">Cancelar</button>
       <button type="button" class="add" onclick="guardarFotoEditada()">Guardar foto</button>
@@ -1767,15 +1789,23 @@
     }
   };
 
+  // La "foto de portada" es simplemente la primera URL del listado — así es como ya la toma la
+  // vista del catálogo público (vista_catalogo_publico.imagen_url = primera foto del producto).
+  // Esta previsualización deja elegir cuál va primero, sin tener que editar el campo de texto a mano.
   window.actualizarPrevisualizacionFotos = function() {
     const cont = document.getElementById('previsualizacion-fotos');
     if (!cont) return;
     const urls = document.getElementById('prod-imagenes').value.split(',').map(s => s.trim()).filter(Boolean);
-    cont.innerHTML = urls.map((url, i) => `
-      <div style="position:relative;">
-        <img src="${escapeHtml(url)}" style="width:64px; height:64px; object-fit:cover; border:1px solid var(--line); display:block;" onerror="this.style.opacity='0.2';">
+    cont.innerHTML = urls.map((url, i) => {
+      const esPortada = i === 0;
+      return `
+      <div style="position:relative; width:64px;">
+        <img src="${escapeHtml(url)}" style="width:64px; height:64px; object-fit:cover; border:2px solid ${esPortada ? 'var(--gold)' : 'var(--line)'}; display:block;" onerror="this.style.opacity='0.2';">
+        <div ${esPortada ? '' : `onclick="hacerFotoPortada(${i})" role="button"`} title="${esPortada ? 'Esta es la foto de portada: la primera que ve el cliente en el catálogo' : 'Usar esta foto como portada'}" style="position:absolute; bottom:0; left:0; right:0; background:rgba(15,27,23,0.78); text-align:center; padding:2px 0; font-size:8px; font-weight:700; letter-spacing:.02em; ${esPortada ? 'color:var(--gold);' : 'color:var(--paper); cursor:pointer;'}">${esPortada ? '★ PORTADA' : 'Hacer portada'}</div>
+        <button type="button" onclick="editarFotoExistente(${i})" title="Editar esta foto" style="position:absolute; top:-7px; left:-7px; width:18px; height:18px; border-radius:50%; background:var(--surface-2); color:var(--gold); border:1px solid var(--gold); font-size:10px; line-height:1; cursor:pointer; padding:0; display:flex; align-items:center; justify-content:center;">✏️</button>
         <button type="button" onclick="quitarImagenProducto(${i})" title="Quitar esta foto" style="position:absolute; top:-7px; right:-7px; width:18px; height:18px; border-radius:50%; background:var(--rust); color:var(--paper); border:none; font-size:11px; line-height:1; cursor:pointer;">×</button>
-      </div>`).join('');
+      </div>`;
+    }).join('');
   };
 
   window.quitarImagenProducto = function(index) {
@@ -1786,21 +1816,94 @@
     actualizarPrevisualizacionFotos();
   };
 
+  window.hacerFotoPortada = function(index) {
+    const campo = document.getElementById('prod-imagenes');
+    const urls = campo.value.split(',').map(s => s.trim()).filter(Boolean);
+    if (index <= 0 || index >= urls.length) return;
+    const [elegida] = urls.splice(index, 1);
+    urls.unshift(elegida);
+    campo.value = urls.join(', ');
+    actualizarPrevisualizacionFotos();
+  };
+
+  // Abre el editor cargando una foto YA GUARDADA del producto (en vez de una captura recién
+  // pegada) — al guardar, reemplaza esa misma posición del listado en vez de agregar una nueva.
+  window.editarFotoExistente = async function(index) {
+    const urls = document.getElementById('prod-imagenes').value.split(',').map(s => s.trim()).filter(Boolean);
+    const url = urls[index];
+    if (!url) return;
+    const msg = document.getElementById('msg-subida-fotos');
+    msg.style.color = 'var(--muted)';
+    msg.textContent = 'Abriendo foto para editar...';
+    try {
+      const resp = await fetch(url);
+      if (!resp.ok) throw new Error('respuesta ' + resp.status);
+      const blob = await resp.blob();
+      msg.textContent = '';
+      await abrirEditorFoto(blob, index);
+    } catch (e) {
+      msg.style.color = 'var(--rust)';
+      msg.textContent = 'No se pudo abrir esta foto para editar (' + e.message + '). Si es una imagen de otro sitio, puede que no se pueda editar aquí — descárgala y súbela de nuevo con "Subir fotos".';
+    }
+  };
+
+  // Sube la foto editada y la coloca en la MISMA posición que la foto original que se estaba
+  // editando (en vez de agregarla al final) — así conserva su lugar en el orden, incluida la
+  // portada si era la foto de portada la que se editó.
+  async function reemplazarFotoProducto(index, archivo) {
+    const msg = document.getElementById('msg-subida-fotos');
+    if (!tenantIdActual) {
+      msg.style.color = 'var(--rust)';
+      msg.textContent = 'No se pudo identificar tu cuenta todavía — recarga la página e intenta de nuevo.';
+      return;
+    }
+    msg.style.color = 'var(--muted)';
+    msg.textContent = 'Guardando foto editada...';
+    const nombreArchivo = `${tenantIdActual}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.png`;
+    const { error } = await supabase.storage.from('productos-fotos').upload(nombreArchivo, archivo, {
+      cacheControl: '31536000', upsert: false, contentType: 'image/png'
+    });
+    if (error) {
+      msg.style.color = 'var(--rust)';
+      msg.textContent = 'Error guardando la foto editada: ' + error.message;
+      return;
+    }
+    const { data: pub } = supabase.storage.from('productos-fotos').getPublicUrl(nombreArchivo);
+    const campo = document.getElementById('prod-imagenes');
+    const urls = campo.value.split(',').map(s => s.trim()).filter(Boolean);
+    if (index >= 0 && index < urls.length) urls[index] = pub.publicUrl; else urls.push(pub.publicUrl);
+    campo.value = urls.join(', ');
+    actualizarPrevisualizacionFotos();
+    msg.style.color = 'var(--teal)';
+    msg.textContent = 'Foto editada guardada correctamente.';
+  }
+
   // --- Editor de fotos pegadas (capturas de pantalla) -----------------------------------------
   // Todo corre en el navegador, con Canvas — no se manda la imagen a ningún servicio externo ni
   // hace falta ninguna clave de API. "Quitar fondo" es un relleno por inundación (flood fill)
   // desde los bordes de la imagen: funciona bien cuando el fondo es parejo (una mesa, una pared,
   // una captura con fondo blanco/gris), pero no es una segmentación con IA — si el fondo es muy
   // irregular puede no quedar perfecto, para eso está el botón "Deshacer".
-  let editorHistorial = []; // pila de ImageData para poder deshacer cada edición
+  let editorHistorial = []; // pila de snapshots {base, capas} para poder deshacer cada edición
+  let editorBaseImageData = null; // pixeles de la foto de base (sin los elementos pegados encima)
+  let editorCapas = []; // elementos pegados encima de la foto: {id, tipo:'imagen'|'texto', x,y,w,h, ...}
+  let capaSeleccionadaId = null;
+  let editorContadorId = 0;
+  let editorIndiceExistente = null; // null = foto nueva (se agrega al final); número = reemplaza esa posición del listado de fotos
+  const STICKERS_DISPONIBLES = ['🔥','⭐','✅','🆕','💯','🎉','📦','🚚','💵','😍','👍','❤️','⚡','🏷️','✨','💥','🎁','📌','🛒','⚠️'];
 
   function vistaProductosActiva() {
     const vista = document.getElementById('view-productos');
     return !!(vista && vista.classList.contains('active'));
   }
 
+  function editorEstaAbierto() {
+    return document.getElementById('modal-editor-foto').style.display === 'flex';
+  }
+
   document.addEventListener('paste', async (e) => {
-    if (!vistaProductosActiva()) return; // no interferir con pegar texto en otras pestañas
+    const editorAbierto = editorEstaAbierto();
+    if (!editorAbierto && !vistaProductosActiva()) return; // no interferir con pegar texto en otras pestañas
     const items = e.clipboardData && e.clipboardData.items;
     if (!items) return;
     const item = Array.from(items).find(it => it.type && it.type.startsWith('image/'));
@@ -1808,10 +1911,31 @@
     e.preventDefault();
     const blob = item.getAsFile();
     if (!blob) return;
-    await abrirEditorFoto(blob);
+    if (editorAbierto) {
+      // El editor ya está abierto con una foto de base: esta nueva imagen pegada se agrega
+      // ENCIMA como un elemento más, no reemplaza lo que ya había.
+      await agregarCapaImagenDesdeBlob(blob);
+    } else {
+      await abrirEditorFoto(blob);
+    }
   });
 
-  async function abrirEditorFoto(blobOrFile) {
+  document.addEventListener('keydown', (e) => {
+    if (!editorEstaAbierto()) return;
+    if (e.key === 'Escape') {
+      if (capaSeleccionadaId) { capaSeleccionadaId = null; redibujarEditor(); }
+      else cerrarEditorFoto();
+      return;
+    }
+    if ((e.key === 'Delete' || e.key === 'Backspace') && capaSeleccionadaId) {
+      const activo = document.activeElement;
+      if (activo && (activo.tagName === 'INPUT' || activo.tagName === 'TEXTAREA')) return; // no interferir al escribir en los campos del editor
+      e.preventDefault();
+      eliminarCapaSeleccionada();
+    }
+  });
+
+  async function abrirEditorFoto(blobOrFile, indiceExistente = null) {
     const bitmap = await createImageBitmap(blobOrFile);
     const canvas = document.getElementById('canvas-editor-foto');
     const MAX = 1000; // límite razonable de trabajo, no hace falta más para una foto de producto
@@ -1824,32 +1948,294 @@
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, w, h);
     ctx.drawImage(bitmap, 0, 0, w, h);
+    editorBaseImageData = ctx.getImageData(0, 0, w, h);
+    editorCapas = [];
+    capaSeleccionadaId = null;
     editorHistorial = [];
+    editorIndiceExistente = indiceExistente;
+    document.getElementById('popover-stickers').style.display = 'none';
+    document.getElementById('popover-texto').style.display = 'none';
     document.getElementById('msg-editor-foto').textContent = '';
     document.getElementById('modal-editor-foto').style.display = 'flex';
+    redibujarEditor();
   }
 
   function guardarSnapshotEditor() {
-    const canvas = document.getElementById('canvas-editor-foto');
-    const ctx = canvas.getContext('2d');
-    editorHistorial.push(ctx.getImageData(0, 0, canvas.width, canvas.height));
-    if (editorHistorial.length > 5) editorHistorial.shift(); // no acumular historial de más
+    editorHistorial.push({
+      base: editorBaseImageData ? new ImageData(new Uint8ClampedArray(editorBaseImageData.data), editorBaseImageData.width, editorBaseImageData.height) : null,
+      capas: editorCapas.map(c => ({ ...c })),
+    });
+    if (editorHistorial.length > 8) editorHistorial.shift(); // no acumular historial de más
   }
 
   window.editorDeshacer = function() {
     if (editorHistorial.length === 0) return;
     const anterior = editorHistorial.pop();
-    const canvas = document.getElementById('canvas-editor-foto');
-    canvas.getContext('2d').putImageData(anterior, 0, 0);
+    editorBaseImageData = anterior.base;
+    editorCapas = anterior.capas;
+    capaSeleccionadaId = null;
+    redibujarEditor();
     document.getElementById('msg-editor-foto').textContent = 'Se deshizo el último cambio.';
   };
 
-  window.editorQuitarFondo = function() {
-    guardarSnapshotEditor();
+  // --- Dibujo: la foto de base + los elementos pegados encima se recomponen en cada cuadro, así
+  // se pueden mover/redimensionar/eliminar sin tener que "aplastarlos" contra la foto hasta que
+  // el usuario decide guardar. --------------------------------------------------------------
+  function dibujarCapa(ctx, capa) {
+    ctx.save();
+    if (capa.tipo === 'imagen') {
+      ctx.drawImage(capa.bitmap, capa.x, capa.y, capa.w, capa.h);
+    } else {
+      ctx.font = `${capa.negrita ? 'bold ' : ''}${Math.round(capa.h)}px 'IBM Plex Sans', sans-serif`;
+      ctx.textBaseline = 'top';
+      ctx.textAlign = 'left';
+      // Un contorno oscuro detrás del texto ayuda a que se lea sobre cualquier fondo de foto.
+      ctx.lineWidth = Math.max(1, capa.h * 0.06);
+      ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+      ctx.strokeText(capa.texto, capa.x, capa.y);
+      ctx.fillStyle = capa.color || '#ffffff';
+      ctx.fillText(capa.texto, capa.x, capa.y);
+      capa.w = ctx.measureText(capa.texto).width; // se recalcula para el próximo arrastre/selección
+    }
+    ctx.restore();
+  }
+
+  function dibujarSeleccion(ctx, capa) {
+    ctx.save();
+    ctx.strokeStyle = '#C9A227';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([5, 4]);
+    ctx.strokeRect(capa.x - 2, capa.y - 2, capa.w + 4, capa.h + 4);
+    ctx.setLineDash([]);
+    const hx = capa.x + capa.w, hy = capa.y + capa.h;
+    ctx.fillStyle = '#C9A227';
+    ctx.fillRect(hx - 6, hy - 6, 12, 12);
+    ctx.restore();
+  }
+
+  function redibujarEditor() {
     const canvas = document.getElementById('canvas-editor-foto');
     const ctx = canvas.getContext('2d');
-    const w = canvas.width, h = canvas.height;
-    const imgData = ctx.getImageData(0, 0, w, h);
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (editorBaseImageData) ctx.putImageData(editorBaseImageData, 0, 0);
+    editorCapas.forEach(capa => dibujarCapa(ctx, capa));
+    const seleccionada = editorCapas.find(c => c.id === capaSeleccionadaId);
+    if (seleccionada) dibujarSeleccion(ctx, seleccionada);
+    posicionarBotonEliminarCapa(seleccionada);
+  }
+
+  function posicionarBotonEliminarCapa(capa) {
+    const btn = document.getElementById('btn-eliminar-capa');
+    if (!capa) { btn.style.display = 'none'; return; }
+    const canvas = document.getElementById('canvas-editor-foto');
+    const rectCanvas = canvas.getBoundingClientRect();
+    const rectContenedor = document.getElementById('contenedor-canvas-editor').getBoundingClientRect();
+    const escalaX = rectCanvas.width / canvas.width;
+    const escalaY = rectCanvas.height / canvas.height;
+    const left = (rectCanvas.left - rectContenedor.left) + (capa.x + capa.w) * escalaX - 13;
+    const top = (rectCanvas.top - rectContenedor.top) + capa.y * escalaY - 13;
+    btn.style.left = left + 'px';
+    btn.style.top = top + 'px';
+    btn.style.display = 'flex';
+  }
+
+  window.eliminarCapaSeleccionada = function() {
+    if (!capaSeleccionadaId) return;
+    guardarSnapshotEditor();
+    editorCapas = editorCapas.filter(c => c.id !== capaSeleccionadaId);
+    capaSeleccionadaId = null;
+    redibujarEditor();
+  };
+
+  // --- Agregar elementos encima de la foto: imagen (pegada, del PC o por URL), sticker o texto ---
+  function agregarCapaImagenDesdeBitmap(bitmap) {
+    guardarSnapshotEditor();
+    const canvas = document.getElementById('canvas-editor-foto');
+    const ladoMax = Math.min(canvas.width, canvas.height) * 0.5; // no tapa toda la foto de entrada
+    const relacion = bitmap.width / bitmap.height || 1;
+    let w = ladoMax, h = ladoMax / relacion;
+    if (h > ladoMax) { h = ladoMax; w = ladoMax * relacion; }
+    const capa = {
+      id: 'c' + (++editorContadorId), tipo: 'imagen', bitmap, relacionAspecto: relacion,
+      x: (canvas.width - w) / 2, y: (canvas.height - h) / 2, w, h,
+    };
+    editorCapas.push(capa);
+    capaSeleccionadaId = capa.id;
+    redibujarEditor();
+  }
+
+  async function agregarCapaImagenDesdeBlob(blob) {
+    try {
+      const bitmap = await createImageBitmap(blob);
+      agregarCapaImagenDesdeBitmap(bitmap);
+    } catch (e) {
+      document.getElementById('msg-editor-foto').textContent = 'No se pudo cargar esa imagen: ' + e.message;
+    }
+  }
+
+  window.agregarCapaImagenDesdeArchivo = async function(file) {
+    if (!file) return;
+    await agregarCapaImagenDesdeBlob(file);
+    document.getElementById('input-editor-agregar-imagen').value = '';
+  };
+
+  window.editorAgregarDesdeUrl = async function() {
+    const url = prompt('Pega la URL de la imagen que quieres pegar sobre la foto:');
+    if (!url || !url.trim()) return;
+    const msg = document.getElementById('msg-editor-foto');
+    msg.textContent = 'Cargando imagen desde la URL...';
+    try {
+      const resp = await fetch(url.trim());
+      if (!resp.ok) throw new Error('respuesta ' + resp.status);
+      const blob = await resp.blob();
+      if (!blob.type.startsWith('image/')) throw new Error('esa URL no es una imagen');
+      await agregarCapaImagenDesdeBlob(blob);
+      msg.textContent = '';
+    } catch (e) {
+      msg.textContent = 'No se pudo cargar esa imagen (' + e.message + '). El sitio de origen puede no permitir usarla aquí — prueba descargarla y usar "Foto de mi PC", o cópiala y pégala con Ctrl+V.';
+    }
+  };
+
+  window.editorTogglePopoverStickers = function() {
+    const pop = document.getElementById('popover-stickers');
+    document.getElementById('popover-texto').style.display = 'none';
+    const mostrar = pop.style.display !== 'flex';
+    if (mostrar && !pop.dataset.armado) {
+      pop.innerHTML = STICKERS_DISPONIBLES.map(e =>
+        `<button type="button" onclick="editorAgregarSticker('${e}')" style="font-size:22px; background:var(--surface); border:1px solid var(--line); width:38px; height:38px; cursor:pointer;">${e}</button>`
+      ).join('') + `
+        <input type="text" id="input-sticker-personalizado" maxlength="4" placeholder="😀" style="width:48px; text-align:center; font-size:18px; padding:6px;">
+        <button type="button" class="btn-ia" style="margin-top:0;" onclick="editorAgregarStickerPersonalizado()">Agregar</button>`;
+      pop.dataset.armado = '1';
+    }
+    pop.style.display = mostrar ? 'flex' : 'none';
+  };
+
+  window.editorAgregarSticker = function(emoji) {
+    guardarSnapshotEditor();
+    const canvas = document.getElementById('canvas-editor-foto');
+    const tam = Math.round(Math.min(canvas.width, canvas.height) * 0.22);
+    const capa = {
+      id: 'c' + (++editorContadorId), tipo: 'texto', texto: emoji, color: '#ffffff', negrita: false,
+      h: tam, w: tam, x: (canvas.width - tam) / 2, y: (canvas.height - tam) / 2,
+    };
+    editorCapas.push(capa);
+    capaSeleccionadaId = capa.id;
+    redibujarEditor();
+    document.getElementById('popover-stickers').style.display = 'none';
+  };
+
+  window.editorAgregarStickerPersonalizado = function() {
+    const input = document.getElementById('input-sticker-personalizado');
+    const emoji = (input.value || '').trim();
+    if (!emoji) return;
+    editorAgregarSticker(emoji);
+    input.value = '';
+  };
+
+  window.editorTogglePopoverTexto = function() {
+    const pop = document.getElementById('popover-texto');
+    document.getElementById('popover-stickers').style.display = 'none';
+    pop.style.display = pop.style.display === 'flex' ? 'none' : 'flex';
+  };
+
+  window.editorAgregarTexto = function() {
+    const input = document.getElementById('input-texto-nuevo');
+    const texto = (input.value || '').trim();
+    if (!texto) return;
+    const color = document.getElementById('input-color-texto').value || '#ffffff';
+    const tam = parseInt(document.getElementById('input-tamano-texto').value, 10) || 40;
+    const negrita = document.getElementById('input-negrita-texto').checked;
+    guardarSnapshotEditor();
+    const canvas = document.getElementById('canvas-editor-foto');
+    const anchoAprox = tam * texto.length * 0.55;
+    const capa = {
+      id: 'c' + (++editorContadorId), tipo: 'texto', texto, color, negrita,
+      h: tam, w: anchoAprox, x: Math.max(6, (canvas.width - anchoAprox) / 2), y: (canvas.height - tam) / 2,
+    };
+    editorCapas.push(capa);
+    capaSeleccionadaId = capa.id;
+    redibujarEditor();
+    input.value = '';
+    document.getElementById('popover-texto').style.display = 'none';
+  };
+
+  // --- Arrastrar para mover, o desde la esquina inferior derecha para redimensionar ---
+  (function initEditorPointerEvents() {
+    const canvas = document.getElementById('canvas-editor-foto');
+    let arrastre = null; // {modo:'mover'|'redimensionar', capaId, offsetX, offsetY, snapshotTomado}
+
+    function coords(e) {
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: (e.clientX - rect.left) * (canvas.width / rect.width),
+        y: (e.clientY - rect.top) * (canvas.height / rect.height),
+      };
+    }
+
+    function capaEnPunto(punto) {
+      for (let i = editorCapas.length - 1; i >= 0; i--) {
+        const c = editorCapas[i];
+        if (punto.x >= c.x && punto.x <= c.x + c.w && punto.y >= c.y && punto.y <= c.y + c.h) return c;
+      }
+      return null;
+    }
+
+    function enManijaRedimension(capa, punto) {
+      if (!capa) return false;
+      const TOL = 16;
+      return Math.abs(punto.x - (capa.x + capa.w)) <= TOL && Math.abs(punto.y - (capa.y + capa.h)) <= TOL;
+    }
+
+    canvas.addEventListener('pointerdown', (e) => {
+      const punto = coords(e);
+      const seleccionada = editorCapas.find(c => c.id === capaSeleccionadaId);
+      if (seleccionada && enManijaRedimension(seleccionada, punto)) {
+        arrastre = { modo: 'redimensionar', capaId: seleccionada.id, snapshotTomado: false };
+        canvas.setPointerCapture(e.pointerId);
+        return;
+      }
+      const capa = capaEnPunto(punto);
+      if (capa) {
+        capaSeleccionadaId = capa.id;
+        arrastre = { modo: 'mover', capaId: capa.id, offsetX: punto.x - capa.x, offsetY: punto.y - capa.y, snapshotTomado: false };
+        canvas.setPointerCapture(e.pointerId);
+        redibujarEditor();
+      } else {
+        capaSeleccionadaId = null;
+        redibujarEditor();
+      }
+    });
+
+    canvas.addEventListener('pointermove', (e) => {
+      if (!arrastre) return;
+      const capa = editorCapas.find(c => c.id === arrastre.capaId);
+      if (!capa) return;
+      if (!arrastre.snapshotTomado) { guardarSnapshotEditor(); arrastre.snapshotTomado = true; }
+      const punto = coords(e);
+      if (arrastre.modo === 'mover') {
+        capa.x = punto.x - arrastre.offsetX;
+        capa.y = punto.y - arrastre.offsetY;
+      } else {
+        const nuevoAncho = Math.max(16, punto.x - capa.x);
+        if (capa.tipo === 'imagen') {
+          capa.w = nuevoAncho;
+          capa.h = Math.max(12, nuevoAncho / capa.relacionAspecto);
+        } else {
+          capa.h = Math.max(10, punto.y - capa.y); // en texto, el arrastre controla el tamaño de letra
+        }
+      }
+      redibujarEditor();
+    });
+
+    ['pointerup', 'pointercancel'].forEach(ev => canvas.addEventListener(ev, () => { arrastre = null; }));
+  })();
+
+  window.editorQuitarFondo = function() {
+    if (!editorBaseImageData) return;
+    guardarSnapshotEditor();
+    const w = editorBaseImageData.width, h = editorBaseImageData.height;
+    const imgData = new ImageData(new Uint8ClampedArray(editorBaseImageData.data), w, h);
     const data = imgData.data;
 
     // Color de referencia del fondo: promedio de las 4 esquinas (así un pixel raro justo en una
@@ -1884,16 +2270,16 @@
       pila.push(x + 1, y, x - 1, y, x, y + 1, x, y - 1);
     }
 
-    ctx.putImageData(imgData, 0, 0);
+    editorBaseImageData = imgData;
+    redibujarEditor();
     document.getElementById('msg-editor-foto').textContent = 'Fondo eliminado — revisa los bordes. Si quedó incompleto, usa "Deshacer".';
   };
 
   window.editorMejorarImagen = function() {
+    if (!editorBaseImageData) return;
     guardarSnapshotEditor();
-    const canvas = document.getElementById('canvas-editor-foto');
-    const ctx = canvas.getContext('2d');
-    const w = canvas.width, h = canvas.height;
-    const imgData = ctx.getImageData(0, 0, w, h);
+    const w = editorBaseImageData.width, h = editorBaseImageData.height;
+    const imgData = new ImageData(new Uint8ClampedArray(editorBaseImageData.data), w, h);
     const data = imgData.data;
 
     // 1) Estiramiento de contraste por canal (percentiles 1/99, para no dejarse arrastrar por
@@ -1942,29 +2328,50 @@
       }
     }
 
-    ctx.putImageData(imgData, 0, 0);
+    editorBaseImageData = imgData;
+    redibujarEditor();
     document.getElementById('msg-editor-foto').textContent = 'Brillo, contraste y nitidez ajustados automáticamente.';
   };
 
   window.cerrarEditorFoto = function() {
     document.getElementById('modal-editor-foto').style.display = 'none';
     editorHistorial = [];
+    editorCapas = [];
+    editorBaseImageData = null;
+    capaSeleccionadaId = null;
+    editorIndiceExistente = null;
+    document.getElementById('btn-eliminar-capa').style.display = 'none';
+    document.getElementById('popover-stickers').style.display = 'none';
+    document.getElementById('popover-texto').style.display = 'none';
   };
 
+  // Aplana la foto de base + todos los elementos pegados encima en un solo canvas (sin el
+  // recuadro de selección, que es solo una guía visual del editor) y lo sube como la foto final.
   window.guardarFotoEditada = async function() {
-    const canvas = document.getElementById('canvas-editor-foto');
     const msg = document.getElementById('msg-editor-foto');
     if (!tenantIdActual) {
       msg.style.color = 'var(--rust)';
       msg.textContent = 'No se pudo identificar tu cuenta todavía — recarga la página e intenta de nuevo.';
       return;
     }
+    const canvasVisible = document.getElementById('canvas-editor-foto');
+    const w = canvasVisible.width, h = canvasVisible.height;
+    const canvasFinal = document.createElement('canvas');
+    canvasFinal.width = w; canvasFinal.height = h;
+    const ctxFinal = canvasFinal.getContext('2d');
+    if (editorBaseImageData) ctxFinal.putImageData(editorBaseImageData, 0, 0);
+    editorCapas.forEach(capa => dibujarCapa(ctxFinal, capa));
+
     msg.style.color = 'var(--muted)';
     msg.textContent = 'Guardando...';
-    canvas.toBlob(async (blob) => {
+    canvasFinal.toBlob(async (blob) => {
       if (!blob) { msg.style.color = 'var(--rust)'; msg.textContent = 'No se pudo generar la imagen — intenta de nuevo.'; return; }
-      const archivo = new File([blob], `captura-${Date.now()}.png`, { type: 'image/png' });
-      await subirFotosProducto([archivo]);
+      const archivo = new File([blob], `foto-${Date.now()}.png`, { type: 'image/png' });
+      if (editorIndiceExistente !== null) {
+        await reemplazarFotoProducto(editorIndiceExistente, archivo);
+      } else {
+        await subirFotosProducto([archivo]);
+      }
       cerrarEditorFoto();
     }, 'image/png');
   };
