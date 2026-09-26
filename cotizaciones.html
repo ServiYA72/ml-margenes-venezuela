@@ -675,20 +675,32 @@
   };
 
   // ---------- Productos ----------
+  const COLUMNAS_PRODUCTO_COTIZACION = 'id, nombre, sku, categoria, especificaciones, costo_usd, activo, proveedor_id, proveedores(nombre), publicaciones(ganancia_real_usd, modo_ganancia, stock, estado)';
+
   async function cargarProductos() {
     const TAMANO_BLOQUE = 1000;
-    let desde = 0, todos = [];
-    while (true) {
-      const { data, error } = await supabase
-        .from('productos')
-        .select('id, nombre, sku, categoria, especificaciones, costo_usd, activo, proveedor_id, proveedores(nombre), publicaciones(ganancia_real_usd, modo_ganancia, stock, estado)')
-        .order('nombre')
-        .range(desde, desde + TAMANO_BLOQUE - 1);
-      if (error || !data || data.length === 0) break;
-      todos = todos.concat(data);
-      if (data.length < TAMANO_BLOQUE) break;
-      desde += TAMANO_BLOQUE;
+    const primeraPagina = await supabase
+      .from('productos')
+      .select(COLUMNAS_PRODUCTO_COTIZACION, { count: 'exact' })
+      .order('nombre')
+      .range(0, TAMANO_BLOQUE - 1);
+
+    let todos = primeraPagina.data || [];
+    const total = primeraPagina.count ?? todos.length;
+
+    if (!primeraPagina.error && total > TAMANO_BLOQUE) {
+      const pedidosRestantes = [];
+      for (let desde = TAMANO_BLOQUE; desde < total; desde += TAMANO_BLOQUE) {
+        pedidosRestantes.push(
+          supabase.from('productos').select(COLUMNAS_PRODUCTO_COTIZACION)
+            .order('nombre')
+            .range(desde, desde + TAMANO_BLOQUE - 1)
+        );
+      }
+      const resultados = await Promise.all(pedidosRestantes);
+      resultados.forEach(r => { if (!r.error && r.data) todos = todos.concat(r.data); });
     }
+
     productosCache = {};
     todos.forEach(p => {
       p.pub = Array.isArray(p.publicaciones) ? p.publicaciones[0] : p.publicaciones;

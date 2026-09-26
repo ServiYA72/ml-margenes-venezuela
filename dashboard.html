@@ -758,7 +758,7 @@
     </div>
 
     <div id="msg-editor-foto" style="font-size:12px; color:var(--muted); margin-top:10px; min-height:14px;"></div>
-    <div class="hint" style="margin-top:2px;">"Quitar fondo" y "Mejorar automático" solo afectan la foto de base, no los elementos pegados encima. "Quitar fondo" funciona mejor con fotos de fondo parejo (blanco, gris, una mesa lisa) — si el resultado no queda limpio, usa "Deshacer".</div>
+    <div class="hint" style="margin-top:2px;">"Quitar fondo" actúa sobre la imagen pegada que tengas seleccionada (por ejemplo, la que acabas de insertar) o, si no hay ninguna seleccionada, sobre la foto de base. "Mejorar automático" solo afecta la foto de base. Funciona mejor con fondos parejos (blanco, gris, una mesa lisa) — si el resultado no queda limpio, usa "Deshacer".</div>
     <div style="display:flex; gap:8px; margin-top:16px; justify-content:flex-end;">
       <button type="button" onclick="cerrarEditorFoto()" style="padding:9px 16px; font-size:13px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line); cursor:pointer;">Cancelar</button>
       <button type="button" class="add" onclick="guardarFotoEditada()">Guardar foto</button>
@@ -1044,31 +1044,67 @@
     sincronizarGanancia(prefix, 'pct');
   };
 
-  async function cargarProductos() {
-    const columnas = 'id, nombre, categoria, costo_usd, sku, especificaciones, proveedores(id, nombre), publicaciones(id, precio_efectivo_usd, precio_bcv_usd_equiv, precio_bcv_bs, ganancia_real_usd, comision_ml_usd, ganancia_neta_usd, modo_ganancia, margen_objetivo_pct, comision_ml_pct, descripcion, condicion, stock, forma_envio, condiciones_pago, horario_atencion, imagenes, estado, fotos_ml)';
-    const TAMANO_BLOQUE = 1000;
-    let desde = 0;
-    let todosLosDatos = [];
+  // Mismas columnas para la carga completa del catálogo y para refrescar solo algunos productos
+  // puntuales (ver refrescarProductosPorId más abajo) — un solo lugar si el día de mañana se
+  // necesita agregar o quitar alguna columna.
+  const COLUMNAS_PRODUCTO = 'id, nombre, categoria, costo_usd, sku, especificaciones, proveedores(id, nombre), publicaciones(id, precio_efectivo_usd, precio_bcv_usd_equiv, precio_bcv_bs, ganancia_real_usd, comision_ml_usd, ganancia_neta_usd, modo_ganancia, margen_objetivo_pct, comision_ml_pct, descripcion, condicion, stock, forma_envio, condiciones_pago, horario_atencion, imagenes, estado, fotos_ml)';
 
-    while (true) {
-      const { data, error } = await supabase
-        .from('productos')
-        .select(columnas)
-        .order('created_at', { ascending: false })
-        .range(desde, desde + TAMANO_BLOQUE - 1);
-
-      if (error || !data || data.length === 0) break;
-      todosLosDatos = todosLosDatos.concat(data);
-      if (data.length < TAMANO_BLOQUE) break;
-      desde += TAMANO_BLOQUE;
-    }
-
-    productosCache = {};
-    todosLosDatos.forEach(p => {
+  function fusionarProductosEnCache(filas) {
+    (filas || []).forEach(p => {
       const pub = (p.publicaciones && p.publicaciones[0]) || {};
       productosCache[p.id] = { ...p, pub };
     });
+  }
 
+  async function cargarProductos() {
+    const TAMANO_BLOQUE = 1000;
+
+    // Primer bloque: además de traer los primeros productos, count:'exact' nos dice cuántos hay
+    // en total, para saber si hacen falta más páginas.
+    const primeraPagina = await supabase
+      .from('productos')
+      .select(COLUMNAS_PRODUCTO, { count: 'exact' })
+      .order('created_at', { ascending: false })
+      .range(0, TAMANO_BLOQUE - 1);
+
+    let todosLosDatos = primeraPagina.data || [];
+    const total = primeraPagina.count ?? todosLosDatos.length;
+
+    // Si hay más de un bloque, se piden TODAS las páginas restantes en paralelo (en vez de una
+    // por una, esperando cada respuesta antes de pedir la siguiente) — con catálogos grandes esto
+    // es la diferencia entre esperar N ida-y-vuelta al servidor en fila o solo una.
+    if (!primeraPagina.error && total > TAMANO_BLOQUE) {
+      const pedidosRestantes = [];
+      for (let desde = TAMANO_BLOQUE; desde < total; desde += TAMANO_BLOQUE) {
+        pedidosRestantes.push(
+          supabase.from('productos').select(COLUMNAS_PRODUCTO)
+            .order('created_at', { ascending: false })
+            .range(desde, desde + TAMANO_BLOQUE - 1)
+        );
+      }
+      const resultados = await Promise.all(pedidosRestantes);
+      resultados.forEach(r => { if (!r.error && r.data) todosLosDatos = todosLosDatos.concat(r.data); });
+    }
+
+    productosCache = {};
+    fusionarProductosEnCache(todosLosDatos);
+
+    actualizarFiltroCategorias();
+    renderizarTablaProductos();
+    actualizarProductosSinCategoria();
+  }
+
+  // Vuelve a pedir SOLO los productos indicados (por id) y actualiza esas entradas en
+  // productosCache, en vez de recargar TODO el catálogo — se usa después de guardar/editar un
+  // producto puntual o un cambio masivo sobre un grupo chico de productos ya identificado, que
+  // antes disparaban una recarga completa del catálogo (la causa principal de que la carga de
+  // productos se sintiera lenta: cada guardado individual volvía a traer todos los productos).
+  async function refrescarProductosPorId(ids) {
+    const idsUnicos = [...new Set((ids || []).filter(Boolean))];
+    if (idsUnicos.length === 0) return;
+    const { data, error } = await supabase.from('productos').select(COLUMNAS_PRODUCTO).in('id', idsUnicos);
+    if (error) { await cargarProductos(); return; } // ante cualquier duda, no dejar la tabla desactualizada
+    fusionarProductosEnCache(data);
     actualizarFiltroCategorias();
     renderizarTablaProductos();
     actualizarProductosSinCategoria();
@@ -2163,6 +2199,7 @@
   // --- Arrastrar para mover, o desde la esquina inferior derecha para redimensionar ---
   (function initEditorPointerEvents() {
     const canvas = document.getElementById('canvas-editor-foto');
+    if (!canvas) return; // defensivo: si por lo que sea esta vista no tiene el editor de fotos en el DOM
     let arrastre = null; // {modo:'mover'|'redimensionar', capaId, offsetX, offsetY, snapshotTomado}
 
     function coords(e) {
@@ -2231,11 +2268,12 @@
     ['pointerup', 'pointercancel'].forEach(ev => canvas.addEventListener(ev, () => { arrastre = null; }));
   })();
 
-  window.editorQuitarFondo = function() {
-    if (!editorBaseImageData) return;
-    guardarSnapshotEditor();
-    const w = editorBaseImageData.width, h = editorBaseImageData.height;
-    const imgData = new ImageData(new Uint8ClampedArray(editorBaseImageData.data), w, h);
+  // Algoritmo puro de quitar-fondo: recibe un ImageData y devuelve uno nuevo con el fondo hecho
+  // transparente, sin tocar el original. Reutilizado tanto para la foto de base como para
+  // cualquier imagen pegada encima (ver quitarFondoDeCapaSeleccionada más abajo).
+  function quitarFondoDeImageData(origen) {
+    const w = origen.width, h = origen.height;
+    const imgData = new ImageData(new Uint8ClampedArray(origen.data), w, h);
     const data = imgData.data;
 
     // Color de referencia del fondo: promedio de las 4 esquinas (así un pixel raro justo en una
@@ -2270,9 +2308,39 @@
       pila.push(x + 1, y, x - 1, y, x, y + 1, x, y - 1);
     }
 
-    editorBaseImageData = imgData;
+    return imgData;
+  }
+
+  // Aplica quitar-fondo a la imagen pegada que esté seleccionada (una capa tipo 'imagen'), sin
+  // tocar la foto de base ni el resto de las capas. Trabaja sobre la resolución real del bitmap
+  // pegado, no sobre su tamaño mostrado en pantalla, para no perder calidad.
+  async function quitarFondoDeCapaSeleccionada(capa) {
+    guardarSnapshotEditor();
+    const w = capa.bitmap.width, h = capa.bitmap.height;
+    const offscreen = document.createElement('canvas');
+    offscreen.width = w; offscreen.height = h;
+    const octx = offscreen.getContext('2d');
+    octx.drawImage(capa.bitmap, 0, 0, w, h);
+    const resultado = quitarFondoDeImageData(octx.getImageData(0, 0, w, h));
+    capa.bitmap = await createImageBitmap(resultado);
     redibujarEditor();
-    document.getElementById('msg-editor-foto').textContent = 'Fondo eliminado — revisa los bordes. Si quedó incompleto, usa "Deshacer".';
+    document.getElementById('msg-editor-foto').textContent = 'Fondo eliminado de la imagen seleccionada — revisa los bordes. Si quedó incompleto, usa "Deshacer".';
+  }
+
+  window.editorQuitarFondo = async function() {
+    // Si hay una imagen pegada seleccionada, "Quitar fondo" actúa sobre ella; si no, actúa
+    // sobre la foto de base (comportamiento de siempre). Así el mismo botón sirve para ambas
+    // cosas: pegar una imagen la deja seleccionada automáticamente, lista para este paso.
+    const capaSeleccionada = editorCapas.find(c => c.id === capaSeleccionadaId);
+    if (capaSeleccionada && capaSeleccionada.tipo === 'imagen') {
+      await quitarFondoDeCapaSeleccionada(capaSeleccionada);
+      return;
+    }
+    if (!editorBaseImageData) return;
+    guardarSnapshotEditor();
+    editorBaseImageData = quitarFondoDeImageData(editorBaseImageData);
+    redibujarEditor();
+    document.getElementById('msg-editor-foto').textContent = 'Fondo eliminado de la foto de base — revisa los bordes. Si quedó incompleto, usa "Deshacer".';
   };
 
   window.editorMejorarImagen = function() {
@@ -3029,7 +3097,7 @@ RESULTADOS DEL CÁLCULO DE PRECIO
     msg.textContent = masivoDetenido
       ? `Detenido: se alcanzaron a actualizar ${hechos} de ${seleccionados.length} productos. Puedes revertir si quieres deshacerlo.`
       : `Listo: ${hechos} de ${seleccionados.length} productos actualizados con ${pct}% de ganancia. Puedes revertir si te equivocaste.`;
-    cargarProductos();
+    await refrescarProductosPorId(seleccionados);
   };
 
   window.detenerAplicacionMasiva = function() {
@@ -3052,11 +3120,12 @@ RESULTADOS DEL CÁLCULO DE PRECIO
       await supabase.from('publicaciones').update(valores).eq('producto_id', producto_id);
     }
 
+    const idsRevertidos = ultimoRespaldoMasivo.map(item => item.producto_id);
     msg.style.color = 'var(--teal)';
     msg.textContent = `Revertido: ${ultimoRespaldoMasivo.length} producto(s) regresaron a su valor anterior.`;
     document.getElementById('btn-revertir-masivo').style.display = 'none';
     ultimoRespaldoMasivo = null;
-    cargarProductos();
+    await refrescarProductosPorId(idsRevertidos);
   };
 
   // Borra en lotes en vez de mandar TODOS los IDs en un solo .in(...): con miles de
@@ -3102,7 +3171,10 @@ RESULTADOS DEL CÁLCULO DE PRECIO
     }
     msg.style.color = 'var(--teal)';
     msg.textContent = `${seleccionados.length} producto(s) eliminado(s).`;
-    cargarProductos();
+    seleccionados.forEach(id => { delete productosCache[id]; });
+    actualizarFiltroCategorias();
+    renderizarTablaProductos();
+    actualizarProductosSinCategoria();
   };
 
   window.eliminarTodos = async function() {
@@ -3123,7 +3195,10 @@ RESULTADOS DEL CÁLCULO DE PRECIO
     }
     msg.style.color = 'var(--teal)';
     msg.textContent = 'Todos los productos fueron eliminados.';
-    cargarProductos();
+    productosCache = {};
+    actualizarFiltroCategorias();
+    renderizarTablaProductos();
+    actualizarProductosSinCategoria();
   };
 
   // --- Zona de limpieza de base de datos: por proveedor o todos, con respaldo y auditoría ---
@@ -3208,7 +3283,10 @@ RESULTADOS DEL CÁLCULO DE PRECIO
     msg.textContent = errAuditoria
       ? `${objetivo.length} producto(s) eliminados y respaldo descargado, pero no se pudo guardar el registro de auditoría: ${errAuditoria.message}`
       : `Listo: ${objetivo.length} producto(s) de "${proveedorNombre}" eliminados. Se descargó el respaldo y quedó registrado en el historial.`;
-    cargarProductos();
+    ids.forEach(id => { delete productosCache[id]; });
+    actualizarFiltroCategorias();
+    renderizarTablaProductos();
+    actualizarProductosSinCategoria();
   };
 
   window.verHistorialLimpieza = async function() {
@@ -3307,9 +3385,16 @@ RESULTADOS DEL CÁLCULO DE PRECIO
     const { error, hechos } = await actualizarEnLotes('productos', 'id', ids, { categoria: null }, 150, (h, t) => {
       msg.style.color = 'var(--muted)'; msg.textContent = `Actualizando ${h}/${t}...`;
     });
-    if (error) { msg.style.color = 'var(--rust)'; msg.textContent = `Error (se alcanzaron a actualizar ${hechos} de ${ids.length}): ` + error.message; }
-    else { msg.style.color = 'var(--teal)'; msg.textContent = `${ids.length} producto(s) quedaron sin categoría.`; }
-    await cargarProductos();
+    if (error) {
+      msg.style.color = 'var(--rust)'; msg.textContent = `Error (se alcanzaron a actualizar ${hechos} de ${ids.length}): ` + error.message;
+      await cargarProductos(); // ante un fallo parcial, mejor traer el estado real del servidor
+    } else {
+      msg.style.color = 'var(--teal)'; msg.textContent = `${ids.length} producto(s) quedaron sin categoría.`;
+      ids.forEach(id => { if (productosCache[id]) productosCache[id].categoria = null; });
+      actualizarFiltroCategorias();
+      renderizarTablaProductos();
+      actualizarProductosSinCategoria();
+    }
     renderizarListaGestionCategorias();
   };
 
@@ -3326,9 +3411,17 @@ RESULTADOS DEL CÁLCULO DE PRECIO
     const { error, hechos } = await actualizarEnLotes('productos', 'id', ids, { categoria: nuevoNombre }, 150, (h, t) => {
       msg.style.color = 'var(--muted)'; msg.textContent = `Actualizando ${h}/${t}...`;
     });
-    if (error) { msg.style.color = 'var(--rust)'; msg.textContent = `Error (se alcanzaron a actualizar ${hechos} de ${ids.length}): ` + error.message; }
-    else { msg.style.color = 'var(--teal)'; msg.textContent = `${ids.length} producto(s) ahora están en "${nuevoNombre}".`; document.getElementById('categoria-nuevo-nombre').value = ''; }
-    await cargarProductos();
+    if (error) {
+      msg.style.color = 'var(--rust)'; msg.textContent = `Error (se alcanzaron a actualizar ${hechos} de ${ids.length}): ` + error.message;
+      await cargarProductos(); // ante un fallo parcial, mejor traer el estado real del servidor
+    } else {
+      msg.style.color = 'var(--teal)'; msg.textContent = `${ids.length} producto(s) ahora están en "${nuevoNombre}".`;
+      document.getElementById('categoria-nuevo-nombre').value = '';
+      ids.forEach(id => { if (productosCache[id]) productosCache[id].categoria = nuevoNombre; });
+      actualizarFiltroCategorias();
+      renderizarTablaProductos();
+      actualizarProductosSinCategoria();
+    }
     renderizarListaGestionCategorias();
   };
 
@@ -3533,7 +3626,7 @@ RESULTADOS DEL CÁLCULO DE PRECIO
       msg.style.color = '';
       const idParaResaltar = productoId;
       cancelarEdicion();
-      await cargarProductos();
+      await refrescarProductosPorId([productoId]);
       irYResaltarProducto(idParaResaltar);
     }
   };

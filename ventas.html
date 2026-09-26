@@ -329,23 +329,48 @@
     if (data) { tasaBCV = parseFloat(data.tasa_bcv); tasaBinance = parseFloat(data.tasa_binance); }
   }
 
-  async function cargarProductos() {
-    const TAMANO_BLOQUE = 1000;
-    let desde = 0, todos = [];
-    while (true) {
-      const { data, error } = await supabase
-        .from('productos')
-        .select('id, nombre, sku, categoria, especificaciones, costo_usd, publicaciones(precio_efectivo_usd, precio_bcv_usd_equiv, precio_bcv_bs, stock)')
-        .order('nombre')
-        .range(desde, desde + TAMANO_BLOQUE - 1);
-      if (error || !data || data.length === 0) break;
-      todos = todos.concat(data);
-      if (data.length < TAMANO_BLOQUE) break;
-      desde += TAMANO_BLOQUE;
-    }
-    todos.forEach(p => {
+  const COLUMNAS_PRODUCTO_VENTA = 'id, nombre, sku, categoria, especificaciones, costo_usd, publicaciones(precio_efectivo_usd, precio_bcv_usd_equiv, precio_bcv_bs, stock)';
+
+  function fusionarProductosVentaEnCache(filas) {
+    (filas || []).forEach(p => {
       productosCache[p.id] = { ...p, pub: (p.publicaciones && p.publicaciones[0]) || {} };
     });
+  }
+
+  async function cargarProductos() {
+    const TAMANO_BLOQUE = 1000;
+    const primeraPagina = await supabase
+      .from('productos')
+      .select(COLUMNAS_PRODUCTO_VENTA, { count: 'exact' })
+      .order('nombre')
+      .range(0, TAMANO_BLOQUE - 1);
+
+    let todos = primeraPagina.data || [];
+    const total = primeraPagina.count ?? todos.length;
+
+    if (!primeraPagina.error && total > TAMANO_BLOQUE) {
+      const pedidosRestantes = [];
+      for (let desde = TAMANO_BLOQUE; desde < total; desde += TAMANO_BLOQUE) {
+        pedidosRestantes.push(
+          supabase.from('productos').select(COLUMNAS_PRODUCTO_VENTA)
+            .order('nombre')
+            .range(desde, desde + TAMANO_BLOQUE - 1)
+        );
+      }
+      const resultados = await Promise.all(pedidosRestantes);
+      resultados.forEach(r => { if (!r.error && r.data) todos = todos.concat(r.data); });
+    }
+
+    fusionarProductosVentaEnCache(todos);
+    renderizarListaProductos(Object.values(productosCache));
+  }
+
+  async function refrescarProductosPorId(ids) {
+    const idsUnicos = [...new Set((ids || []).filter(Boolean))];
+    if (idsUnicos.length === 0) return;
+    const { data, error } = await supabase.from('productos').select(COLUMNAS_PRODUCTO_VENTA).in('id', idsUnicos);
+    if (error) { await cargarProductos(); return; }
+    fusionarProductosVentaEnCache(data);
     renderizarListaProductos(Object.values(productosCache));
   }
 
@@ -479,8 +504,9 @@
 
     msg.className = 'msg ok';
     msg.textContent = 'Venta registrada y stock actualizado.';
+    const idProductoVendido = productoElegidoId;
     limpiarFormularioVenta();
-    await cargarProductos();
+    await refrescarProductosPorId([idProductoVendido]);
     await cargarClientes();
     await cargarVentas();
   };
