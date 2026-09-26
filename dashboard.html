@@ -2332,15 +2332,34 @@ RESULTADOS DEL CÁLCULO DE PRECIO
       // corre todo el contenido ya dibujado hacia atrás sin tener que volver a dibujarlo) y se
       // ajustan los números de página del mapa sumándoles cuántas páginas de índice se agregaron.
       //
-      // Este catálogo puede tener MUCHAS categorías (el usuario reportó verlas "en fila", una
-      // debajo de la otra, desperdiciando el ancho de la página) — por eso el índice se reparte
-      // en 3 columnas por página en vez de una sola lista vertical, aprovechando todo el espacio
-      // disponible y necesitando muchas menos páginas de índice.
-      const categoriasIndice = Object.keys(categoriaPaginaMap);
-      const numColumnasIndice = 3;
-      const espacioEntreColumnas = 14;
-      const anchoColumnaIndice = (anchoUtil - espacioEntreColumnas * (numColumnasIndice - 1)) / numColumnasIndice;
-      const altoFilaIndice = 15;
+      // Antes cada categoría ocupaba su propia fila (aunque repartidas en columnas, seguían
+      // siendo "una debajo de la otra" dentro de cada columna) — con catálogos de muchas
+      // categorías eso desbordaba a varias páginas de índice. Ahora se aprovecha la
+      // clasificación alfabética: las categorías se agrupan por su letra inicial y, dentro de
+      // cada letra, se concatenan en la misma línea (separadas por comas), como el índice de un
+      // diccionario — cada categoría sigue siendo su propio enlace clicable dentro del texto
+      // concatenado. Eso ocupa muchísimo menos espacio vertical, y con 2 columnas estilo
+      // diccionario (A-M / N-Z) el índice entra en una sola página en la enorme mayoría de los
+      // catálogos; si el catálogo tiene tantas categorías que ni así entra, la letra se va
+      // achicando progresivamente antes de, como último recurso, agregar una página más.
+      const categoriasIndice = Object.keys(categoriaPaginaMap); // ya vienen en orden alfabético
+
+      function primeraLetraCategoria(nombre) {
+        const limpio = String(nombre || '').normalize('NFD').replace(/[̀-ͯ]/g, '').trim();
+        const m = limpio.match(/[A-Za-z0-9]/);
+        return m ? m[0].toUpperCase() : '#';
+      }
+      const categoriasPorLetra = {};
+      categoriasIndice.forEach(categoria => {
+        const letra = primeraLetraCategoria(categoria);
+        (categoriasPorLetra[letra] = categoriasPorLetra[letra] || []).push(categoria);
+      });
+      const letrasOrdenadas = Object.keys(categoriasPorLetra).sort((a, b) => {
+        if (a === '#' && b !== '#') return 1; // categorías sin letra (empiezan con símbolo) van al final
+        if (b === '#' && a !== '#') return -1;
+        return a.localeCompare(b, 'es');
+      });
+      const gruposIndice = letrasOrdenadas.map(letra => ({ letra, categorias: categoriasPorLetra[letra] }));
 
       const tituloIndice = 'Índice por categoría';
       const notaIndice = 'Toca una categoría para ir directo a esa sección (o revisa los marcadores del panel lateral de tu lector de PDF). También puedes buscar cualquier producto por nombre o código con el buscador de tu lector (ícono de lupa, o Ctrl+F / Cmd+F). Cada producto tiene además un enlace para pedirlo por WhatsApp con un solo toque.';
@@ -2348,34 +2367,137 @@ RESULTADOS DEL CÁLCULO DE PRECIO
       doc.setFontSize(8.5);
       const notaIndiceWrap = doc.splitTextToSize(notaIndice, anchoUtil);
 
-      // Cuántas filas (y por lo tanto cuántas categorías, x3 columnas) caben en la primera
-      // página del índice (que además lleva título y nota) y en las páginas siguientes.
       const yTrasEncabezado = 50 + 48;
-      const yInicioFilasPagina1 = yTrasEncabezado + 18 + 11 * notaIndiceWrap.length + 14;
-      const yInicioFilasPaginaN = yTrasEncabezado;
-      const filasPorPagina1 = Math.max(1, Math.floor((760 - yInicioFilasPagina1) / altoFilaIndice));
-      const filasPorPaginaN = Math.max(1, Math.floor((760 - yInicioFilasPaginaN) / altoFilaIndice));
-      const itemsPorPagina1 = filasPorPagina1 * numColumnasIndice;
-      const itemsPorPaginaN = filasPorPaginaN * numColumnasIndice;
+      const yInicioIndicePagina1 = yTrasEncabezado + 18 + 11 * notaIndiceWrap.length + 14;
+      const yInicioIndicePaginaN = yTrasEncabezado;
 
-      const numPaginasIndice = categoriasIndice.length <= itemsPorPagina1
-        ? 1
-        : 1 + Math.ceil((categoriasIndice.length - itemsPorPagina1) / itemsPorPaginaN);
+      // 2 columnas estilo diccionario (A-M / N-Z) — a diferencia de la grilla fija de antes, acá
+      // cada letra puede ocupar 1 o varias líneas según cuántas categorías concatene, así que el
+      // reparto entre columnas se hace por altura acumulada, no por cantidad de filas.
+      const numColumnasIndice = 2;
+      const espacioEntreColumnas = 22;
+      const anchoColumnaIndice = (anchoUtil - espacioEntreColumnas * (numColumnasIndice - 1)) / numColumnasIndice;
+      const anchoLetra = 16; // sangría bajo la letra para cuando sus categorías no entran en una sola línea
+      const PLACEHOLDER_PAGINA = '8888'; // ancho de sobra: el número de página real nunca ocupa más dígitos
+
+      // Arma, para un grupo de categorías (todas de la misma letra), en qué línea y en qué x cae
+      // cada una dentro del ancho de la columna — concatenándolas con coma hasta que ya no entren
+      // más en la línea actual, y recién ahí saltando a la siguiente (con sangría bajo la letra).
+      // Mide el ancho usando un número de página "de relleno" (más ancho que cualquier número
+      // real) porque el número de página final recién se sabe después de decidir cuántas páginas
+      // de índice hacen falta — así se evita una dependencia circular; en el dibujo final se usa
+      // el número real, que nunca ocupa más espacio que el de relleno usado acá para medir.
+      function armarLineasGrupo(categorias, fontCat) {
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(fontCat);
+        const lineas = [];
+        let lineaActual = [];
+        let xCursor = anchoLetra;
+        categorias.forEach((categoria, idx) => {
+          const esUltimo = idx === categorias.length - 1;
+          const textoMedida = categoria + ' (' + PLACEHOLDER_PAGINA + ')' + (esUltimo ? '' : ',');
+          const ancho = doc.getTextWidth(textoMedida + ' ');
+          if (xCursor + ancho > anchoColumnaIndice && lineaActual.length > 0) {
+            lineas.push(lineaActual);
+            lineaActual = [];
+            xCursor = anchoLetra;
+          }
+          lineaActual.push({ categoria, esUltimo, x: xCursor });
+          xCursor += ancho;
+        });
+        if (lineaActual.length) lineas.push(lineaActual);
+        return lineas;
+      }
+
+      function construirGrupos(fontCat, altoLinea, gapGrupo) {
+        return gruposIndice.map(g => {
+          const lineas = armarLineasGrupo(g.categorias, fontCat);
+          return { letra: g.letra, lineas, alto: lineas.length * altoLinea + gapGrupo };
+        });
+      }
+
+      // Reparte los grupos ya armados entre páginas de índice: en cada página, va llenando la
+      // columna más baja de las 2 hasta que ninguna de las 2 tiene más lugar — recién ahí pasa a
+      // la siguiente página. Con pocas categorías esto da, casi siempre, una sola página.
+      function distribuirEnPaginas(grupos) {
+        const paginas = [];
+        let restantes = grupos.slice();
+        let esPrimera = true;
+        while (restantes.length > 0) {
+          const alturaDisp = esPrimera ? (760 - yInicioIndicePagina1) : (760 - yInicioIndicePaginaN);
+          let altoCol1 = 0, altoCol2 = 0;
+          const col1 = [], col2 = [];
+          let i = 0;
+          while (i < restantes.length) {
+            const g = restantes[i];
+            const enCol1 = altoCol1 <= altoCol2;
+            const altoActual = enCol1 ? altoCol1 : altoCol2;
+            const yaHayAlgo = col1.length + col2.length > 0;
+            if (altoActual + g.alto > alturaDisp && yaHayAlgo) break;
+            if (enCol1) { col1.push(g); altoCol1 += g.alto; } else { col2.push(g); altoCol2 += g.alto; }
+            i++;
+          }
+          if (col1.length === 0 && col2.length === 0) { col1.push(restantes[0]); i = 1; } // 1 letra con MUCHÍSIMAS categorías: no se pierde, se deja igual aunque se pase del margen
+          paginas.push({ col1, col2, esPrimera });
+          restantes = restantes.slice(i);
+          esPrimera = false;
+        }
+        return paginas;
+      }
+
+      // Prueba con un tamaño de letra normal y, si no entra en una sola página, la va achicando
+      // progresivamente (igual que se hace con los montos grandes en las cotizaciones) antes de
+      // resignarse a agregar una página más de índice.
+      let fontCat = 8.5, fontLetra = 10, altoLinea = 12, gapGrupo = 6;
+      let gruposConLineas = construirGrupos(fontCat, altoLinea, gapGrupo);
+      let paginasIndice = distribuirEnPaginas(gruposConLineas);
+      const PISO_FONT_CAT = 6.5;
+      while (paginasIndice.length > 1 && fontCat > PISO_FONT_CAT) {
+        fontCat = Math.max(PISO_FONT_CAT, fontCat - 0.5);
+        fontLetra = Math.max(PISO_FONT_CAT + 1.5, fontLetra - 0.5);
+        altoLinea = Math.max(9, altoLinea - 0.5);
+        gapGrupo = Math.max(3, gapGrupo - 0.5);
+        gruposConLineas = construirGrupos(fontCat, altoLinea, gapGrupo);
+        paginasIndice = distribuirEnPaginas(gruposConLineas);
+      }
+
+      const numPaginasIndice = paginasIndice.length;
       for (let i = 0; i < numPaginasIndice; i++) doc.insertPage(1);
       const desplazamiento = numPaginasIndice;
 
-      // Recorta el nombre de una categoría, carácter por carácter, hasta que quepa en el ancho
-      // de su columna — para que una categoría con un nombre largo no invada la columna vecina.
-      function recortarNombreCategoria(nombre, anchoMaximo) {
-        if (doc.getTextWidth(nombre) <= anchoMaximo) return nombre;
-        let recortado = nombre;
-        while (recortado.length > 1 && doc.getTextWidth(recortado + '…') > anchoMaximo) {
-          recortado = recortado.slice(0, -1);
-        }
-        return recortado + '…';
+      function dibujarColumnaIndice(columna, xBase, yInicio) {
+        doc.setDrawColor(225, 225, 218);
+        let yCol = yInicio;
+        columna.forEach(grupo => {
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(fontLetra);
+          doc.setTextColor(201, 162, 39);
+          doc.text(grupo.letra, xBase, yCol + altoLinea - 3);
+
+          grupo.lineas.forEach((linea, idxLinea) => {
+            const yLinea = yCol + idxLinea * altoLinea + altoLinea - 3;
+            linea.forEach(token => {
+              const paginaReal = categoriaPaginaMap[token.categoria] + desplazamiento;
+              const textoReal = token.categoria + ' (' + paginaReal + ')';
+              doc.setFont('helvetica', 'normal');
+              doc.setFontSize(fontCat);
+              doc.setTextColor(63, 167, 150);
+              doc.text(textoReal, xBase + token.x, yLinea);
+              const anchoReal = doc.getTextWidth(textoReal);
+              // Zona clicable sobre "categoría (página)" — no incluye la coma que sigue, para no
+              // invadir visualmente el siguiente ítem de la línea.
+              doc.link(xBase + token.x - 1, yLinea - altoLinea + 2, anchoReal + 2, altoLinea, { pageNumber: paginaReal });
+              if (!token.esUltimo) {
+                doc.setTextColor(143, 166, 155);
+                doc.text(',', xBase + token.x + anchoReal, yLinea);
+              }
+            });
+          });
+          yCol += grupo.lineas.length * altoLinea + gapGrupo;
+        });
+        doc.setTextColor(15, 27, 23);
       }
 
-      let cursorIndice = 0;
       for (let pag = 1; pag <= numPaginasIndice; pag++) {
         doc.setPage(pag);
         y = 50;
@@ -2394,41 +2516,9 @@ RESULTADOS DEL CÁLCULO DE PRECIO
           y += 11 * notaIndiceWrap.length + 14;
         }
 
-        const itemsEnEstaPagina = Math.min(pag === 1 ? itemsPorPagina1 : itemsPorPaginaN, categoriasIndice.length - cursorIndice);
-        const yInicioColumnas = y;
-        const filasEnEstaPagina = Math.ceil(itemsEnEstaPagina / numColumnasIndice);
-
-        // Líneas divisorias finas entre columnas, para que se vean como columnas distribuidas
-        // en vez de texto suelto flotando en la página.
-        doc.setDrawColor(225, 225, 218);
-        for (let c = 1; c < numColumnasIndice; c++) {
-          const xDivisor = margenX + c * (anchoColumnaIndice + espacioEntreColumnas) - espacioEntreColumnas / 2;
-          doc.line(xDivisor, yInicioColumnas - 6, xDivisor, yInicioColumnas + filasEnEstaPagina * altoFilaIndice - 4);
-        }
-
-        for (let j = 0; j < itemsEnEstaPagina; j++) {
-          const categoria = categoriasIndice[cursorIndice + j];
-          const paginaDestino = categoriaPaginaMap[categoria] + desplazamiento;
-          const columna = j % numColumnasIndice;
-          const fila = Math.floor(j / numColumnasIndice);
-          const xColumna = margenX + columna * (anchoColumnaIndice + espacioEntreColumnas);
-          const yFila = yInicioColumnas + fila * altoFilaIndice;
-
-          doc.setFont('helvetica', 'bold');
-          doc.setFontSize(8.5);
-          doc.setTextColor(63, 167, 150);
-          doc.text(recortarNombreCategoria(categoria, anchoColumnaIndice - 22), xColumna, yFila);
-          doc.setFont('helvetica', 'normal');
-          doc.setFontSize(7.5);
-          doc.setTextColor(143, 166, 155);
-          doc.text(String(paginaDestino), xColumna + anchoColumnaIndice, yFila, { align: 'right' });
-
-          // Zona clicable de toda la celda (no solo el texto) — más fácil de tocar desde el
-          // celular que apuntarle justo al nombre de la categoría.
-          doc.link(xColumna - 2, yFila - 10, anchoColumnaIndice + 4, altoFilaIndice, { pageNumber: paginaDestino });
-        }
-
-        cursorIndice += itemsEnEstaPagina;
+        const { col1, col2 } = paginasIndice[pag - 1];
+        dibujarColumnaIndice(col1, margenX, y);
+        dibujarColumnaIndice(col2, margenX + anchoColumnaIndice + espacioEntreColumnas, y);
       }
 
       // Marcadores del lector de PDF (panel lateral en Adobe Reader, Chrome, Vista previa de
