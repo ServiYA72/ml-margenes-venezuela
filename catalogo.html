@@ -63,6 +63,23 @@
   input:focus, select:focus { outline: none; border-color: var(--gold); }
   .contador-resultados { font-size: 12.5px; color: var(--muted); white-space: nowrap; padding-bottom: 11px; }
 
+  .barra-letras { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 22px; }
+  .letra-btn {
+    position: relative; background: var(--surface); border: 1px solid var(--line); color: var(--paper);
+    width: 40px; height: 40px; font-family: 'IBM Plex Mono', monospace; font-size: 14px; font-weight: 600;
+    cursor: pointer; display: flex; align-items: center; justify-content: center;
+    transition: border-color .15s ease, color .15s ease, background .15s ease;
+  }
+  .letra-btn:hover:not(:disabled) { border-color: var(--gold); color: var(--gold); }
+  .letra-btn.activa { background: var(--gold); color: var(--ink); border-color: var(--gold); }
+  .letra-btn:disabled { opacity: .3; cursor: not-allowed; }
+  .letra-contador {
+    position: absolute; top: -6px; right: -6px; background: var(--teal); color: var(--ink);
+    font-size: 9px; font-weight: 700; min-width: 15px; height: 15px; border-radius: 8px;
+    display: flex; align-items: center; justify-content: center; padding: 0 3px; font-family: 'IBM Plex Mono', monospace;
+  }
+  .letra-btn.activa .letra-contador { background: var(--ink); color: var(--gold); }
+
   .grid-productos {
     display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 18px;
   }
@@ -191,7 +208,7 @@
 
   @media print {
     body { background: #fff; color: #111; }
-    header, .barra-filtros, .paginacion, button.compartir { display: none; }
+    header, .barra-filtros, .barra-letras, .paginacion, button.compartir { display: none; }
     .tarjeta { break-inside: avoid; border-color: #ccc; }
     .tp-precio-usd { color: #7a5f0c; }
   }
@@ -231,7 +248,8 @@
     <div class="contador-resultados" id="contador-resultados"></div>
   </div>
 
-  <div id="grid-productos" class="grid-productos"></div>
+  <div class="barra-letras" id="barra-letras"></div>
+  <div id="grid-productos" class="grid-productos" style="display:none;"></div>
   <div class="estado-carga" id="estado-carga">Cargando catálogo…</div>
   <div class="estado-vacio" id="estado-vacio" style="display:none;">No se encontraron productos con ese criterio.</div>
 
@@ -307,6 +325,28 @@
   // se asume que sí (true), igual que el valor por defecto en la base de datos, así el catálogo
   // nunca muestra tarjetas vacías mientras la consulta de configuración todavía está en camino.
   let catalogoSoloConFotos = true;
+
+  // Catálogo en modo "índice alfabético": por defecto los productos están ocultos y solo se ven
+  // las letras del alfabeto (A-Z + "#" para nombres que no empiezan con una letra); al hacer clic
+  // en una letra se cargan y despliegan únicamente los productos cuyo nombre empieza con ella. Si
+  // el visitante escribe algo en el buscador, el catálogo cambia a "modo búsqueda" (la grilla
+  // tradicional, paginada) hasta que borre el texto.
+  const LETRAS_ALFABETO = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z','#'];
+  const LIMITE_PRODUCTOS_POR_LETRA = 300; // tope de seguridad por letra; un catálogo real está muy por debajo de esto
+  let modoBusqueda = false;
+  let letraAbierta = null;
+  let idsPorLetra = {};
+  let conteoPorLetra = {};
+  let cargandoProductosLetra = false;
+
+  // Primera letra "visual" del nombre de un producto: quita acentos (para que "Árbol" caiga en la
+  // misma letra que "Arbol") y toma el primer carácter alfabético; si el nombre empieza con un
+  // número, símbolo o está vacío, cae en el cajón "#".
+  function primeraLetraNombre(nombre) {
+    const texto = String(nombre || '').trim().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const primerCaracter = texto.charAt(0);
+    return /[A-Za-z]/.test(primerCaracter) ? primerCaracter.toUpperCase() : '#';
+  }
 
   // En el Dashboard, la descripción guardada de un producto puede traer pegada la "descripción
   // predeterminada" (un texto genérico, igual para todo el catálogo, pensado para uso interno)
@@ -630,6 +670,112 @@
     if (e.key === 'ArrowRight') galeriaIr(1);
   });
 
+  function construirBarraLetras() {
+    const cont = document.getElementById('barra-letras');
+    cont.innerHTML = LETRAS_ALFABETO.map(letra => {
+      const cantidad = conteoPorLetra[letra] || 0;
+      const activa = letra === letraAbierta;
+      return `<button type="button" class="letra-btn ${activa ? 'activa' : ''}" ${cantidad === 0 ? 'disabled' : ''} onclick="toggleLetra('${letra}')" aria-label="Ver productos con la letra ${letra}">${letra}${cantidad > 0 ? `<span class="letra-contador">${cantidad > 99 ? '99+' : cantidad}</span>` : ''}</button>`;
+    }).join('');
+  }
+
+  // Recorre (liviano: solo id + nombre) todos los productos que cumplen el filtro de categoría y
+  // "solo con fotos" activos, y los agrupa por primera letra — esto arma el índice (qué letras
+  // tienen productos y cuántos) sin traer todavía la data completa de cada producto.
+  async function actualizarConteoLetras() {
+    const categoria = document.getElementById('filtro-categoria').value;
+    const estadoCarga = document.getElementById('estado-carga');
+    estadoCarga.textContent = 'Cargando catálogo…';
+    estadoCarga.style.display = 'block';
+
+    let query = supabase.from('vista_catalogo_publico').select('id, nombre').eq('tenant_slug', TENANT_SLUG);
+    if (categoria) query = query.eq('categoria', categoria);
+    if (catalogoSoloConFotos) query = query.eq('tiene_fotos', true);
+    // Límite de seguridad: muy por encima de lo esperado en un catálogo real; si algún día se
+    // supera, el índice alfabético sigue funcionando, solo no contaría los productos de más.
+    query = query.order('nombre').range(0, 4999);
+
+    const { data, error } = await query;
+    estadoCarga.style.display = 'none';
+
+    idsPorLetra = {};
+    conteoPorLetra = {};
+    LETRAS_ALFABETO.forEach(l => { idsPorLetra[l] = []; conteoPorLetra[l] = 0; });
+
+    if (error) {
+      console.error('No se pudo cargar el índice alfabético del catálogo', error);
+    } else {
+      (data || []).forEach(p => {
+        const letra = primeraLetraNombre(p.nombre);
+        const clave = idsPorLetra[letra] ? letra : '#';
+        idsPorLetra[clave].push(p.id);
+        conteoPorLetra[clave] = (conteoPorLetra[clave] || 0) + 1;
+      });
+    }
+    construirBarraLetras();
+  }
+
+  window.toggleLetra = function(letra) {
+    if (letraAbierta === letra) {
+      cerrarLetra();
+    } else {
+      abrirLetra(letra);
+    }
+  };
+
+  function cerrarLetra() {
+    letraAbierta = null;
+    document.getElementById('grid-productos').innerHTML = '';
+    document.getElementById('grid-productos').style.display = 'none';
+    document.getElementById('paginacion').style.display = 'none';
+    document.getElementById('estado-vacio').style.display = 'none';
+    document.getElementById('contador-resultados').textContent = '';
+    construirBarraLetras();
+  }
+
+  async function abrirLetra(letra) {
+    if (cargandoProductosLetra) return;
+    letraAbierta = letra;
+    construirBarraLetras();
+
+    const grid = document.getElementById('grid-productos');
+    const estadoCarga = document.getElementById('estado-carga');
+    const estadoVacio = document.getElementById('estado-vacio');
+    grid.innerHTML = '';
+    grid.style.display = 'grid';
+    estadoVacio.style.display = 'none';
+    document.getElementById('paginacion').style.display = 'none';
+    document.getElementById('contador-resultados').textContent = '';
+
+    const idsTotal = idsPorLetra[letra] || [];
+    if (idsTotal.length === 0) {
+      estadoVacio.style.display = 'block';
+      return;
+    }
+    const ids = idsTotal.slice(0, LIMITE_PRODUCTOS_POR_LETRA);
+
+    cargandoProductosLetra = true;
+    estadoCarga.textContent = 'Cargando productos…';
+    estadoCarga.style.display = 'block';
+    const { data, error } = await supabase.from('vista_catalogo_publico').select('*').eq('tenant_slug', TENANT_SLUG).in('id', ids).order('nombre');
+    cargandoProductosLetra = false;
+
+    if (letraAbierta !== letra) return; // el visitante cambió de letra (o de filtro) mientras cargaba
+
+    estadoCarga.style.display = 'none';
+    if (error) {
+      estadoCarga.textContent = 'No se pudieron cargar los productos: ' + error.message;
+      estadoCarga.style.display = 'block';
+      return;
+    }
+
+    grid.innerHTML = (data || []).map(tarjetaHtml).join('');
+    const mostrados = (data || []).length;
+    document.getElementById('contador-resultados').textContent = mostrados < idsTotal.length
+      ? `Mostrando ${mostrados} de ${idsTotal.length} productos con "${letra}"`
+      : `${mostrados} producto${mostrados === 1 ? '' : 's'} con "${letra}"`;
+  }
+
   window.cargarProductos = async function(reset) {
     if (cargando) return;
     cargando = true;
@@ -638,6 +784,8 @@
     const estadoCarga = document.getElementById('estado-carga');
     const estadoVacio = document.getElementById('estado-vacio');
     const btnMas = document.getElementById('btn-cargar-mas');
+    document.getElementById('grid-productos').style.display = 'grid';
+    estadoCarga.textContent = 'Cargando catálogo…';
     estadoCarga.style.display = 'block';
     estadoVacio.style.display = 'none';
     if (btnMas) btnMas.disabled = true;
@@ -691,8 +839,40 @@
   let timerBusqueda = null;
   window.onCambioFiltro = function() {
     clearTimeout(timerBusqueda);
-    timerBusqueda = setTimeout(() => cargarProductos(true), 300);
+    timerBusqueda = setTimeout(aplicarFiltros, 300);
   };
+
+  // Decide, según el buscador, en qué modo debe estar el catálogo: si hay texto escrito, se
+  // muestra la grilla tradicional (paginada) con los resultados de la búsqueda; si está vacío,
+  // se vuelve al índice alfabético (letras). Si el visitante tenía una letra abierta y cambia de
+  // categoría (sin escribir nada en el buscador), se reabre esa misma letra ya con el nuevo
+  // filtro aplicado, en vez de dejarlo con el índice colapsado.
+  async function aplicarFiltros() {
+    const texto = document.getElementById('buscador').value.trim();
+
+    if (texto) {
+      modoBusqueda = true;
+      letraAbierta = null;
+      document.getElementById('barra-letras').style.display = 'none';
+      cargarProductos(true);
+      return;
+    }
+
+    modoBusqueda = false;
+    document.getElementById('barra-letras').style.display = 'flex';
+    const letraPrevia = letraAbierta;
+    letraAbierta = null;
+    document.getElementById('grid-productos').innerHTML = '';
+    document.getElementById('grid-productos').style.display = 'none';
+    document.getElementById('paginacion').style.display = 'none';
+    document.getElementById('estado-vacio').style.display = 'none';
+    document.getElementById('contador-resultados').textContent = '';
+
+    await actualizarConteoLetras();
+    if (letraPrevia && (conteoPorLetra[letraPrevia] || 0) > 0) {
+      abrirLetra(letraPrevia);
+    }
+  }
 
   window.compartirCatalogo = async function() {
     // Se conserva el parámetro ?t= (identifica el tenant) al compartir;
@@ -712,7 +892,7 @@
 
   actualizarInterfazCarrito();
   cargarCategorias();
-  cargarConfigCatalogo().then(() => cargarProductos(true));
+  cargarConfigCatalogo().then(() => aplicarFiltros());
 </script>
 
 <div class="btns-scroll">
