@@ -277,6 +277,7 @@
         <div class="resumen-item"><b id="res-vinculadas">0</b>ya vinculadas</div>
         <div class="resumen-item"><b id="res-pendientes">0</b>por revisar</div>
       </div>
+      <div id="detalle-sync-precios" style="display:none; margin-top:12px; font-size:12.5px; line-height:1.9;"></div>
     </div>
 
     <div class="panel" id="panel-revisar" style="display:none;">
@@ -340,10 +341,12 @@
 
   const CLAVE_OMITIDOS = 'ml-fichas-omitidas'; // ids de publicaciones ML marcadas "no es mío", para no repreguntar
 
-  let productosCache = []; // [{id, nombre, sku, especificaciones, _tokens}] — catálogo completo, para sugerir/buscar coincidencias
+  let productosCache = []; // [{id, nombre, sku, especificaciones, costo_usd, _tokens}] — catálogo completo, para sugerir/buscar coincidencias
   let filasRevisar = [];   // filas de la última ficha técnica importada que todavía no están vinculadas
   let idsYaVinculados = new Set(); // mercadolibre_item_id ya presentes en publicaciones (estado = publicado)
+  let publicadosCache = []; // publicaciones ya vinculadas, con lo necesario para resincronizar precio (ver sincronizarPreciosDesdeFicha)
   let tenantIdActual = null; // necesario para armar la ruta de subida de fotos, igual que en dashboard.html
+  let tasaBCV = null, tasaBinance = null; // necesarias para recalcular precio/ganancia igual que en dashboard.html (ver calcular_precios)
 
   (async function init() {
     const { data: { session } } = await supabase.auth.getSession();
@@ -354,10 +357,23 @@
     const { data: perfil } = await supabase.from('profiles').select('tenant_id').eq('id', session.user.id).single();
     tenantIdActual = perfil?.tenant_id || null;
 
+    await cargarTasas();
     await cargarProductosCache();
     await cargarPublicados();
     preseleccionarDesdeUrl();
   })();
+
+  // Mismas tasas que usa dashboard.html para calcular_precios (BCV y Binance, la más reciente
+  // cargada) — se necesitan aquí para poder recalcular precio/ganancia cuando se sincroniza un
+  // precio cambiado en Mercado Libre (ver sincronizarPreciosDesdeFicha).
+  async function cargarTasas() {
+    const { data } = await supabase
+      .from('tasas_cambio').select('*').order('fecha', { ascending: false }).limit(1).single();
+    if (data) {
+      tasaBCV = parseFloat(data.tasa_bcv);
+      tasaBinance = parseFloat(data.tasa_binance);
+    }
+  }
 
   // Si se llega acá desde el botón "Enviar a Publicación ML" del Dashboard (al editar un
   // producto), el producto ya viene elegido en el paso 1 — así no hay que buscarlo de nuevo.
@@ -383,7 +399,7 @@
 
   async function cargarProductosCache() {
     const TAMANO_BLOQUE = 1000;
-    const COLUMNAS = 'id, nombre, sku, especificaciones';
+    const COLUMNAS = 'id, nombre, sku, especificaciones, costo_usd';
     const primeraPagina = await supabase
       .from('productos')
       .select(COLUMNAS, { count: 'exact' })
@@ -558,6 +574,17 @@
   // fila 5 en adelante = datos reales. Las columnas varían de orden y cantidad según la
   // categoría (cada una trae su propia ficha técnica), así que se ubican por nombre de código
   // en la fila 1 en vez de por posición fija.
+  // La columna PRICE de la ficha técnica normalmente ya viene como número plano (formato de
+  // planilla para edición masiva, no un texto para mostrar), pero por si acaso viene con símbolo
+  // de moneda o separador de miles, se limpia antes de convertir.
+  function parsearPrecioML(v) {
+    if (v === '' || v === null || v === undefined) return null;
+    if (typeof v === 'number') return isFinite(v) ? v : null;
+    const limpio = String(v).replace(/[^\d.,-]/g, '').replace(/\.(?=\d{3}(\D|$))/g, '').replace(',', '.');
+    const n = parseFloat(limpio);
+    return isNaN(n) ? null : n;
+  }
+
   function extraerFilasML(workbook) {
     const HOJAS_IGNORAR = new Set(['Ayuda', 'hidden']);
     const filas = [];
@@ -591,6 +618,11 @@
           titulo: idx.TITLE !== undefined ? String(fila[idx.TITLE] || '').trim() : '',
           marca: idx.BRAND !== undefined ? String(fila[idx.BRAND] || '').trim() : '',
           modelo: idx.MODEL !== undefined ? String(fila[idx.MODEL] || '').trim() : '',
+          // Precio ACTUAL de la publicación en Mercado Libre (columna con código "PRICE" en la
+          // ficha técnica) — se usa para detectar si el usuario cambió el precio directamente en
+          // ML y no quedó reflejado en el sistema (ver sincronizarPreciosDesdeFicha). null si la
+          // hoja no trae esa columna o la celda viene vacía/no numérica.
+          precio: idx.PRICE !== undefined ? parsearPrecioML(fila[idx.PRICE]) : null,
           textoCompleto
         });
       }
@@ -634,26 +666,52 @@
 
     const vistos = new Set();
     const pendientes = [];
-    let vinculadasEnArchivo = 0;
+    const yaVinculadasFilas = [];
     filas.forEach(f => {
       if (vistos.has(f.id)) return;
       vistos.add(f.id);
-      if (idsYaVinculados.has(f.id)) { vinculadasEnArchivo++; return; }
+      if (idsYaVinculados.has(f.id)) { yaVinculadasFilas.push(f); return; }
       if (omitidos.has(f.id)) return;
       pendientes.push(f);
     });
 
     document.getElementById('resumen-import').style.display = 'flex';
     document.getElementById('res-total').textContent = vistos.size;
-    document.getElementById('res-vinculadas').textContent = vinculadasEnArchivo;
+    document.getElementById('res-vinculadas').textContent = yaVinculadasFilas.length;
     document.getElementById('res-pendientes').textContent = pendientes.length;
 
+    // Entre las que ya estaban vinculadas, revisa si el precio cambió en Mercado Libre desde la
+    // última vez y, si es así, actualiza automáticamente el precio/ganancia en el sistema.
+    msg.style.color = 'var(--muted)';
+    msg.textContent = `Se leyeron ${vistos.size} publicación(es) — revisando si algún precio cambió en Mercado Libre...`;
+    const sync = await sincronizarPreciosDesdeFicha(yaVinculadasFilas);
+    mostrarResumenSincronizacionPrecios(sync);
+
     msg.style.color = 'var(--teal)';
-    msg.textContent = `Listo — se leyeron ${vistos.size} publicación(es).`;
+    let textoFinal = `Listo — se leyeron ${vistos.size} publicación(es).`;
+    if (sync.actualizados.length > 0) textoFinal += ` Se actualizó el precio de ${sync.actualizados.length} producto(s) que había cambiado en Mercado Libre.`;
+    if (sync.noSincronizados.length > 0) { msg.style.color = 'var(--gold)'; textoFinal += ` ${sync.noSincronizados.length} precio(s) no se pudieron sincronizar solos — revísalos en el Dashboard (detalle abajo).`; }
+    msg.textContent = textoFinal;
 
     filasRevisar = pendientes;
     renderizarRevision();
   };
+
+  function mostrarResumenSincronizacionPrecios(sync) {
+    const cont = document.getElementById('detalle-sync-precios');
+    if (!cont) return;
+    if (sync.actualizados.length === 0 && sync.noSincronizados.length === 0) { cont.innerHTML = ''; cont.style.display = 'none'; return; }
+    cont.style.display = 'block';
+    const filasHtml = [];
+    sync.actualizados.forEach(a => {
+      const anterior = a.anterior != null ? '$' + a.anterior.toFixed(2) : '(sin precio previo)';
+      filasHtml.push(`<div style="color:var(--teal);">✓ ${escapeHtml(a.nombre)}: ${anterior} → $${a.nuevo.toFixed(2)}</div>`);
+    });
+    sync.noSincronizados.forEach(n => {
+      filasHtml.push(`<div style="color:var(--gold);">⚠ ${escapeHtml(n.nombre)}: no se pudo sincronizar (${escapeHtml(n.motivo)})</div>`);
+    });
+    cont.innerHTML = filasHtml.join('');
+  }
 
   function renderizarRevision() {
     const panel = document.getElementById('panel-revisar');
@@ -738,16 +796,28 @@
 
     const link = construirLinkML(f.id);
     const { data: pubExistente } = await supabase
-      .from('publicaciones').select('id').eq('producto_id', productoId).maybeSingle();
+      .from('publicaciones').select('id, comision_ml_pct').eq('producto_id', productoId).maybeSingle();
+
+    // Si la ficha ML trae el precio actual de esta publicación, se aprovecha para dejar el
+    // precio/ganancia del sistema alineados con lo que de verdad está publicado — así no hace
+    // falta ir al Dashboard a cargarlo aparte cuando ya viene en la ficha que se está importando.
+    let datosPrecio = {};
+    let avisoPrecio = '';
+    if (f.precio != null) {
+      const producto = productosCache.find(p => p.id === productoId);
+      const r = await recalcularPrecioPublicacion(f.precio, producto?.costo_usd, pubExistente?.comision_ml_pct);
+      if (r.ok) datosPrecio = r.datos;
+      else avisoPrecio = ` (el precio no se pudo sincronizar automáticamente: ${r.motivo} — cárgalo a mano en el Dashboard)`;
+    }
 
     let error;
     if (pubExistente) {
       ({ error } = await supabase.from('publicaciones')
-        .update({ mercadolibre_item_id: f.id, mercadolibre_link: link, estado: 'publicado' })
+        .update({ mercadolibre_item_id: f.id, mercadolibre_link: link, estado: 'publicado', ...datosPrecio })
         .eq('id', pubExistente.id));
     } else {
       ({ error } = await supabase.from('publicaciones')
-        .insert({ producto_id: productoId, mercadolibre_item_id: f.id, mercadolibre_link: link, estado: 'publicado' }));
+        .insert({ producto_id: productoId, mercadolibre_item_id: f.id, mercadolibre_link: link, estado: 'publicado', ...datosPrecio }));
     }
 
     if (error) {
@@ -759,6 +829,11 @@
     filasRevisar.splice(idx, 1);
     renderizarRevision();
     await cargarPublicados();
+    if (avisoPrecio) {
+      const msgPersistente = document.getElementById('msg-import');
+      msgPersistente.style.color = 'var(--gold)';
+      msgPersistente.textContent = `Vinculado.${avisoPrecio}`;
+    }
   };
 
   window.omitirRevision = function(idx) {
@@ -772,11 +847,12 @@
   async function cargarPublicados() {
     const { data, error } = await supabase
       .from('publicaciones')
-      .select('id, producto_id, mercadolibre_item_id, mercadolibre_link, precio_efectivo_usd, stock, productos(nombre, sku)')
+      .select('id, producto_id, mercadolibre_item_id, mercadolibre_link, precio_efectivo_usd, comision_ml_pct, stock, productos(nombre, sku, costo_usd)')
       .eq('estado', 'publicado')
       .order('updated_at', { ascending: false });
 
     idsYaVinculados = new Set((data || []).map(p => p.mercadolibre_item_id).filter(Boolean));
+    publicadosCache = data || []; // se usa para resincronizar el precio si cambió en Mercado Libre (ver sincronizarPreciosDesdeFicha)
 
     const tbody = document.getElementById('tbody-publicados');
     const vacio = document.getElementById('empty-publicados');
@@ -802,6 +878,78 @@
           </div>
         </td>
       </tr>`).join('');
+  }
+
+  // Recalcula precio/ganancia/comisión/Bs para una publicación cuyo precio REAL en Mercado Libre
+  // ahora es `precioReal` (ya sea porque se acaba de vincular, o porque cambió directamente en
+  // ML). En vez de escribir el precio a secas, se reutiliza la MISMA función de cálculo del
+  // sistema (`calcular_precios`, la que usa dashboard.html) para que la ganancia, la comisión y
+  // el precio en Bs con brecha cambiaria queden coherentes entre sí — nunca se reinventa esa
+  // fórmula acá. Se le pide el precio en modo "fijo" (bruta, antes de comisión), con el valor de
+  // ganancia bruta que produce exactamente ese precio (precioReal - costo): así el resultado del
+  // cálculo, por construcción, debe coincidir con precioReal. Si no coincide (lo cual indicaría
+  // que ese supuesto no aplica para este caso), NO se escribe nada — mejor no tocar un número
+  // financiero que arriesgarse a que quede mal.
+  // Devuelve { ok:true, calculo } o { ok:false, motivo }.
+  async function recalcularPrecioPublicacion(precioReal, costoUsd, comisionMlPct) {
+    if (!tasaBCV || !tasaBinance) return { ok: false, motivo: 'no hay tasas de cambio (BCV/Binance) cargadas' };
+    const costo = parseFloat(costoUsd);
+    if (isNaN(costo)) return { ok: false, motivo: 'el producto no tiene costo cargado' };
+    const comision = comisionMlPct != null && !isNaN(parseFloat(comisionMlPct)) ? parseFloat(comisionMlPct) : 11;
+    const valorGananciaBruta = precioReal - costo;
+
+    const { data: calculo, error } = await supabase.rpc('calcular_precios', {
+      p_costo_usd: costo, p_modo: 'fijo', p_valor: valorGananciaBruta,
+      p_comision_ml_pct: comision, p_tasa_bcv: tasaBCV, p_tasa_binance: tasaBinance
+    });
+    if (error || !calculo || !calculo[0]) return { ok: false, motivo: 'error al calcular: ' + (error?.message || 'sin datos') };
+
+    const c = calculo[0];
+    if (Math.abs(parseFloat(c.precio_efectivo_usd) - precioReal) > 0.02) {
+      return { ok: false, motivo: 'el cálculo no coincidió con el precio de Mercado Libre' };
+    }
+    return {
+      ok: true,
+      datos: {
+        modo_ganancia: 'fijo',
+        margen_objetivo_pct: null,
+        comision_ml_pct: comision,
+        precio_efectivo_usd: c.precio_efectivo_usd,
+        precio_bcv_usd_equiv: c.precio_bcv_usd_equiv,
+        precio_bcv_bs: c.precio_bcv_bs,
+        ganancia_real_usd: c.ganancia_deseada_usd,
+        comision_ml_usd: c.comision_ml_usd,
+        ganancia_neta_usd: c.ganancia_neta_usd
+      }
+    };
+  }
+
+  // Compara el precio que trae la ficha técnica de ML (lo que está publicado AHORA MISMO) contra
+  // el precio guardado en el sistema para cada publicación YA vinculada, y si cambiaron, actualiza
+  // la base de datos automáticamente — así si el usuario edita el precio directamente en Mercado
+  // Libre, no hace falta que lo repita a mano acá; basta con volver a importar la ficha.
+  // No modifica nada por su cuenta cuando no puede estar seguro (sin tasas, sin costo, o si el
+  // cálculo no cuadra) — en esos casos lo reporta para revisión manual en el Dashboard.
+  async function sincronizarPreciosDesdeFicha(filasYaVinculadas) {
+    const resultado = { actualizados: [], noSincronizados: [] };
+    for (const f of filasYaVinculadas) {
+      if (f.precio == null) continue; // la ficha no trae columna de precio para esta categoría
+      const pub = publicadosCache.find(p => p.mercadolibre_item_id === f.id);
+      if (!pub) continue;
+
+      const precioActual = pub.precio_efectivo_usd != null ? parseFloat(pub.precio_efectivo_usd) : null;
+      if (precioActual != null && Math.abs(precioActual - f.precio) < 0.01) continue; // sin cambios
+
+      const nombre = pub.productos?.nombre || f.titulo || '(producto)';
+      const r = await recalcularPrecioPublicacion(f.precio, pub.productos?.costo_usd, pub.comision_ml_pct);
+      if (!r.ok) { resultado.noSincronizados.push({ nombre, motivo: r.motivo }); continue; }
+
+      const { error } = await supabase.from('publicaciones').update(r.datos).eq('id', pub.id);
+      if (error) { resultado.noSincronizados.push({ nombre, motivo: 'error al guardar: ' + error.message }); continue; }
+
+      resultado.actualizados.push({ nombre, anterior: precioActual, nuevo: f.precio });
+    }
+    return resultado;
   }
 
   window.quitarPublicado = async function(publicacionId) {
