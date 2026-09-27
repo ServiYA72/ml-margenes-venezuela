@@ -157,6 +157,7 @@
   .rv-sug-item:hover { background: var(--surface); color: var(--gold); }
   .rv-sug-item .sku { color: var(--muted); font-family: 'IBM Plex Mono', monospace; font-size: 11px; }
   .tag-sugerido { font-size: 10.5px; color: var(--teal); margin-top: 6px; }
+  .tag-ambiguo { font-size: 10.5px; color: var(--gold); margin-top: 6px; line-height: 1.5; }
   .rv-acciones { display: flex; gap: 8px; align-items: center; flex: 0 0 auto; }
   .rv-acciones button { margin: 0; padding: 9px 14px; font-size: 12.5px; }
   .rv-msg { font-size: 11.5px; margin-top: 6px; }
@@ -339,7 +340,7 @@
 
   const CLAVE_OMITIDOS = 'ml-fichas-omitidas'; // ids de publicaciones ML marcadas "no es mío", para no repreguntar
 
-  let productosCache = []; // [{id, nombre, sku}] — catálogo completo, para sugerir/buscar coincidencias
+  let productosCache = []; // [{id, nombre, sku, especificaciones, _tokens}] — catálogo completo, para sugerir/buscar coincidencias
   let filasRevisar = [];   // filas de la última ficha técnica importada que todavía no están vinculadas
   let idsYaVinculados = new Set(); // mercadolibre_item_id ya presentes en publicaciones (estado = publicado)
   let tenantIdActual = null; // necesario para armar la ruta de subida de fotos, igual que en dashboard.html
@@ -382,9 +383,10 @@
 
   async function cargarProductosCache() {
     const TAMANO_BLOQUE = 1000;
+    const COLUMNAS = 'id, nombre, sku, especificaciones';
     const primeraPagina = await supabase
       .from('productos')
-      .select('id, nombre, sku', { count: 'exact' })
+      .select(COLUMNAS, { count: 'exact' })
       .order('nombre')
       .range(0, TAMANO_BLOQUE - 1);
 
@@ -395,7 +397,7 @@
       const pedidosRestantes = [];
       for (let desde = TAMANO_BLOQUE; desde < total; desde += TAMANO_BLOQUE) {
         pedidosRestantes.push(
-          supabase.from('productos').select('id, nombre, sku')
+          supabase.from('productos').select(COLUMNAS)
             .order('nombre')
             .range(desde, desde + TAMANO_BLOQUE - 1)
         );
@@ -404,7 +406,55 @@
       resultados.forEach(r => { if (!r.error && r.data) todos = todos.concat(r.data); });
     }
 
-    productosCache = todos;
+    // Para cada producto se precalcula el conjunto de palabras que lo describen: el nombre, más
+    // la marca y TODAS las características técnicas que el usuario cargó en la ficha del producto
+    // (ver dashboard.html > productos.especificaciones = { marca, caracteristicas: {clave:valor} }).
+    // Esto es lo que permite distinguir productos con nombre casi idéntico (ej. misma laptop con
+    // 8GB vs 16GB de RAM) aunque esa diferencia no esté en el nombre — sí suele estar cargada como
+    // característica.
+    productosCache = todos.map(p => ({ ...p, _tokens: tokenizarCoincidencia(textoDescriptivoProducto(p)) }));
+    construirFrecuenciaPalabras();
+  }
+
+  function textoDescriptivoProducto(p) {
+    const partes = [p.nombre || ''];
+    const esp = p && p.especificaciones;
+    if (esp) {
+      if (esp.marca) partes.push(esp.marca);
+      if (esp.caracteristicas) {
+        Object.values(esp.caracteristicas).forEach(v => { if (v) partes.push(String(v)); });
+      }
+    }
+    return partes.join(' ');
+  }
+
+  // "Cuántos productos del catálogo contienen cada palabra" — sirve para, al comparar texto,
+  // darle poco peso a palabras que casi todo producto comparte ("laptop", "core", "ram", la
+  // propia marca si vende mayormente esa marca) y mucho peso a las que de verdad distinguen un
+  // producto de otro (números de modelo, capacidades, generación). Estilo TF-IDF simplificado.
+  let frecuenciaPalabras = new Map();
+  let totalProductosIdf = 0;
+  function construirFrecuenciaPalabras() {
+    frecuenciaPalabras = new Map();
+    totalProductosIdf = productosCache.length;
+    for (const p of productosCache) {
+      for (const t of p._tokens) frecuenciaPalabras.set(t, (frecuenciaPalabras.get(t) || 0) + 1);
+    }
+  }
+  function pesoPalabra(token) {
+    const df = frecuenciaPalabras.get(token) || 1;
+    return Math.log((totalProductosIdf + 1) / (df + 0.5)) + 0.15; // siempre > 0
+  }
+  function similitudPonderada(tokensA, tokensB) {
+    if (tokensA.size === 0 || tokensB.size === 0) return 0;
+    let pesoInterseccion = 0, pesoUnion = 0;
+    const union = new Set([...tokensA, ...tokensB]);
+    for (const t of union) {
+      const w = pesoPalabra(t);
+      pesoUnion += w;
+      if (tokensA.has(t) && tokensB.has(t)) pesoInterseccion += w;
+    }
+    return pesoUnion ? pesoInterseccion / pesoUnion : 0;
   }
 
   function escapeHtml(str) {
@@ -422,24 +472,74 @@
     return new Set(normalizarTexto(s).split(' ').filter(Boolean));
   }
 
-  // Sugiere el producto del catálogo que más se parece al título de la publicación de ML,
-  // por superposición de palabras (Jaccard). No es perfecto (dos productos muy parecidos pueden
-  // confundirse, ej. "6ta gen" vs "8va gen"), así que SIEMPRE se muestra como sugerencia editable,
-  // nunca se vincula solo — el usuario confirma o corrige cada una a mano.
-  function sugerirProducto(tituloML) {
-    const tML = tokenizar(tituloML);
-    if (tML.size === 0) return null;
-    let mejor = null, mejorScore = 0;
-    for (const p of productosCache) {
-      const tP = tokenizar(p.nombre);
-      if (tP.size === 0) continue;
-      let inter = 0;
-      for (const tok of tML) if (tP.has(tok)) inter++;
-      const union = tML.size + tP.size - inter;
-      const score = union ? inter / union : 0;
-      if (score > mejorScore) { mejorScore = score; mejor = p; }
+  // Variante usada SOLO para comparar y sugerir coincidencias (sugerirProducto/textoDescriptivoProducto):
+  // además de normalizar, une un número seguido de una palabra corta separada por espacio
+  // (ej. "16 GB" -> "16gb"), porque el mismo dato aparece a veces junto y a veces separado según
+  // venga de la ficha de Mercado Libre o de lo que el usuario tipeó en las características del
+  // producto — sin esto, "16 GB" y "16GB" se tratan como palabras distintas y no se reconoce la
+  // coincidencia real. No se usa en las demás búsquedas de este archivo (buscador de productos,
+  // etc.) para no cambiarles el comportamiento.
+  function normalizarParaCoincidencia(s) {
+    return normalizarTexto(s).replace(/(\d+)\s+([a-z]+)\b/g, '$1$2');
+  }
+  function tokenizarCoincidencia(s) {
+    return new Set(normalizarParaCoincidencia(s).split(' ').filter(Boolean));
+  }
+
+  // Sugiere el producto del catálogo que corresponde a esta publicación de ML.
+  // 1) Primero intenta una coincidencia EXACTA de SKU: cuando el producto se publicó desde este
+  //    mismo sistema (ver generarPlantillaPreparar, más abajo), su SKU se escribió en la planilla
+  //    de ML — así que si el archivo de "Fichas técnicas" trae ese mismo SKU de vuelta, es una
+  //    identificación confiable, no una adivinanza por texto. Cubre solo los productos publicados
+  //    con SKU cargado.
+  // 2) Si no hay SKU (o el producto no tiene SKU cargado en el catálogo), se compara TODO el
+  //    texto disponible: no solo el título de la publicación, sino también las demás columnas
+  //    de la ficha técnica de ML (RAM, almacenamiento, color, etc. — Mercado Libre casi nunca mete
+  //    esas specs en el título, pero sí las trae como columnas separadas), contra el nombre MÁS
+  //    las características técnicas que el usuario cargó en el producto (dashboard > ficha del
+  //    producto). Comparar solo títulos perdía justo la información que distingue dos variantes
+  //    casi idénticas (ej. la misma laptop en 8GB y en 16GB).
+  //    Cada palabra se pondera por qué tan rara es en el catálogo (similar a TF-IDF): palabras que
+  //    casi todo producto comparte ("laptop", "core", "ram") pesan poco y no deciden nada por sí
+  //    solas; las que realmente distinguen un producto de otro (capacidades, generación, modelo)
+  //    pesan más y son las que inclinan la balanza.
+  // 3) Guardia de ambigüedad: si el mejor candidato y el segundo mejor quedan casi empatados, es
+  //    señal de que hay dos productos muy parecidos y no hay información suficiente para elegir
+  //    con confianza entre ellos — en ese caso no se sugiere ninguno (se avisa cuáles son, para que
+  //    el usuario elija a mano) en vez de arriesgarse a vincular el nombre equivocado.
+  // Y en cualquiera de los dos casos, la sugerencia SIEMPRE se muestra editable — nunca se vincula
+  // sola; el usuario confirma o corrige cada una a mano antes de "Vincular".
+  const UMBRAL_SIMILITUD_TITULO = 0.30;
+  const MARGEN_AMBIGUEDAD = 0.08;
+  function sugerirProducto(tituloML, skuML, textoCompletoML) {
+    if (skuML) {
+      const skuNorm = normalizarTexto(skuML);
+      if (skuNorm) {
+        const porSku = productosCache.find(p => p.sku && normalizarTexto(p.sku) === skuNorm);
+        if (porSku) return { producto: porSku, score: 1, porSku: true };
+      }
     }
-    return mejor ? { producto: mejor, score: mejorScore } : null;
+
+    const tConsulta = tokenizarCoincidencia([tituloML, textoCompletoML].filter(Boolean).join(' '));
+    if (tConsulta.size === 0) return null;
+
+    const candidatos = [];
+    for (const p of productosCache) {
+      const score = similitudPonderada(tConsulta, p._tokens);
+      if (score > 0) candidatos.push({ producto: p, score });
+    }
+    if (candidatos.length === 0) return null;
+    candidatos.sort((a, b) => b.score - a.score);
+    const mejor = candidatos[0];
+    const segundo = candidatos[1];
+
+    if (mejor.score < UMBRAL_SIMILITUD_TITULO) return null;
+
+    if (segundo && (mejor.score - segundo.score) < MARGEN_AMBIGUEDAD && segundo.score >= UMBRAL_SIMILITUD_TITULO * 0.7) {
+      return { producto: null, ambiguo: true, candidatos: [mejor.producto, segundo.producto] };
+    }
+
+    return { producto: mejor.producto, score: mejor.score, porSku: false };
   }
 
   function cargarOmitidos() {
@@ -475,13 +575,23 @@
         const fila = matriz[r] || [];
         const id = fila[idx.ID];
         if (!id) continue;
+        // textoCompleto: TODO el resto de columnas de esta fila (las decenas de características
+        // técnicas propias de la categoría — RAM, almacenamiento, color, capacidad, etc. — que
+        // Mercado Libre expone en la ficha técnica pero normalmente NO incluye en el título). Se
+        // usa para sugerir el producto correcto cuando no hay SKU cargado (ver sugerirProducto).
+        const textoCompleto = fila
+          .filter((_, i) => i !== idx.ID)
+          .map(v => String(v ?? '').trim())
+          .filter(Boolean)
+          .join(' ');
         filas.push({
           categoria: nombreHoja,
           id: String(id).trim(),
           sku: idx.SKU !== undefined ? String(fila[idx.SKU] || '').trim() : '',
           titulo: idx.TITLE !== undefined ? String(fila[idx.TITLE] || '').trim() : '',
           marca: idx.BRAND !== undefined ? String(fila[idx.BRAND] || '').trim() : '',
-          modelo: idx.MODEL !== undefined ? String(fila[idx.MODEL] || '').trim() : ''
+          modelo: idx.MODEL !== undefined ? String(fila[idx.MODEL] || '').trim() : '',
+          textoCompleto
         });
       }
     });
@@ -555,9 +665,20 @@
     }
     panel.style.display = 'block';
     cont.innerHTML = filasRevisar.map((f, i) => {
-      const sugerencia = sugerirProducto(f.titulo);
-      const valorInicial = sugerencia ? sugerencia.producto.nombre : '';
-      const idInicial = sugerencia ? sugerencia.producto.id : '';
+      const sugerencia = sugerirProducto(f.titulo, f.sku, f.textoCompleto);
+      const esAmbiguo = !!(sugerencia && sugerencia.ambiguo);
+      const sugerenciaValida = sugerencia && !esAmbiguo ? sugerencia : null;
+      const valorInicial = sugerenciaValida ? sugerenciaValida.producto.nombre : '';
+      const idInicial = sugerenciaValida ? sugerenciaValida.producto.id : '';
+      let tagSugerencia = '';
+      if (sugerenciaValida) {
+        tagSugerencia = sugerenciaValida.porSku
+          ? `<div class="tag-sugerido">Encontrado por SKU (coincidencia exacta) — igual revísalo antes de confirmar</div>`
+          : `<div class="tag-sugerido">Sugerido por parecido con la ficha del producto — revísalo antes de confirmar</div>`;
+      } else if (esAmbiguo) {
+        const [c1, c2] = sugerencia.candidatos;
+        tagSugerencia = `<div class="tag-ambiguo">Hay más de un producto muy parecido (ej. "${escapeHtml(c1.nombre)}" y "${escapeHtml(c2.nombre)}") — no se pudo elegir uno solo con confianza, búscalo abajo y elige el correcto</div>`;
+      }
       return `
         <div class="fila-revisar" data-idx="${i}">
           <div class="rv-info">
@@ -569,7 +690,7 @@
               value="${escapeHtml(valorInicial)}" oninput="buscarEnRevision(${i}, this.value)" autocomplete="off">
             <input type="hidden" class="rv-producto-id" data-idx="${i}" value="${escapeHtml(idInicial)}">
             <div class="rv-sugerencias" id="rv-sug-${i}"></div>
-            ${sugerencia ? `<div class="tag-sugerido">Sugerido por similitud de nombre — revísalo antes de confirmar</div>` : ''}
+            ${tagSugerencia}
             <div class="rv-msg" id="rv-msg-${i}"></div>
           </div>
           <div class="rv-acciones">
