@@ -1185,31 +1185,27 @@
   async function cargarProductos() {
     const TAMANO_BLOQUE = 1000;
 
-    // Primer bloque: además de traer los primeros productos, count:'exact' nos dice cuántos hay
-    // en total, para saber si hacen falta más páginas.
-    const primeraPagina = await supabase
-      .from('productos')
-      .select(COLUMNAS_PRODUCTO, { count: 'exact' })
-      .order('created_at', { ascending: false })
-      .range(0, TAMANO_BLOQUE - 1);
+    // Se piden bloques de 1000 uno tras otro HASTA que un bloque vuelva con menos de 1000 filas
+    // (esa es la señal de que ya no queda nada más). Antes esto se decidía comparando contra el
+    // total que devuelve count:'exact' — pero si esa cuenta llega en null (puede pasar por un
+    // proxy o extensión del navegador que recorte el header Content-Range de la respuesta), el
+    // total caía de vuelta a "cuántas filas llegaron en el primer bloque" — exactamente 1000 — y
+    // el bucle de páginas siguientes nunca se disparaba, dejando el catálogo cortado en 1000 sin
+    // avisar. Contar cuántas filas llegó CADA bloque, en vez de confiar en un total aparte, no
+    // tiene ese punto ciego.
+    let todosLosDatos = [];
+    let desde = 0;
+    while (true) {
+      const { data, error } = await supabase
+        .from('productos')
+        .select(COLUMNAS_PRODUCTO)
+        .order('created_at', { ascending: false })
+        .range(desde, desde + TAMANO_BLOQUE - 1);
 
-    let todosLosDatos = primeraPagina.data || [];
-    const total = primeraPagina.count ?? todosLosDatos.length;
-
-    // Si hay más de un bloque, se piden TODAS las páginas restantes en paralelo (en vez de una
-    // por una, esperando cada respuesta antes de pedir la siguiente) — con catálogos grandes esto
-    // es la diferencia entre esperar N ida-y-vuelta al servidor en fila o solo una.
-    if (!primeraPagina.error && total > TAMANO_BLOQUE) {
-      const pedidosRestantes = [];
-      for (let desde = TAMANO_BLOQUE; desde < total; desde += TAMANO_BLOQUE) {
-        pedidosRestantes.push(
-          supabase.from('productos').select(COLUMNAS_PRODUCTO)
-            .order('created_at', { ascending: false })
-            .range(desde, desde + TAMANO_BLOQUE - 1)
-        );
-      }
-      const resultados = await Promise.all(pedidosRestantes);
-      resultados.forEach(r => { if (!r.error && r.data) todosLosDatos = todosLosDatos.concat(r.data); });
+      if (error) { console.error('Error cargando productos', error); break; }
+      todosLosDatos = todosLosDatos.concat(data || []);
+      if (!data || data.length < TAMANO_BLOQUE) break; // último bloque: no llegó lleno, no hay más
+      desde += TAMANO_BLOQUE;
     }
 
     productosCache = {};

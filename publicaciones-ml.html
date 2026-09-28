@@ -409,31 +409,28 @@
   };
 
   async function cargarProductosCache() {
+    // Se piden bloques de 1000 hasta que uno vuelva con menos de 1000 filas — no se confía en
+    // count:'exact' para saber el total, porque puede llegar en null (si algo en el camino
+    // recorta el header Content-Range de la respuesta) y dejar el catálogo cortado en el primer
+    // bloque sin avisar.
     const TAMANO_BLOQUE = 1000;
     // costo_usd ya no es una columna de productos: se movió a la tabla protegida productos_costos
     // (RLS: solo rol="dueño" puede leerla) — se trae embebida y se aplana abajo al mismo nombre
     // plano de siempre, para no tener que tocar el resto del archivo que ya espera p.costo_usd.
     const COLUMNAS = 'id, nombre, sku, especificaciones, productos_costos(costo_usd)';
-    const primeraPagina = await supabase
-      .from('productos')
-      .select(COLUMNAS, { count: 'exact' })
-      .order('nombre')
-      .range(0, TAMANO_BLOQUE - 1);
+    let todos = [];
+    let desde = 0;
+    while (true) {
+      const { data, error } = await supabase
+        .from('productos')
+        .select(COLUMNAS)
+        .order('nombre')
+        .range(desde, desde + TAMANO_BLOQUE - 1);
 
-    let todos = primeraPagina.data || [];
-    const total = primeraPagina.count ?? todos.length;
-
-    if (!primeraPagina.error && total > TAMANO_BLOQUE) {
-      const pedidosRestantes = [];
-      for (let desde = TAMANO_BLOQUE; desde < total; desde += TAMANO_BLOQUE) {
-        pedidosRestantes.push(
-          supabase.from('productos').select(COLUMNAS)
-            .order('nombre')
-            .range(desde, desde + TAMANO_BLOQUE - 1)
-        );
-      }
-      const resultados = await Promise.all(pedidosRestantes);
-      resultados.forEach(r => { if (!r.error && r.data) todos = todos.concat(r.data); });
+      if (error) { console.error('Error cargando productos', error); break; }
+      todos = todos.concat(data || []);
+      if (!data || data.length < TAMANO_BLOQUE) break;
+      desde += TAMANO_BLOQUE;
     }
 
     // Para cada producto se precalcula el conjunto de palabras que lo describen: el nombre, más
