@@ -113,6 +113,11 @@
   <h1>Importar lista de precios</h1>
   <p class="sub">Sube el Excel o CSV de un proveedor nacional y carga todos los productos de una vez, con el margen ya calculado para cada uno.</p>
 
+  <div class="panel" id="panel-bloqueo-vendedor" style="display:none;">
+    <p class="sub" style="margin:0;">Esta herramienta trabaja con costos y márgenes de proveedor, así que solo está disponible para el rol dueño. Si necesitas cargar productos nuevos sin precio, pídele a un dueño que lo haga desde aquí, o cárgalos manualmente desde Productos.</p>
+  </div>
+
+  <div id="contenido-import-dueno">
   <div class="panel">
     <h2>1. Elige el proveedor y la ganancia a aplicar</h2>
     <div class="grid-form">
@@ -225,6 +230,7 @@
   </div>
 
   <datalist id="lista-categorias-import"></datalist>
+  </div>
 </main>
 
 <script type="module">
@@ -247,8 +253,19 @@
     if (!session) {
       who.textContent = 'No hay sesión — inicia sesión en login.html';
       who.style.color = '#C1553B';
-    } else {
-      who.textContent = session.user.email;
+      return;
+    }
+    who.textContent = session.user.email;
+
+    // Esta página completa gira en torno a costos y márgenes de proveedor (columna de costo del
+    // archivo, ganancia calculada por fila, etc.) — no es una vista parcial como dashboard.html
+    // donde solo se ocultan algunos campos, así que para rol="vendedor" se bloquea la página
+    // entera en vez de intentar tapar cada celda de la tabla de previsualización.
+    const { data: perfil } = await supabase.from('profiles').select('rol').eq('id', session.user.id).single();
+    if (perfil?.rol !== 'dueño') {
+      document.getElementById('panel-bloqueo-vendedor').style.display = 'block';
+      document.getElementById('contenido-import-dueno').style.display = 'none';
+      return;
     }
 
     const { data: tasas } = await supabase.from('tasas_cambio').select('*').order('fecha', { ascending: false }).limit(1).single();
@@ -1062,19 +1079,26 @@
     // A este punto filasValidas ya solo contiene variantes con precio válido del proveedor
     // (las "no disponibles" se descartaron desde la vista previa y nunca llegan aquí).
     for (const fila of aInsertar) {
+      // costo_usd ya no es columna de productos: se guarda aparte en la tabla protegida
+      // productos_costos (RLS: solo rol="dueño" — esta página entera ya está bloqueada para
+      // cualquier otro rol, pero el insert también se restructura porque la columna plana ni
+      // siquiera existe más).
       const { data: producto, error: errProd } = await supabase
         .from('productos')
         .insert({
           proveedor_id, nombre: fila.nombre, categoria: fila.categoria || null,
           sku: fila.codigo || null,
           especificaciones: fila.marca ? { marca: fila.marca } : {},
-          costo_usd: fila.costo, creado_por: session?.user?.id
+          creado_por: session?.user?.id
         })
         .select()
         .single();
 
       if (!errProd) {
-        await supabase.from('publicaciones').insert({
+        await supabase.from('productos_costos')
+          .upsert({ producto_id: producto.id, costo_usd: fila.costo }, { onConflict: 'producto_id' });
+
+        const { data: publicacion, error: errPub } = await supabase.from('publicaciones').insert({
           producto_id: producto.id,
           descripcion: fila.descripcion || null,
           modo_ganancia: modo,
@@ -1083,11 +1107,19 @@
           precio_efectivo_usd: fila.precioEfectivo.toFixed(2),
           precio_bcv_usd_equiv: fila.precioBcvUsdEquiv.toFixed(2),
           precio_bcv_bs: fila.precioBcvBs.toFixed(2),
-          ganancia_real_usd: fila.gananciaDeseada.toFixed(2),
-          comision_ml_usd: fila.comisionMlUsd.toFixed(2),
-          ganancia_neta_usd: fila.gananciaNetaUsd.toFixed(2),
           creado_por: session?.user?.id
-        });
+        }).select('id').single();
+
+        // ganancia_real_usd/comision_ml_usd/ganancia_neta_usd ya no viven en publicaciones:
+        // se movieron al sidecar protegido publicaciones_margenes.
+        if (!errPub && publicacion) {
+          await supabase.from('publicaciones_margenes').upsert({
+            publicacion_id: publicacion.id,
+            ganancia_real_usd: fila.gananciaDeseada.toFixed(2),
+            comision_ml_usd: fila.comisionMlUsd.toFixed(2),
+            ganancia_neta_usd: fila.gananciaNetaUsd.toFixed(2)
+          }, { onConflict: 'publicacion_id' });
+        }
         cargados++;
       }
       progreso++;

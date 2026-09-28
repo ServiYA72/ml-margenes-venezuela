@@ -329,7 +329,9 @@
     if (data) { tasaBCV = parseFloat(data.tasa_bcv); tasaBinance = parseFloat(data.tasa_binance); }
   }
 
-  const COLUMNAS_PRODUCTO_VENTA = 'id, nombre, sku, categoria, especificaciones, costo_usd, publicaciones(precio_efectivo_usd, precio_bcv_usd_equiv, precio_bcv_bs, stock)';
+  // costo_usd no se pide aquí: se movió a la tabla protegida productos_costos (visible solo para
+  // rol="dueño") y este archivo nunca mostraba el costo, así que no hace falta traerlo.
+  const COLUMNAS_PRODUCTO_VENTA = 'id, nombre, sku, categoria, especificaciones, publicaciones(precio_efectivo_usd, precio_bcv_usd_equiv, precio_bcv_bs, stock)';
 
   function fusionarProductosVentaEnCache(filas) {
     (filas || []).forEach(p => {

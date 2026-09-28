@@ -138,6 +138,8 @@
   .panel-ganancia-general .dato-costo { font-size: 12.5px; color: var(--muted); margin-top: 4px; }
   .panel-ganancia-general .dato-costo b { color: var(--paper); font-family: 'IBM Plex Mono', monospace; }
   .panel-ganancia-general .monto { font-family: 'IBM Plex Mono', monospace; font-size: 22px; font-weight: 600; color: var(--gold); }
+  /* Costo/ganancia interna: solo visible para rol "dueño" — ver rolActual en el script */
+  body.rol-vendedor .solo-dueno { display: none !important; }
 </style>
 </head>
 <body>
@@ -287,12 +289,12 @@
           <option value="mano_obra">Mano de obra técnica (servicio)</option>
         </select>
       </div>
-      <div>
+      <div class="solo-dueno">
         <label for="libre-costo" id="label-libre-costo">Costo (opcional, si lo conoces)</label>
         <input type="number" step="0.01" id="libre-costo" placeholder="0.00">
       </div>
     </div>
-    <div class="hint" id="hint-libre-costo" style="margin-top:0;">Si dejas el costo en 0 (o en blanco), este ítem se cuenta con 100% de ganancia en el resumen interno de abajo — nunca aparece en el PDF del cliente.</div>
+    <div class="hint solo-dueno" id="hint-libre-costo" style="margin-top:0;">Si dejas el costo en 0 (o en blanco), este ítem se cuenta con 100% de ganancia en el resumen interno de abajo — nunca aparece en el PDF del cliente.</div>
     <button class="secondary" style="margin-left:0;" onclick="agregarItemLibre()">Agregar ítem</button>
   </div>
 
@@ -326,7 +328,7 @@
       </table>
     </div>
 
-    <div class="panel-ganancia-general" style="flex-direction:column; align-items:stretch;">
+    <div class="panel-ganancia-general solo-dueno" style="flex-direction:column; align-items:stretch;">
       <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:14px;">
         <div>
           <div class="titulo">Ganancia general de esta cotización — interno, nunca aparece en el PDF</div>
@@ -484,11 +486,19 @@
     document.getElementById('preview-forma-pago').textContent = 'Se imprimirá: "' + textoFormaPago(pct) + '"';
   };
 
+  let rolActual = null; // 'dueño' o 'vendedor' — controla si se muestran costo/ganancia interna
+  let tenantIdActual = null; // necesario para guardar en cotizacion_items_costos
+  function esDueno() { return rolActual === 'dueño'; }
+
   async function initSesion() {
     const { data: { session } } = await supabase.auth.getSession();
     const who = document.getElementById('who');
-    if (!session) { who.textContent = 'No hay sesión — inicia sesión en login.html'; who.style.color = '#C1553B'; }
-    else who.textContent = session.user.email;
+    if (!session) { who.textContent = 'No hay sesión — inicia sesión en login.html'; who.style.color = '#C1553B'; return; }
+    who.textContent = session.user.email;
+    const { data: perfil } = await supabase.from('profiles').select('rol, tenant_id').eq('id', session.user.id).single();
+    rolActual = perfil?.rol || 'vendedor';
+    tenantIdActual = perfil?.tenant_id || null;
+    document.body.classList.toggle('rol-vendedor', !esDueno());
   }
 
   // ---------- Tasas de cambio del día ----------
@@ -675,7 +685,18 @@
   };
 
   // ---------- Productos ----------
-  const COLUMNAS_PRODUCTO_COTIZACION = 'id, nombre, sku, categoria, especificaciones, costo_usd, activo, proveedor_id, proveedores(nombre), publicaciones(ganancia_real_usd, modo_ganancia, stock, estado)';
+  // costo_usd y ganancia_real_usd se movieron a las tablas protegidas productos_costos y
+  // publicaciones_margenes (RLS: solo visibles para rol="dueño"). Se piden embebidas y
+  // normalizarCostosProducto() las aplana al shape de antes para el resto del código.
+  const COLUMNAS_PRODUCTO_COTIZACION = 'id, nombre, sku, categoria, especificaciones, productos_costos(costo_usd), activo, proveedor_id, proveedores(nombre), publicaciones(modo_ganancia, stock, estado, publicaciones_margenes(ganancia_real_usd))';
+
+  function normalizarCostosProducto(p) {
+    if (!p) return p;
+    p.costo_usd = p.productos_costos ? p.productos_costos.costo_usd : null;
+    const pubs = Array.isArray(p.publicaciones) ? p.publicaciones : (p.publicaciones ? [p.publicaciones] : []);
+    pubs.forEach(pub => { pub.ganancia_real_usd = pub.publicaciones_margenes ? pub.publicaciones_margenes.ganancia_real_usd : null; });
+    return p;
+  }
 
   async function cargarProductos() {
     const TAMANO_BLOQUE = 1000;
@@ -703,6 +724,7 @@
 
     productosCache = {};
     todos.forEach(p => {
+      normalizarCostosProducto(p);
       p.pub = Array.isArray(p.publicaciones) ? p.publicaciones[0] : p.publicaciones;
       p.proveedorNombre = p.proveedores?.nombre || '';
       productosCache[p.id] = p;
@@ -763,7 +785,7 @@
           <span style="color:var(--muted)">${escapeHtml(p.categoria || '')}</span>
           <span style="color:var(--muted)">${escapeHtml(p.proveedorNombre || '')}</span>
           ${badgeStockHtml(p.pub?.stock)}
-          <span style="color:var(--gold)">costo $${parseFloat(p.costo_usd || 0).toFixed(2)}</span>
+          ${esDueno() ? `<span style="color:var(--gold)">costo $${parseFloat(p.costo_usd || 0).toFixed(2)}</span>` : ''}
         </span>
       `;
       fila.onclick = () => elegirProducto(p.id);
@@ -816,21 +838,31 @@
     if (!p) return;
     filtrarListaProductos();
 
-    const costo = parseFloat(p.costo_usd || 0);
-    const margenGuardado = p.pub?.ganancia_real_usd;
-    const margenUsd = (margenGuardado != null && !isNaN(parseFloat(margenGuardado))) ? parseFloat(margenGuardado) : costo * 0.30;
-    const calc = calcularPrecioSinComision(costo, margenUsd);
-
     const panel = document.getElementById('producto-elegido-panel');
     panel.style.display = 'block';
     document.getElementById('pe-nombre').textContent = p.nombre + (p.proveedorNombre ? ' — ' + p.proveedorNombre : '');
     document.getElementById('pe-cantidad').value = 1;
-    document.getElementById('pe-precio').value = calc ? calc.precioUsd.toFixed(2) : costo.toFixed(2);
-    actualizarPrevioBs();
 
-    document.getElementById('pe-costo-ref').textContent = calc
-      ? `Costo de referencia: $${costo.toFixed(2)} · Margen usado: $${margenUsd.toFixed(2)}${margenGuardado == null ? ' (30% por defecto — este producto no tiene margen configurado en el catálogo)' : ' (tomado del margen configurado en el catálogo)'} · Precio sugerido en efectivo, sin comisión de Mercado Libre — puedes editarlo (el precio con brecha cambiaria se ajusta solo).`
-      : `Costo de referencia: $${costo.toFixed(2)}. No hay tasas de cambio cargadas todavía, así que no se puede sugerir el precio con brecha cambiaria.`;
+    // El costo/margen es confidencial (rol dueño): para ese rol se sugiere el precio calculado
+    // desde el costo, igual que antes. Para vendedor, p.costo_usd viene null (RLS) — se sugiere
+    // en su lugar el precio ya publicado, que sí es información pública.
+    if (esDueno()) {
+      const costo = parseFloat(p.costo_usd || 0);
+      const margenGuardado = p.pub?.ganancia_real_usd;
+      const margenUsd = (margenGuardado != null && !isNaN(parseFloat(margenGuardado))) ? parseFloat(margenGuardado) : costo * 0.30;
+      const calc = calcularPrecioSinComision(costo, margenUsd);
+      document.getElementById('pe-precio').value = calc ? calc.precioUsd.toFixed(2) : costo.toFixed(2);
+      document.getElementById('pe-costo-ref').textContent = calc
+        ? `Costo de referencia: $${costo.toFixed(2)} · Margen usado: $${margenUsd.toFixed(2)}${margenGuardado == null ? ' (30% por defecto — este producto no tiene margen configurado en el catálogo)' : ' (tomado del margen configurado en el catálogo)'} · Precio sugerido en efectivo, sin comisión de Mercado Libre — puedes editarlo (el precio con brecha cambiaria se ajusta solo).`
+        : `Costo de referencia: $${costo.toFixed(2)}. No hay tasas de cambio cargadas todavía, así que no se puede sugerir el precio con brecha cambiaria.`;
+    } else {
+      const precioPublicado = parseFloat(p.pub?.precio_efectivo_usd || 0);
+      document.getElementById('pe-precio').value = precioPublicado ? precioPublicado.toFixed(2) : '';
+      document.getElementById('pe-costo-ref').textContent = precioPublicado
+        ? `Precio de referencia (publicado): $${precioPublicado.toFixed(2)} · Ajusta el precio si esta cotización lleva condiciones distintas.`
+        : 'Este producto no tiene un precio publicado de referencia — escribe el precio manualmente.';
+    }
+    actualizarPrevioBs();
 
     const avisos = [];
     if (p.activo === false) avisos.push('Este producto está marcado como inactivo en el catálogo.');
@@ -1167,7 +1199,7 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
         const subtotal = it.cantidad * it.precioUnitario;
         const subtotalConBrecha = it.cantidad * (it.precioConBrecha || 0);
 
-        const desgloseTexto = textoDesgloseItem(it);
+        const desgloseTexto = esDueno() ? textoDesgloseItem(it) : '';
 
         const avisosHtml = (it.avisos && it.avisos.length)
           ? it.avisos.map(a => `<div class="badge-aviso">${escapeHtml(a)}</div>`).join('')
@@ -1277,6 +1309,8 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
       await supabase.from('cotizacion_items').delete().eq('cotizacion_id', cotizacion.id);
     }
 
+    // costo_original_usd ya no vive en cotizacion_items: se movió a la tabla protegida
+    // cotizacion_items_costos (RLS: solo rol="dueño" puede leerla o escribirla).
     const filasItems = itemsCotizacion.map((it, idx) => ({
       cotizacion_id: cotizacion.id,
       producto_id: it.producto_id,
@@ -1286,11 +1320,20 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
       precio_unitario_bs: (it.precioUnitarioBs || 0).toFixed(2),
       subtotal: (it.cantidad * it.precioUnitario).toFixed(2),
       subtotal_bs: (it.cantidad * (it.precioUnitarioBs || 0)).toFixed(2),
-      costo_original_usd: it.costoOriginal != null ? it.costoOriginal : null,
       tipo_item: it.producto_id ? 'producto' : (it.tipoItem || 'libre'),
       orden: idx
     }));
-    const { error: errItems } = await supabase.from('cotizacion_items').insert(filasItems);
+    const { data: itemsInsertados, error: errItems } = await supabase.from('cotizacion_items').insert(filasItems).select();
+
+    if (!errItems && esDueno() && itemsInsertados) {
+      // itemsInsertados conserva el mismo orden que filasItems/itemsCotizacion (insert en bloque).
+      await Promise.all(itemsInsertados.map((fila, idx) => {
+        const costo = itemsCotizacion[idx]?.costoOriginal;
+        if (costo === null || costo === undefined) return null;
+        return supabase.from('cotizacion_items_costos')
+          .upsert({ item_id: fila.id, tenant_id: tenantIdActual, costo_original_usd: costo }, { onConflict: 'item_id' });
+      }));
+    }
 
     btn.disabled = false;
     btn.textContent = 'Guardar cotización';
@@ -1369,7 +1412,7 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
 
     const [{ data: cot, error: errCot }, { data: itemsDb, error: errItems }] = await Promise.all([
       supabase.from('cotizaciones').select('*').eq('id', id).single(),
-      supabase.from('cotizacion_items').select('*').eq('cotizacion_id', id).order('orden')
+      supabase.from('cotizacion_items').select('*, cotizacion_items_costos(costo_original_usd)').eq('cotizacion_id', id).order('orden')
     ]);
 
     if (errCot || !cot) {
@@ -1409,7 +1452,7 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
         // reimprime, nunca una tasa congelada del día en que se guardó.
         precioUnitarioBs: tasaBinance ? parseFloat(it.precio_unitario) * tasaBinance : parseFloat(it.precio_unitario_bs || 0),
         precioConBrecha: calcularPrecioConBrecha(parseFloat(it.precio_unitario)),
-        costoOriginal: it.costo_original_usd != null ? parseFloat(it.costo_original_usd) : null,
+        costoOriginal: it.cotizacion_items_costos?.costo_original_usd != null ? parseFloat(it.cotizacion_items_costos.costo_original_usd) : null,
         // Cotizaciones guardadas antes de esta columna no tienen tipo_item: se infiere
         // 'producto' si viene del catálogo, o 'libre' por defecto (nunca se pierde el ítem).
         tipoItem: it.tipo_item || (it.producto_id ? 'producto' : 'libre'),
@@ -1420,9 +1463,11 @@ Ganancia: $${ganancia.toFixed(2)}  (${margenPct.toFixed(1)}% del precio)`;
         if (!p) {
           item.avisos.push('Este producto ya no existe en el catálogo.');
         } else {
-          const costoActual = parseFloat(p.costo_usd || 0);
-          if (item.costoOriginal != null && Math.abs(costoActual - item.costoOriginal) > 0.001) {
-            item.avisos.push(`Costo cambió: era $${item.costoOriginal.toFixed(2)}, ahora $${costoActual.toFixed(2)}.`);
+          if (esDueno()) {
+            const costoActual = parseFloat(p.costo_usd || 0);
+            if (item.costoOriginal != null && Math.abs(costoActual - item.costoOriginal) > 0.001) {
+              item.avisos.push(`Costo cambió: era $${item.costoOriginal.toFixed(2)}, ahora $${costoActual.toFixed(2)}.`);
+            }
           }
           if (p.activo === false) item.avisos.push('Producto inactivo en el catálogo.');
           const stockActual = p.pub?.stock;

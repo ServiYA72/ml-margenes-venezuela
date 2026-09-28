@@ -249,6 +249,8 @@
   .gold-text { color: var(--gold); }
   .teal-text { color: var(--teal); }
   .msg { font-size: 13px; margin-top: 12px; color: var(--rust); }
+  /* Costo/ganancia real: solo visible para rol "dueño" — ver rolActual en el script */
+  body.rol-vendedor .solo-dueno { display: none !important; }
 </style>
 <script>
   // Se ejecuta de inmediato, antes de pintar la página, para no mostrar "Proveedores" ni un instante
@@ -420,8 +422,8 @@
         </div>
       </div>
 
-      <div class="subseccion-titulo">Precio y ganancia</div>
-      <div class="grid-form">
+      <div class="subseccion-titulo solo-dueno">Precio y ganancia</div>
+      <div class="grid-form solo-dueno">
         <div>
           <label for="prod-costo">Costo proveedor (USD)</label>
           <input type="number" step="0.01" id="prod-costo" placeholder="157.00" oninput="sincronizarGanancia('prod','usd')">
@@ -454,7 +456,7 @@
           <input type="number" step="0.5" id="prod-comision" value="11" oninput="sincronizarGanancia('prod','tipo')">
         </div>
       </div>
-      <div id="comparacion-comisiones" style="display:none; margin-top:14px; padding:12px 14px; background:var(--surface-2); border:1px solid var(--line);"></div>
+      <div id="comparacion-comisiones" class="solo-dueno" style="display:none; margin-top:14px; padding:12px 14px; background:var(--surface-2); border:1px solid var(--line);"></div>
 
       <div class="subseccion-titulo">Descripción y características</div>
       <div class="grid-form">
@@ -539,7 +541,7 @@
       <h2>Productos con margen calculado</h2>
 
       <div style="display:flex; gap:12px; align-items:end; flex-wrap:wrap; margin-bottom:16px; padding-bottom:16px; border-bottom:1px solid var(--line);">
-        <div>
+        <div class="solo-dueno">
           <label for="bulk-porcentaje" style="display:block; font-size:12px; color:var(--muted); margin-bottom:6px;">Aplicar % de ganancia a los seleccionados</label>
           <div style="display:flex; gap:8px;">
             <input type="number" step="0.5" id="bulk-porcentaje" placeholder="Ej: 25" style="width:100px; background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:9px 10px; font-size:14px;">
@@ -581,7 +583,7 @@
             <option value="1001-999999">Más de $1000</option>
           </select>
         </div>
-        <div>
+        <div class="solo-dueno">
           <label for="filtro-costo" style="display:block; font-size:12px; color:var(--muted); margin-bottom:6px;">Rango de costo proveedor</label>
           <select id="filtro-costo" onchange="aplicarFiltrosProductos()" style="background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:9px 10px; font-size:14px;">
             <option value="">Todos los costos</option>
@@ -800,6 +802,14 @@
 
   let tasaBCV = null, tasaBinance = null;
   let tenantIdActual = null; // necesario para armar la ruta de subida de fotos (ver revisarSubidaImagenes)
+  let rolActual = null; // 'dueño' o 'vendedor' — controla si se muestran costos/ganancia (ver esConVisibilidadCostos)
+
+  function esDueno() { return rolActual === 'dueño'; }
+  // Formatea un valor de costo/ganancia: '—' si el rol actual no tiene acceso (undefined/null por RLS) o si vino null.
+  function fmtConfidencial(valor, prefijo) {
+    if (!esDueno() || valor === null || valor === undefined) return '—';
+    return (prefijo || '$') + parseFloat(valor).toFixed(2);
+  }
 
   window.switchView = function(view, btn) {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -818,8 +828,10 @@
     }
     who.textContent = session.user.email;
 
-    const { data: perfil } = await supabase.from('profiles').select('tenant_id').eq('id', session.user.id).single();
+    const { data: perfil } = await supabase.from('profiles').select('tenant_id, rol').eq('id', session.user.id).single();
     tenantIdActual = perfil?.tenant_id || null;
+    rolActual = perfil?.rol || 'vendedor';
+    document.body.classList.toggle('rol-vendedor', !esDueno());
 
     return session.user;
   }
@@ -1047,10 +1059,46 @@
   // Mismas columnas para la carga completa del catálogo y para refrescar solo algunos productos
   // puntuales (ver refrescarProductosPorId más abajo) — un solo lugar si el día de mañana se
   // necesita agregar o quitar alguna columna.
-  const COLUMNAS_PRODUCTO = 'id, nombre, categoria, costo_usd, sku, especificaciones, proveedores(id, nombre), publicaciones(id, precio_efectivo_usd, precio_bcv_usd_equiv, precio_bcv_bs, ganancia_real_usd, comision_ml_usd, ganancia_neta_usd, modo_ganancia, margen_objetivo_pct, comision_ml_pct, descripcion, condicion, stock, forma_envio, condiciones_pago, horario_atencion, imagenes, estado, fotos_ml)';
+  // costo_usd y ganancia/margen ya no viven en productos/publicaciones: se movieron a productos_costos y
+  // publicaciones_margenes (tablas protegidas por RLS, solo visibles para rol='dueño'). Se piden embebidas
+  // aquí y normalizarCostosProducto() las vuelve a aplanar al shape de antes para el resto del código.
+  const COLUMNAS_PRODUCTO = 'id, nombre, categoria, sku, especificaciones, productos_costos(costo_usd), proveedores(id, nombre), publicaciones(id, precio_efectivo_usd, precio_bcv_usd_equiv, precio_bcv_bs, modo_ganancia, comision_ml_pct, descripcion, condicion, stock, forma_envio, condiciones_pago, horario_atencion, imagenes, estado, fotos_ml, publicaciones_margenes(margen_objetivo_pct, ganancia_real_usd, comision_ml_usd, ganancia_neta_usd))';
+
+  // Aplana productos_costos/publicaciones_margenes sobre el producto, para que el resto del código pueda
+  // seguir leyendo p.costo_usd y pub.ganancia_real_usd como antes. Para rol "vendedor" estos campos quedan
+  // en null (RLS no deja ver esas filas) — fmtConfidencial() y las clases "solo-dueno" se encargan de ocultarlos.
+  function normalizarCostosProducto(p) {
+    if (!p) return p;
+    p.costo_usd = p.productos_costos ? p.productos_costos.costo_usd : null;
+    const pubs = Array.isArray(p.publicaciones) ? p.publicaciones : (p.publicaciones ? [p.publicaciones] : []);
+    pubs.forEach(pub => {
+      const m = pub.publicaciones_margenes || {};
+      pub.margen_objetivo_pct = m.margen_objetivo_pct ?? null;
+      pub.ganancia_real_usd = m.ganancia_real_usd ?? null;
+      pub.comision_ml_usd = m.comision_ml_usd ?? null;
+      pub.ganancia_neta_usd = m.ganancia_neta_usd ?? null;
+    });
+    return p;
+  }
+
+  // Escribe/actualiza el costo de un producto en la tabla protegida (solo lo puede hacer un dueño —
+  // para un vendedor, RLS rechaza este upsert). onConflict por producto_id porque es 1:1.
+  async function guardarCostoProducto(productoId, costoUsd) {
+    if (costoUsd === null || costoUsd === undefined || isNaN(costoUsd)) return { error: null };
+    return supabase.from('productos_costos')
+      .upsert({ producto_id: productoId, tenant_id: tenantIdActual, costo_usd: costoUsd }, { onConflict: 'producto_id' });
+  }
+
+  // Escribe/actualiza el margen/ganancia de una publicación en la tabla protegida (mismo criterio que
+  // guardarCostoProducto — solo dueño). Solo toca las claves que vengan definidas en `campos`.
+  async function guardarMargenPublicacion(publicacionId, campos) {
+    return supabase.from('publicaciones_margenes')
+      .upsert({ publicacion_id: publicacionId, tenant_id: tenantIdActual, ...campos }, { onConflict: 'publicacion_id' });
+  }
 
   function fusionarProductosEnCache(filas) {
     (filas || []).forEach(p => {
+      normalizarCostosProducto(p);
       const pub = (p.publicaciones && p.publicaciones[0]) || {};
       productosCache[p.id] = { ...p, pub };
     });
@@ -1139,7 +1187,7 @@
       return `
         <div class="fila-producto" style="cursor:pointer;" onclick="revisarProductoSinCategoria('${p.id}')">
           <span class="fp-nombre">${escapeHtml(p.nombre || '(sin nombre)')}</span>
-          <span class="fp-info">${escapeHtml(proveedor)} · $${Number(p.costo_usd || 0).toFixed(2)} · Revisar y clasificar →</span>
+          <span class="fp-info">${escapeHtml(proveedor)}${esDueno() ? ' · $' + Number(p.costo_usd || 0).toFixed(2) : ''} · Revisar y clasificar →</span>
         </div>`;
     }).join('');
   }
@@ -1390,16 +1438,16 @@
         <td>${escapeHtml(p.proveedores?.nombre || '—')}</td>
         <td>${estadoHtml}</td>
         <td class="num">${stockHtml}</td>
-        <td class="num">$${parseFloat(p.costo_usd).toFixed(2)}</td>
+        <td class="num">${fmtConfidencial(p.costo_usd)}</td>
         <td class="num" style="color:var(--teal); font-weight:700; font-size:14px;">${pub.precio_bcv_usd_equiv ? '$' + parseFloat(pub.precio_bcv_usd_equiv).toFixed(2) : '—'}</td>
         <td class="num teal-text">${pub.precio_bcv_bs ? 'Bs ' + parseFloat(pub.precio_bcv_bs).toLocaleString('es-VE', {maximumFractionDigits: 2}) : '—'}</td>
         <td class="num gold-text">${pub.precio_efectivo_usd ? '$' + parseFloat(pub.precio_efectivo_usd).toFixed(2) : '—'}</td>
-        <td class="num">${pub.ganancia_real_usd ? '$' + parseFloat(pub.ganancia_real_usd).toFixed(2) : '—'}</td>
-        <td class="num" style="color:var(--rust)">${pub.comision_ml_usd ? '$' + parseFloat(pub.comision_ml_usd).toFixed(2) : '—'}</td>
-        <td class="num" style="color:var(--teal); font-weight:600;">${pub.ganancia_neta_usd ? '$' + parseFloat(pub.ganancia_neta_usd).toFixed(2) : '—'}</td>
+        <td class="num">${fmtConfidencial(pub.ganancia_real_usd)}</td>
+        <td class="num" style="color:var(--rust)">${fmtConfidencial(pub.comision_ml_usd)}</td>
+        <td class="num" style="color:var(--teal); font-weight:600;">${fmtConfidencial(pub.ganancia_neta_usd)}</td>
         <td>
           <button class="add" style="padding:6px 12px; font-size:12px;" onclick="editarProducto('${p.id}')">Editar</button>
-          <button class="add" style="padding:6px 12px; font-size:12px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line); margin-top:4px;" onclick="verDesglose('${p.id}')">Desglose</button>
+          <button class="add solo-dueno" style="padding:6px 12px; font-size:12px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line); margin-top:4px;" onclick="verDesglose('${p.id}')">Desglose</button>
           <button class="add" style="padding:6px 12px; font-size:12px; background:var(--surface-2); color:var(--teal); border:1px solid var(--teal); margin-top:4px;" onclick="verVentasProducto('${p.id}')">Ventas</button>
         </td>
       `;
@@ -1550,6 +1598,12 @@
   };
 
   let editandoProductoId = null;
+  // Snapshot de los 4 valores que determinan el precio (costo, tipo de ganancia, valor de
+  // ganancia, comisión ML) tal como quedaron cargados al ABRIR la edición — se usa en
+  // crearProducto() para decidir si el usuario realmente tocó algo que deba recalcular el
+  // precio, o si solo editó otro campo (nombre, descripción, stock...) y por lo tanto el precio
+  // ya guardado debe preservarse tal cual, sin volver a pasar por calcular_precios.
+  let valoresPrecioAlAbrirEdicion = null;
 
   // --- Características técnicas (lista editable clave/valor) -------------------------------
   // Se guardan dentro de productos.especificaciones como { marca, caracteristicas: {clave: valor} }.
@@ -1643,9 +1697,11 @@
     document.getElementById('prod-categoria').value = p.categoria || '';
     document.getElementById('prod-costo').value = p.costo_usd || '';
     document.getElementById('prod-modo-ganancia').value = (pub.modo_ganancia === 'porcentaje' ? 'fijo' : pub.modo_ganancia) || 'fijo';
-    document.getElementById('prod-valor-ganancia').value = pub.ganancia_real_usd || 30;
+    // ?? en vez de || — una ganancia real de $0 es un valor válido y no debe pisarse con el
+    // default de 30 (con || eso pasaba, porque 0 es "falsy" en JS).
+    document.getElementById('prod-valor-ganancia').value = pub.ganancia_real_usd ?? 30;
 
-    const comisionGuardada = pub.comision_ml_pct ? parseFloat(pub.comision_ml_pct) : 11;
+    const comisionGuardada = (pub.comision_ml_pct !== null && pub.comision_ml_pct !== undefined) ? parseFloat(pub.comision_ml_pct) : 11;
     const tipoPubSelect = document.getElementById('prod-tipo-publicacion');
     if (comisionGuardada === 11 || comisionGuardada === 15) {
       tipoPubSelect.value = String(comisionGuardada);
@@ -1655,6 +1711,16 @@
     document.getElementById('prod-comision').value = comisionGuardada;
     aplicarTipoPublicacion('prod');
     sincronizarGanancia('prod', 'usd');
+
+    // Snapshot de lo que quedó cargado — ver la declaración de valoresPrecioAlAbrirEdicion.
+    // Se toma DESPUÉS de aplicarTipoPublicacion/sincronizarGanancia para reflejar los valores
+    // reales que terminaron en los inputs (ellas pueden redondear/ajustar la comisión).
+    valoresPrecioAlAbrirEdicion = {
+      costo: parseFloat(document.getElementById('prod-costo').value),
+      modo: document.getElementById('prod-modo-ganancia').value,
+      valorGanancia: parseFloat(document.getElementById('prod-valor-ganancia').value),
+      comision: parseFloat(document.getElementById('prod-comision').value)
+    };
     document.getElementById('prod-descripcion').value = pub.descripcion || '';
     document.getElementById('prod-condicion').value = pub.condicion || 'nuevo';
     document.getElementById('prod-stock').value = pub.stock || 1;
@@ -1685,6 +1751,7 @@
 
   window.cancelarEdicion = function() {
     editandoProductoId = null;
+    valoresPrecioAlAbrirEdicion = null;
     document.getElementById('titulo-form-producto').textContent = 'Nuevo producto';
     document.getElementById('btn-guardar-producto').textContent = 'Agregar y calcular';
     document.getElementById('btn-cancelar-edicion').style.display = 'none';
@@ -2447,6 +2514,7 @@
   // Mantiene sincronizados los campos de ganancia en $ y en %, en ambas direcciones,
   // según el tipo elegido (bruta = antes de comisión, neta = después de comisión).
   window.verDesglose = function(id) {
+    if (!esDueno()) { alert('El desglose de costo y ganancia solo está disponible para el rol dueño.'); return; }
     const p = productosCache[id];
     if (!p || !p.pub || !p.pub.id) { alert('Este producto todavía no tiene un cálculo guardado.'); return; }
     if (!tasaBCV || !tasaBinance) { alert('No hay tasas de cambio cargadas.'); return; }
@@ -3028,6 +3096,7 @@ RESULTADOS DEL CÁLCULO DE PRECIO
 
   window.aplicarPorcentajeMasivo = async function() {
     const msg = document.getElementById('msg-bulk');
+    if (!esDueno()) { msg.style.color = 'var(--rust)'; msg.textContent = 'Esta función requiere rol dueño.'; return; }
     const pct = parseFloat(document.getElementById('bulk-porcentaje').value);
     const seleccionados = obtenerSeleccionados();
 
@@ -3040,6 +3109,7 @@ RESULTADOS DEL CÁLCULO DE PRECIO
       const pub = productosCache[id]?.pub || {};
       return {
         producto_id: id,
+        publicacion_id: pub.id ?? null,
         modo_ganancia: pub.modo_ganancia ?? null,
         precio_efectivo_usd: pub.precio_efectivo_usd ?? null,
         precio_bcv_usd_equiv: pub.precio_bcv_usd_equiv ?? null,
@@ -3079,11 +3149,15 @@ RESULTADOS DEL CÁLCULO DE PRECIO
           modo_ganancia: 'porcentaje',
           precio_efectivo_usd: c.precio_efectivo_usd,
           precio_bcv_usd_equiv: c.precio_bcv_usd_equiv,
-          precio_bcv_bs: c.precio_bcv_bs,
-          ganancia_real_usd: c.ganancia_deseada_usd,
-          comision_ml_usd: c.comision_ml_usd,
-          ganancia_neta_usd: c.ganancia_neta_usd
+          precio_bcv_bs: c.precio_bcv_bs
         }).eq('producto_id', id);
+        if (p.pub?.id) {
+          await guardarMargenPublicacion(p.pub.id, {
+            ganancia_real_usd: c.ganancia_deseada_usd,
+            comision_ml_usd: c.comision_ml_usd,
+            ganancia_neta_usd: c.ganancia_neta_usd
+          });
+        }
         hechos++;
       }
       msg.textContent = `Aplicando ${hechos} / ${seleccionados.length}...`;
@@ -3116,8 +3190,11 @@ RESULTADOS DEL CÁLCULO DE PRECIO
     msg.textContent = 'Revirtiendo...';
 
     for (const item of ultimoRespaldoMasivo) {
-      const { producto_id, ...valores } = item;
-      await supabase.from('publicaciones').update(valores).eq('producto_id', producto_id);
+      const { producto_id, publicacion_id, ganancia_real_usd, comision_ml_usd, ganancia_neta_usd, ...valoresPub } = item;
+      await supabase.from('publicaciones').update(valoresPub).eq('producto_id', producto_id);
+      if (publicacion_id) {
+        await guardarMargenPublicacion(publicacion_id, { ganancia_real_usd, comision_ml_usd, ganancia_neta_usd });
+      }
     }
 
     const idsRevertidos = ultimoRespaldoMasivo.map(item => item.producto_id);
@@ -3548,8 +3625,9 @@ RESULTADOS DEL CÁLCULO DE PRECIO
     const msg = document.getElementById('msg-producto');
 
     if (!proveedor_id) { msg.textContent = 'Selecciona un proveedor.'; return; }
-    if (!nombre || isNaN(costo_usd)) { msg.textContent = 'Nombre y costo son obligatorios.'; return; }
-    if (!tasaBCV || !tasaBinance) { msg.textContent = 'No hay tasas de cambio cargadas todavía.'; return; }
+    if (!nombre) { msg.textContent = 'El nombre es obligatorio.'; return; }
+    if (esDueno() && isNaN(costo_usd)) { msg.textContent = 'El costo es obligatorio.'; return; }
+    if (esDueno() && (!tasaBCV || !tasaBinance)) { msg.textContent = 'No hay tasas de cambio cargadas todavía.'; return; }
 
     const { data: { session } } = await supabase.auth.getSession();
     let productoId = editandoProductoId;
@@ -3558,76 +3636,132 @@ RESULTADOS DEL CÁLCULO DE PRECIO
     if (editandoProductoId) {
       const { error: errUpd } = await supabase
         .from('productos')
-        .update({ proveedor_id, nombre, categoria, costo_usd, especificaciones })
+        .update({ proveedor_id, nombre, categoria, especificaciones })
         .eq('id', editandoProductoId);
       if (errUpd) { msg.textContent = 'Error al actualizar: ' + errUpd.message; return; }
     } else {
       const { data: producto, error: errProd } = await supabase
         .from('productos')
-        .insert({ proveedor_id, nombre, categoria, costo_usd, especificaciones, creado_por: session?.user?.id })
+        .insert({ proveedor_id, nombre, categoria, especificaciones, creado_por: session?.user?.id })
         .select()
         .single();
       if (errProd) { msg.textContent = 'Error: ' + errProd.message; return; }
       productoId = producto.id;
     }
 
-    // Llamar la función de cálculo de márgenes ya guardada en la base de datos
-    const { data: calculo, error: errCalc } = await supabase.rpc('calcular_precios', {
-      p_costo_usd: costo_usd,
-      p_modo: modo,
-      p_valor: valorGanancia,
-      p_comision_ml_pct: comision,
-      p_tasa_bcv: tasaBCV,
-      p_tasa_binance: tasaBinance
-    });
+    // El costo/ganancia solo lo maneja el rol dueño — RLS rechazaría igual el intento de un
+    // vendedor, pero se evita aquí directamente para no llamar al RPC de precios sin costo real.
+    if (!esDueno()) {
+      msg.style.color = '';
+      const idParaResaltarSinCosto = productoId;
+      cancelarEdicion();
+      await refrescarProductosPorId([productoId]);
+      irYResaltarProducto(idParaResaltarSinCosto);
+      return;
+    }
+
+    await guardarCostoProducto(productoId, costo_usd);
+
+    const publicacionPrevia = editandoProductoId ? productosCache[editandoProductoId]?.pub : null;
+    const hayPrecioPrevio = !!(publicacionPrevia && publicacionPrevia.precio_efectivo_usd != null);
+
+    // Preservar el precio: si se está editando un producto que YA tenía precio calculado, solo
+    // se vuelve a pasar por calcular_precios cuando el usuario realmente tocó costo, tipo de
+    // ganancia, ganancia o comisión respecto de lo que estaba cargado al abrir la edición. Antes
+    // esto se recalculaba SIEMPRE al guardar, así que cambiar solo el nombre o la descripción de
+    // un producto ya podía terminar moviéndole el precio (por redondeos del RPC, o por defaults
+    // como "modo_ganancia: porcentaje" que el formulario no sabe representar). Ver
+    // valoresPrecioAlAbrirEdicion más arriba.
+    const cambioAfectaPrecio = !hayPrecioPrevio || !valoresPrecioAlAbrirEdicion ||
+      costo_usd !== valoresPrecioAlAbrirEdicion.costo ||
+      modo !== valoresPrecioAlAbrirEdicion.modo ||
+      valorGanancia !== valoresPrecioAlAbrirEdicion.valorGanancia ||
+      comision !== valoresPrecioAlAbrirEdicion.comision;
+
+    const imagenes = document.getElementById('prod-imagenes').value
+      .split(',').map(s => s.trim()).filter(Boolean);
+
+    // Campos que siempre se pueden editar sin tocar el precio.
+    const datosPublicacion = {
+      descripcion: document.getElementById('prod-descripcion').value.trim(),
+      condicion: document.getElementById('prod-condicion').value,
+      stock: parseInt(document.getElementById('prod-stock').value) || 1,
+      forma_envio: document.getElementById('prod-envio').value.trim(),
+      condiciones_pago: document.getElementById('prod-pago').value.trim(),
+      horario_atencion: document.getElementById('prod-horario').value.trim(),
+      imagenes: imagenes,
+      fotos_ml: document.getElementById('prod-fotos-ml').value.trim() || null
+    };
+
+    let margenPublicacion = null;
+    let errCalc = null;
+
+    if (cambioAfectaPrecio) {
+      // Llamar la función de cálculo de márgenes ya guardada en la base de datos
+      const { data: calculo, error } = await supabase.rpc('calcular_precios', {
+        p_costo_usd: costo_usd,
+        p_modo: modo,
+        p_valor: valorGanancia,
+        p_comision_ml_pct: comision,
+        p_tasa_bcv: tasaBCV,
+        p_tasa_binance: tasaBinance
+      });
+      errCalc = error;
+      if (!errCalc) {
+        const c = calculo[0];
+        margenPublicacion = {
+          margen_objetivo_pct: modo === 'porcentaje' ? valorGanancia : null,
+          ganancia_real_usd: c.ganancia_deseada_usd,
+          comision_ml_usd: c.comision_ml_usd,
+          ganancia_neta_usd: c.ganancia_neta_usd
+        };
+        datosPublicacion.modo_ganancia = modo;
+        datosPublicacion.comision_ml_pct = comision;
+        datosPublicacion.precio_efectivo_usd = c.precio_efectivo_usd;
+        datosPublicacion.precio_bcv_usd_equiv = c.precio_bcv_usd_equiv;
+        datosPublicacion.precio_bcv_bs = c.precio_bcv_bs;
+      }
+    }
 
     if (errCalc) { msg.textContent = 'Producto guardado, pero falló el cálculo: ' + errCalc.message; }
     else {
-      const c = calculo[0];
-      const imagenes = document.getElementById('prod-imagenes').value
-        .split(',').map(s => s.trim()).filter(Boolean);
-
-      const datosPublicacion = {
-        modo_ganancia: modo,
-        margen_objetivo_pct: modo === 'porcentaje' ? valorGanancia : null,
-        comision_ml_pct: comision,
-        precio_efectivo_usd: c.precio_efectivo_usd,
-        precio_bcv_usd_equiv: c.precio_bcv_usd_equiv,
-        precio_bcv_bs: c.precio_bcv_bs,
-        ganancia_real_usd: c.ganancia_deseada_usd,
-        comision_ml_usd: c.comision_ml_usd,
-        ganancia_neta_usd: c.ganancia_neta_usd,
-        descripcion: document.getElementById('prod-descripcion').value.trim(),
-        condicion: document.getElementById('prod-condicion').value,
-        stock: parseInt(document.getElementById('prod-stock').value) || 1,
-        forma_envio: document.getElementById('prod-envio').value.trim(),
-        condiciones_pago: document.getElementById('prod-pago').value.trim(),
-        horario_atencion: document.getElementById('prod-horario').value.trim(),
-        imagenes: imagenes,
-        fotos_ml: document.getElementById('prod-fotos-ml').value.trim() || null
-      };
-
       // Al guardar, el producto pasa a la lista de "listos para publicar" — salvo que ya
       // esté publicado de verdad en Mercado Libre (estado 'publicado'), en cuyo caso no lo
       // tocamos: editar precio/descripción desde aquí no debe des-vincular una publicación real.
-      const estadoActual = editandoProductoId ? (productosCache[editandoProductoId]?.pub?.estado || 'borrador') : 'borrador';
+      const estadoActual = editandoProductoId ? (publicacionPrevia?.estado || 'borrador') : 'borrador';
       if (estadoActual !== 'publicado') {
         datosPublicacion.estado = 'listo';
       }
 
-      if (editandoProductoId) {
+      let publicacionId = publicacionPrevia?.id || null;
+
+      if (publicacionId) {
         const { error: errPubUpd } = await supabase.from('publicaciones').update(datosPublicacion).eq('producto_id', productoId);
         if (errPubUpd) { msg.style.color = 'var(--rust)'; msg.textContent = 'Error al guardar los cambios: ' + errPubUpd.message; return; }
       } else {
-        const { error: errPubIns } = await supabase.from('publicaciones').insert({ ...datosPublicacion, producto_id: productoId, creado_por: session?.user?.id });
+        const { data: publicacion, error: errPubIns } = await supabase.from('publicaciones')
+          .insert({ ...datosPublicacion, producto_id: productoId, creado_por: session?.user?.id })
+          .select()
+          .single();
         if (errPubIns) { msg.style.color = 'var(--rust)'; msg.textContent = 'Error al guardar la publicación: ' + errPubIns.message; return; }
+        publicacionId = publicacion.id;
       }
+
+      if (margenPublicacion) await guardarMargenPublicacion(publicacionId, margenPublicacion);
 
       msg.style.color = '';
       const idParaResaltar = productoId;
+      const yaEstabaEditando = !!editandoProductoId;
       cancelarEdicion();
       await refrescarProductosPorId([productoId]);
       irYResaltarProducto(idParaResaltar);
+
+      // Al guardar la edición de un producto ya existente, preguntar de una vez si además de
+      // guardar quiere mandarlo a Publicaciones ML — así no hace falta un segundo clic aparte
+      // en "Enviar a Publicación ML" ni el riesgo de reabrirlo después con datos desactualizados.
+      if (yaEstabaEditando && confirm('Cambios guardados. ¿Enviar este producto a Publicaciones ML ahora?')) {
+        window.location.href = 'publicaciones-ml.html?producto_id=' + encodeURIComponent(idParaResaltar);
+      }
     }
   };
 

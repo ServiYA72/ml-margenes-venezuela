@@ -399,7 +399,10 @@
 
   async function cargarProductosCache() {
     const TAMANO_BLOQUE = 1000;
-    const COLUMNAS = 'id, nombre, sku, especificaciones, costo_usd';
+    // costo_usd ya no es una columna de productos: se movió a la tabla protegida productos_costos
+    // (RLS: solo rol="dueño" puede leerla) — se trae embebida y se aplana abajo al mismo nombre
+    // plano de siempre, para no tener que tocar el resto del archivo que ya espera p.costo_usd.
+    const COLUMNAS = 'id, nombre, sku, especificaciones, productos_costos(costo_usd)';
     const primeraPagina = await supabase
       .from('productos')
       .select(COLUMNAS, { count: 'exact' })
@@ -428,7 +431,7 @@
     // Esto es lo que permite distinguir productos con nombre casi idéntico (ej. misma laptop con
     // 8GB vs 16GB de RAM) aunque esa diferencia no esté en el nombre — sí suele estar cargada como
     // característica.
-    productosCache = todos.map(p => ({ ...p, _tokens: tokenizarCoincidencia(textoDescriptivoProducto(p)) }));
+    productosCache = todos.map(p => ({ ...p, costo_usd: p.productos_costos?.costo_usd ?? null, _tokens: tokenizarCoincidencia(textoDescriptivoProducto(p)) }));
     construirFrecuenciaPalabras();
   }
 
@@ -801,29 +804,42 @@
     // Si la ficha ML trae el precio actual de esta publicación, se aprovecha para dejar el
     // precio/ganancia del sistema alineados con lo que de verdad está publicado — así no hace
     // falta ir al Dashboard a cargarlo aparte cuando ya viene en la ficha que se está importando.
-    let datosPrecio = {};
+    let datosPublicos = {};
+    let datosMargen = null;
     let avisoPrecio = '';
     if (f.precio != null) {
       const producto = productosCache.find(p => p.id === productoId);
       const r = await recalcularPrecioPublicacion(f.precio, producto?.costo_usd, pubExistente?.comision_ml_pct);
-      if (r.ok) datosPrecio = r.datos;
+      if (r.ok) { datosPublicos = r.datosPublicos; datosMargen = r.datosMargen; }
       else avisoPrecio = ` (el precio no se pudo sincronizar automáticamente: ${r.motivo} — cárgalo a mano en el Dashboard)`;
     }
 
-    let error;
+    let error, publicacionId;
     if (pubExistente) {
       ({ error } = await supabase.from('publicaciones')
-        .update({ mercadolibre_item_id: f.id, mercadolibre_link: link, estado: 'publicado', ...datosPrecio })
+        .update({ mercadolibre_item_id: f.id, mercadolibre_link: link, estado: 'publicado', ...datosPublicos })
         .eq('id', pubExistente.id));
+      publicacionId = pubExistente.id;
     } else {
-      ({ error } = await supabase.from('publicaciones')
-        .insert({ producto_id: productoId, mercadolibre_item_id: f.id, mercadolibre_link: link, estado: 'publicado', ...datosPrecio }));
+      const { data: insertada, error: errIns } = await supabase.from('publicaciones')
+        .insert({ producto_id: productoId, mercadolibre_item_id: f.id, mercadolibre_link: link, estado: 'publicado', ...datosPublicos })
+        .select('id').single();
+      error = errIns;
+      publicacionId = insertada?.id;
     }
 
     if (error) {
       msg.style.color = 'var(--rust)';
       msg.textContent = 'Error al vincular: ' + error.message;
       return;
+    }
+
+    // margen_objetivo_pct/ganancia_real_usd/comision_ml_usd/ganancia_neta_usd van al sidecar
+    // protegido publicaciones_margenes — solo se llega hasta acá con datosMargen si hubo costo
+    // cargado (es decir, si la sesión es dueño; para vendedor costo_usd siempre viene null).
+    if (datosMargen && publicacionId) {
+      await supabase.from('publicaciones_margenes')
+        .upsert({ publicacion_id: publicacionId, tenant_id: tenantIdActual, ...datosMargen }, { onConflict: 'publicacion_id' });
     }
 
     filasRevisar.splice(idx, 1);
@@ -847,7 +863,7 @@
   async function cargarPublicados() {
     const { data, error } = await supabase
       .from('publicaciones')
-      .select('id, producto_id, mercadolibre_item_id, mercadolibre_link, precio_efectivo_usd, comision_ml_pct, stock, productos(nombre, sku, costo_usd)')
+      .select('id, producto_id, mercadolibre_item_id, mercadolibre_link, precio_efectivo_usd, comision_ml_pct, stock, productos(nombre, sku, productos_costos(costo_usd))')
       .eq('estado', 'publicado')
       .order('updated_at', { ascending: false });
 
@@ -908,15 +924,23 @@
     if (Math.abs(parseFloat(c.precio_efectivo_usd) - precioReal) > 0.02) {
       return { ok: false, motivo: 'el cálculo no coincidió con el precio de Mercado Libre' };
     }
+    // margen_objetivo_pct/ganancia_real_usd/comision_ml_usd/ganancia_neta_usd ya no viven en
+    // publicaciones: se movieron a la tabla protegida publicaciones_margenes (RLS: solo
+    // rol="dueño"). Por eso el resultado se separa en dos partes: lo que sigue en publicaciones
+    // (datosPublicos, no confidencial) y lo que va al sidecar (datosMargen, solo se puede
+    // escribir si la sesión es dueño — para vendedor este flujo ni se alcanza, porque arriba
+    // ya se corta si no hay costo cargado, y costo_usd siempre es null para vendedor).
     return {
       ok: true,
-      datos: {
+      datosPublicos: {
         modo_ganancia: 'fijo',
-        margen_objetivo_pct: null,
         comision_ml_pct: comision,
         precio_efectivo_usd: c.precio_efectivo_usd,
         precio_bcv_usd_equiv: c.precio_bcv_usd_equiv,
-        precio_bcv_bs: c.precio_bcv_bs,
+        precio_bcv_bs: c.precio_bcv_bs
+      },
+      datosMargen: {
+        margen_objetivo_pct: null,
         ganancia_real_usd: c.ganancia_deseada_usd,
         comision_ml_usd: c.comision_ml_usd,
         ganancia_neta_usd: c.ganancia_neta_usd
@@ -941,11 +965,17 @@
       if (precioActual != null && Math.abs(precioActual - f.precio) < 0.01) continue; // sin cambios
 
       const nombre = pub.productos?.nombre || f.titulo || '(producto)';
-      const r = await recalcularPrecioPublicacion(f.precio, pub.productos?.costo_usd, pub.comision_ml_pct);
+      const r = await recalcularPrecioPublicacion(f.precio, pub.productos?.productos_costos?.costo_usd, pub.comision_ml_pct);
       if (!r.ok) { resultado.noSincronizados.push({ nombre, motivo: r.motivo }); continue; }
 
-      const { error } = await supabase.from('publicaciones').update(r.datos).eq('id', pub.id);
+      const { error } = await supabase.from('publicaciones').update(r.datosPublicos).eq('id', pub.id);
       if (error) { resultado.noSincronizados.push({ nombre, motivo: 'error al guardar: ' + error.message }); continue; }
+
+      // margen_objetivo_pct/ganancia_real_usd/comision_ml_usd/ganancia_neta_usd van al sidecar
+      // protegido publicaciones_margenes (RLS: solo rol="dueño" — para vendedor, costo_usd
+      // arriba siempre viene null y r.ok ya habría cortado antes de llegar acá).
+      await supabase.from('publicaciones_margenes')
+        .upsert({ publicacion_id: pub.id, tenant_id: tenantIdActual, ...r.datosMargen }, { onConflict: 'publicacion_id' });
 
       resultado.actualizados.push({ nombre, anterior: precioActual, nuevo: f.precio });
     }
