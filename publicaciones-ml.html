@@ -157,6 +157,20 @@
     padding: 5px 9px; cursor: pointer; white-space: nowrap;
   }
   .chip-subir-foto:hover { border-color: var(--gold); color: var(--gold); }
+  /* Botones del editor de fotos (pegar/recortar/mejorar) — mismos estilos que ya usa dashboard.html. */
+  .btn-ia {
+    background: var(--surface-2); color: var(--gold); border: 1px solid var(--gold);
+    padding: 9px 14px; font-size: 12.5px; font-weight: 600; cursor: pointer; margin-top: 8px;
+    font-family: 'IBM Plex Sans', sans-serif;
+  }
+  .btn-ia:hover:not(:disabled) { background: var(--gold); color: var(--ink); }
+  .btn-ia:disabled { opacity: 0.6; cursor: default; }
+  button.add {
+    background: var(--gold); color: var(--ink); border: none; padding: 10px 18px;
+    font-weight: 600; font-size: 14px; cursor: pointer; height: 41px;
+  }
+  button.add:hover { background: #DAB13A; }
+  button.add:disabled { background: var(--line); color: var(--muted); cursor: not-allowed; }
   .chip-quitar {
     background: none; border: none; color: var(--muted); cursor: pointer; font-size: 15px; line-height: 1; padding: 0 2px;
   }
@@ -256,7 +270,7 @@
 
     <div class="panel">
       <h2><span class="paso-num">1</span> Elige los productos</h2>
-      <div class="hint" style="margin-top:0;">Busca y agrega los que vas a publicar en esta tanda. Si a alguno le falta foto — o las URLs del Gestor de fotos de Mercado Libre — cárgalas aquí mismo, no hace falta ir al Dashboard ni al catálogo.</div>
+      <div class="hint" style="margin-top:0;">Busca y agrega los que vas a publicar en esta tanda. Si a alguno le falta foto — o las URLs del Gestor de fotos de Mercado Libre — cárgalas aquí mismo, no hace falta ir al Dashboard ni al catálogo. Al hacer click en "📷 Subir/Agregar foto" de un producto, también puedes pegar una captura con <strong>Ctrl+V</strong> en vez de elegir un archivo — se abre un editor para recortar fondo/mejorarla antes de guardarla (el mismo que ya usa el Dashboard).</div>
 
       <label for="buscar-preparar">Buscar producto</label>
       <div style="position:relative;">
@@ -264,7 +278,56 @@
         <div class="rv-sugerencias" id="sugerencias-preparar"></div>
       </div>
       <div id="chips-seleccionados" style="display:flex; flex-direction:column; gap:8px; margin-top:14px;"></div>
+      <div id="indicador-foto-objetivo" style="display:none; align-items:center; gap:10px; flex-wrap:wrap; margin-top:10px; padding:8px 12px; background:var(--surface-2); border:1px solid var(--gold); font-size:12.5px; color:var(--paper);">
+        <span>📌 Pegando fotos (<strong>Ctrl+V</strong>) para: <b id="indicador-foto-objetivo-nombre"></b> — se abre un editor para recortar/mejorar antes de guardar.</span>
+        <button type="button" class="chip-subir-foto" onclick="limpiarObjetivoFoto()">Listo</button>
+      </div>
       <input type="file" id="input-foto-chip" accept="image/jpeg,image/png,image/webp" multiple style="display:none;" onchange="subirFotoParaPreparar(this.files)">
+    </div>
+
+    <div id="modal-editor-foto" style="display:none; position:fixed; inset:0; background:rgba(15,27,23,0.85); z-index:60; align-items:center; justify-content:center; padding:24px;">
+      <div style="background:var(--surface); border:1px solid var(--line); max-width:600px; width:100%; max-height:90vh; overflow-y:auto; padding:24px;">
+        <div style="display:flex; justify-content:space-between; align-items:start; margin-bottom:14px;">
+          <h3 style="margin:0;">Editor de fotos</h3>
+          <button type="button" onclick="cerrarEditorFoto()" style="background:none; border:none; color:var(--muted); font-size:20px; cursor:pointer; line-height:1;">×</button>
+        </div>
+        <div id="contenedor-canvas-editor" style="position:relative; background-image:repeating-conic-gradient(#3a3a3a 0% 25%, #2a2a2a 0% 50%); background-size:16px 16px; display:flex; align-items:center; justify-content:center; min-height:220px; border:1px solid var(--line);">
+          <canvas id="canvas-editor-foto" style="max-width:100%; max-height:400px; display:block; touch-action:none; cursor:default;"></canvas>
+          <button type="button" id="btn-eliminar-capa" onclick="eliminarCapaSeleccionada()" title="Eliminar este elemento" style="display:none; position:absolute; width:26px; height:26px; border-radius:50%; background:var(--rust); color:var(--paper); border:2px solid var(--surface); font-size:13px; line-height:1; cursor:pointer; align-items:center; justify-content:center; padding:0; z-index:2;">🗑</button>
+        </div>
+
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:14px;">
+          <button type="button" class="btn-ia" onclick="editorQuitarFondo()">🪄 Quitar fondo</button>
+          <button type="button" class="btn-ia" onclick="editorMejorarImagen()">✨ Mejorar automático</button>
+          <button type="button" onclick="editorDeshacer()" class="chip-subir-foto" style="padding:9px 14px; font-size:12.5px;">↩ Deshacer</button>
+        </div>
+
+        <div style="margin-top:16px; font-size:11px; text-transform:uppercase; letter-spacing:.03em; color:var(--muted); font-weight:600;">Pegar algo encima de la foto</div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:8px;">
+          <button type="button" onclick="document.getElementById('input-editor-agregar-imagen').click()" class="chip-subir-foto" style="padding:9px 14px; font-size:12.5px;">💻 Foto de mi PC</button>
+          <input type="file" id="input-editor-agregar-imagen" accept="image/*" style="display:none;" onchange="agregarCapaImagenDesdeArchivo(this.files[0])">
+          <button type="button" onclick="editorAgregarDesdeUrl()" class="chip-subir-foto" style="padding:9px 14px; font-size:12.5px;">🔗 Desde una URL</button>
+          <button type="button" onclick="editorTogglePopoverStickers()" class="chip-subir-foto" style="padding:9px 14px; font-size:12.5px;">😊 Sticker</button>
+          <button type="button" onclick="editorTogglePopoverTexto()" class="chip-subir-foto" style="padding:9px 14px; font-size:12.5px;">🔤 Texto</button>
+        </div>
+        <div class="hint" style="margin-top:6px;">También puedes copiar una imagen (una captura, o una foto copiada de otra página) y pegarla aquí con <strong>Ctrl+V</strong> mientras este editor está abierto. Una vez pegado, arrastra cualquier elemento para moverlo, o desde su esquina inferior derecha para cambiar su tamaño; el botón 🗑 lo quita.</div>
+
+        <div id="popover-stickers" style="display:none; gap:6px; flex-wrap:wrap; align-items:center; background:var(--surface-2); border:1px solid var(--line); padding:10px; margin-top:10px;"></div>
+        <div id="popover-texto" style="display:none; gap:8px; flex-wrap:wrap; align-items:center; background:var(--surface-2); border:1px solid var(--line); padding:10px; margin-top:10px;">
+          <input type="text" id="input-texto-nuevo" placeholder="Ej: ¡OFERTA! / NUEVO / -20%" style="flex:1; min-width:140px;">
+          <input type="color" id="input-color-texto" value="#ffffff" title="Color del texto" style="width:40px; height:38px; padding:2px; cursor:pointer;">
+          <input type="range" id="input-tamano-texto" min="16" max="140" value="40" title="Tamaño de letra" style="width:110px;">
+          <label style="display:flex; align-items:center; gap:5px; font-size:12px; color:var(--muted); margin-bottom:0; white-space:nowrap;"><input type="checkbox" id="input-negrita-texto" style="width:auto;"> Negrita</label>
+          <button type="button" class="btn-ia" style="margin-top:0;" onclick="editorAgregarTexto()">Agregar texto</button>
+        </div>
+
+        <div id="msg-editor-foto" style="font-size:12px; color:var(--muted); margin-top:10px; min-height:14px;"></div>
+        <div class="hint" style="margin-top:2px;">"Quitar fondo" actúa sobre la imagen pegada que tengas seleccionada (por ejemplo, la que acabas de insertar) o, si no hay ninguna seleccionada, sobre la foto de base. "Mejorar automático" solo afecta la foto de base. Funciona mejor con fondos parejos (blanco, gris, una mesa lisa) — si el resultado no queda limpio, usa "Deshacer".</div>
+        <div style="display:flex; gap:8px; margin-top:16px; justify-content:flex-end;">
+          <button type="button" onclick="cerrarEditorFoto()" class="chip-subir-foto" style="padding:9px 16px; font-size:13px;">Cancelar</button>
+          <button type="button" class="add" onclick="guardarFotoEditada()">Guardar foto</button>
+        </div>
+      </div>
     </div>
 
     <div id="modal-fotos-ml" class="modal-fondo" style="display:none;">
@@ -1728,12 +1791,59 @@
     await renderizarEstadoPlantillaPaso2();
   };
 
+  // Revisa si el archivo que se va a guardar como plantilla ya trae un producto cargado en las
+  // filas de datos (a partir de filaDatosInicio) — es decir, si en realidad es una planilla ya
+  // usada/llenada (de una subida anterior) y no el Excel en blanco que se descarga de Mercado
+  // Libre en Publicar → Masivamente. Guardar por error un archivo así en el repositorio hace que
+  // cada tanda nueva arrastre esa fila vieja (con un SKU y fotos que ya no corresponden), y
+  // Mercado Libre termina rechazando la subida completa con "ya la habías subido o utilizado".
+  // Devuelve el título de la primera fila con datos encontrada, o null si el archivo está
+  // realmente en blanco.
+  function plantillaTieneProductosCargados(buffer, hoja) {
+    let wb;
+    try { wb = XLSX.read(buffer.slice(0), { type: 'array' }); } catch (e) { return null; }
+    const HOJAS_IGNORAR = new Set(['Ayuda', 'ayuda', 'extra info', 'hidden']);
+    const nombreHoja = (hoja && wb.SheetNames.includes(hoja) && !HOJAS_IGNORAR.has(hoja))
+      ? hoja
+      : wb.SheetNames.find(n => {
+          if (HOJAS_IGNORAR.has(n)) return false;
+          const m = XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, defval: '' });
+          return !!detectarEncabezadosPlantilla(m);
+        });
+    if (!nombreHoja) return null;
+    const matriz = XLSX.utils.sheet_to_json(wb.Sheets[nombreHoja], { header: 1, defval: '' });
+    const enc = detectarEncabezadosPlantilla(matriz);
+    if (!enc) return null;
+    // Se revisa desde filaDatosInicio - 1 (la fila 7 de Excel, la "vista previa" que Mercado
+    // Libre nunca procesa como dato real) en adelante: aunque esa fila no cause el error de
+    // "ya la habías subido", si tiene un título cargado es la misma señal de que este archivo es
+    // en realidad una planilla ya usada y no el Excel en blanco recién descargado.
+    for (let i = enc.filaDatosInicio - 1; i < matriz.length; i++) {
+      const fila = matriz[i] || [];
+      const titulo = String(fila[enc.col.titulo] || '').trim();
+      if (titulo) return titulo;
+    }
+    return null;
+  }
+
   // Sube el buffer al bucket plantillas-ml y guarda/actualiza la fila en plantillas_ml — la usan
   // tanto la subida manual del paso 2 (cuando falta la plantilla de la categoría elegida) como el
   // panel del repositorio (agregar nueva / reemplazar).
   async function guardarPlantillaEnRepositorio(categoria, nombreArchivo, buffer, hoja) {
     const msgs = [document.getElementById('msg-plantilla-preparar'), document.getElementById('msg-repositorio-plantillas')].filter(Boolean);
     if (!tenantIdActual) return;
+
+    const tituloExistente = plantillaTieneProductosCargados(buffer, hoja);
+    if (tituloExistente) {
+      const continuar = confirm(
+        `Este archivo ya trae un producto cargado ("${tituloExistente}") — no parece ser el Excel en blanco que se descarga de Mercado Libre en Publicar → Masivamente, sino una planilla ya usada.\n\nSi la guardas así en el repositorio, las próximas tandas van a arrastrar esa fila vieja y Mercado Libre puede rechazar la subida con "ya la habías subido o utilizado".\n\n¿Guardarla de todas formas?`
+      );
+      if (!continuar) {
+        msgs.forEach(m => { m.style.color = 'var(--gold)'; m.textContent = 'No se guardó — sube el Excel en blanco descargado de Mercado Libre (Publicar → Masivamente), sin llenar ninguna fila.'; });
+        return;
+      }
+    }
+
     const extension = (nombreArchivo.split('.').pop() || 'xlsx').toLowerCase().replace(/[^a-z0-9]/g, '') || 'xlsx';
     const rutaArchivo = `${tenantIdActual}/${categoria.replace(/[^a-zA-Z0-9]+/g, '-')}-${Date.now()}.${extension}`;
     const { error: errorSubida } = await supabase.storage.from('plantillas-ml').upload(rutaArchivo, buffer, {
@@ -1892,7 +2002,12 @@
   // mostrar el estado de las fotos en el chip como para generar la planilla, así no se consulta
   // dos veces lo mismo y el chip siempre refleja lo último que se subió.
   let infoPrepararPorProducto = {};
-  let productoFotoObjetivo = null; // qué producto recibe la próxima foto que se suba desde un chip
+  // Qué producto recibe la próxima foto que se suba desde un chip — tanto por el selector de
+  // archivos de siempre como por Ctrl+V (ver dispararSubidaFoto y el editor de fotos más abajo).
+  // Queda "armado" (no se limpia solo después de una subida) para poder pegar varias fotos
+  // seguidas del mismo producto — se limpia al elegir otro chip, al quitarlo de la tanda, o con
+  // el botón "Listo" del aviso (ver limpiarObjetivoFoto/actualizarIndicadorFotoObjetivo).
+  let productoFotoObjetivo = null;
   let productoFotosMlObjetivo = null; // qué producto se está editando en el modal de "Fotos para Mercado Libre"
 
   async function refrescarInfoPreparar() {
@@ -1923,6 +2038,7 @@
   window.quitarDePreparar = function(productoId) {
     seleccionadosPreparar = seleccionadosPreparar.filter(x => x.id !== productoId);
     delete infoPrepararPorProducto[productoId];
+    if (productoFotoObjetivo === productoId) { productoFotoObjetivo = null; actualizarIndicadorFotoObjetivo(); }
     renderizarChipsPreparar();
   };
 
@@ -2008,22 +2124,47 @@
   window.addEventListener('focus', () => { if (seleccionadosPreparar.length > 0) refrescarInfoPreparar(); });
 
   // Abre el selector de archivos del navegador para el producto de este chip, reutilizando un
-  // único input oculto (no hace falta crear uno por chip).
+  // único input oculto (no hace falta crear uno por chip). También "arma" ese producto como
+  // destino de un pegado con Ctrl+V (ver el editor de fotos más abajo) — ambos caminos conviven:
+  // se puede elegir un archivo directo, O pegar una captura, para el mismo producto marcado.
   window.dispararSubidaFoto = function(productoId) {
     productoFotoObjetivo = productoId;
+    actualizarIndicadorFotoObjetivo();
     document.getElementById('input-foto-chip').click();
+  };
+
+  function actualizarIndicadorFotoObjetivo() {
+    const cont = document.getElementById('indicador-foto-objetivo');
+    if (!cont) return;
+    if (!productoFotoObjetivo) { cont.style.display = 'none'; return; }
+    const p = seleccionadosPreparar.find(x => x.id === productoFotoObjetivo);
+    document.getElementById('indicador-foto-objetivo-nombre').textContent = p ? p.nombre : 'este producto';
+    cont.style.display = 'flex';
+  }
+
+  window.limpiarObjetivoFoto = function() {
+    productoFotoObjetivo = null;
+    actualizarIndicadorFotoObjetivo();
   };
 
   window.subirFotoParaPreparar = async function(files) {
     const productoId = productoFotoObjetivo;
     if (!productoId || !files || files.length === 0) return;
+    await subirImagenesProductoPreparar(productoId, Array.from(files));
+    document.getElementById('input-foto-chip').value = '';
+  };
+
+  // Sube uno o más archivos ya listos (elegidos del PC, o generados por el editor de fotos) como
+  // fotos del producto indicado — comparten esta misma función para no duplicar la lógica de
+  // subida a Storage ni la de crear/actualizar la fila en "publicaciones".
+  async function subirImagenesProductoPreparar(productoId, files) {
     if (!tenantIdActual) {
       alert('No se pudo identificar tu cuenta todavía — recarga la página e intenta de nuevo.');
       return;
     }
 
     const urlsNuevas = [];
-    for (const file of Array.from(files)) {
+    for (const file of files) {
       const extension = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '') || 'jpg';
       const nombreArchivo = `${tenantIdActual}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${extension}`;
       const { error } = await supabase.storage.from('productos-fotos').upload(nombreArchivo, file, {
@@ -2046,9 +2187,536 @@
       }
     }
 
-    document.getElementById('input-foto-chip').value = '';
-    productoFotoObjetivo = null;
     await refrescarInfoPreparar();
+  }
+
+  // --- Editor de fotos pegadas (capturas de pantalla) -----------------------------------------
+  // Mismo editor que ya existe en dashboard.html, adaptado a este flujo por chips: acá no se
+  // edita "el producto que se está viendo" (Dashboard tiene un solo formulario a la vez), sino
+  // el producto marcado como productoFotoObjetivo — el mismo que ya se usa para la subida directa
+  // de fotos (ver dispararSubidaFoto/subirFotoParaPreparar) — así que pegar con Ctrl+V y subir
+  // "de siempre" comparten el mismo destino sin necesidad de una variable aparte.
+  // Todo corre en el navegador, con Canvas — no se manda la imagen a ningún servicio externo ni
+  // hace falta ninguna clave de API. "Quitar fondo" es un relleno por inundación (flood fill)
+  // desde los bordes de la imagen: funciona bien cuando el fondo es parejo (una mesa, una pared,
+  // una captura con fondo blanco/gris), pero no es una segmentación con IA — si el fondo es muy
+  // irregular puede no quedar perfecto, para eso está el botón "Deshacer".
+  let editorHistorial = []; // pila de snapshots {base, capas} para poder deshacer cada edición
+  let editorBaseImageData = null; // pixeles de la foto de base (sin los elementos pegados encima)
+  let editorCapas = []; // elementos pegados encima de la foto: {id, tipo:'imagen'|'texto', x,y,w,h, ...}
+  let capaSeleccionadaId = null;
+  let editorContadorId = 0;
+  const STICKERS_DISPONIBLES = ['🔥','⭐','✅','🆕','💯','🎉','📦','🚚','💵','😍','👍','❤️','⚡','🏷️','✨','💥','🎁','📌','🛒','⚠️'];
+
+  function editorEstaAbierto() {
+    const modal = document.getElementById('modal-editor-foto');
+    return !!modal && modal.style.display === 'flex';
+  }
+
+  // Solo intercepta el pegado cuando hay un producto marcado como destino (se marca al hacer
+  // click en "📷 Subir/Agregar foto" de un chip — ver dispararSubidaFoto) o cuando el editor ya
+  // está abierto — así no interfiere con pegar texto normal en cualquier otro campo de la página.
+  document.addEventListener('paste', async (e) => {
+    const editorAbierto = editorEstaAbierto();
+    if (!editorAbierto && !productoFotoObjetivo) return;
+    const items = e.clipboardData && e.clipboardData.items;
+    if (!items) return;
+    const item = Array.from(items).find(it => it.type && it.type.startsWith('image/'));
+    if (!item) return; // no hay imagen en el portapapeles: dejar que el pegado normal siga su curso
+    e.preventDefault();
+    const blob = item.getAsFile();
+    if (!blob) return;
+    if (editorAbierto) {
+      // El editor ya está abierto con una foto de base: esta nueva imagen pegada se agrega
+      // ENCIMA como un elemento más, no reemplaza lo que ya había.
+      await agregarCapaImagenDesdeBlob(blob);
+    } else {
+      await abrirEditorFoto(blob);
+    }
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (!editorEstaAbierto()) return;
+    if (e.key === 'Escape') {
+      if (capaSeleccionadaId) { capaSeleccionadaId = null; redibujarEditor(); }
+      else cerrarEditorFoto();
+      return;
+    }
+    if ((e.key === 'Delete' || e.key === 'Backspace') && capaSeleccionadaId) {
+      const activo = document.activeElement;
+      if (activo && (activo.tagName === 'INPUT' || activo.tagName === 'TEXTAREA')) return; // no interferir al escribir en los campos del editor
+      e.preventDefault();
+      eliminarCapaSeleccionada();
+    }
+  });
+
+  async function abrirEditorFoto(blobOrFile) {
+    const bitmap = await createImageBitmap(blobOrFile);
+    const canvas = document.getElementById('canvas-editor-foto');
+    const MAX = 1000; // límite razonable de trabajo, no hace falta más para una foto de producto
+    let w = bitmap.width, h = bitmap.height;
+    if (w > MAX || h > MAX) {
+      const escala = MAX / Math.max(w, h);
+      w = Math.round(w * escala); h = Math.round(h * escala);
+    }
+    canvas.width = w; canvas.height = h;
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, w, h);
+    ctx.drawImage(bitmap, 0, 0, w, h);
+    editorBaseImageData = ctx.getImageData(0, 0, w, h);
+    editorCapas = [];
+    capaSeleccionadaId = null;
+    editorHistorial = [];
+    document.getElementById('popover-stickers').style.display = 'none';
+    document.getElementById('popover-texto').style.display = 'none';
+    document.getElementById('msg-editor-foto').textContent = '';
+    document.getElementById('modal-editor-foto').style.display = 'flex';
+    redibujarEditor();
+  }
+
+  function guardarSnapshotEditor() {
+    editorHistorial.push({
+      base: editorBaseImageData ? new ImageData(new Uint8ClampedArray(editorBaseImageData.data), editorBaseImageData.width, editorBaseImageData.height) : null,
+      capas: editorCapas.map(c => ({ ...c })),
+    });
+    if (editorHistorial.length > 8) editorHistorial.shift(); // no acumular historial de más
+  }
+
+  window.editorDeshacer = function() {
+    if (editorHistorial.length === 0) return;
+    const anterior = editorHistorial.pop();
+    editorBaseImageData = anterior.base;
+    editorCapas = anterior.capas;
+    capaSeleccionadaId = null;
+    redibujarEditor();
+    document.getElementById('msg-editor-foto').textContent = 'Se deshizo el último cambio.';
+  };
+
+  // --- Dibujo: la foto de base + los elementos pegados encima se recomponen en cada cuadro, así
+  // se pueden mover/redimensionar/eliminar sin tener que "aplastarlos" contra la foto hasta que
+  // el usuario decide guardar. --------------------------------------------------------------
+  function dibujarCapa(ctx, capa) {
+    ctx.save();
+    if (capa.tipo === 'imagen') {
+      ctx.drawImage(capa.bitmap, capa.x, capa.y, capa.w, capa.h);
+    } else {
+      ctx.font = `${capa.negrita ? 'bold ' : ''}${Math.round(capa.h)}px 'IBM Plex Sans', sans-serif`;
+      ctx.textBaseline = 'top';
+      ctx.textAlign = 'left';
+      // Un contorno oscuro detrás del texto ayuda a que se lea sobre cualquier fondo de foto.
+      ctx.lineWidth = Math.max(1, capa.h * 0.06);
+      ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+      ctx.strokeText(capa.texto, capa.x, capa.y);
+      ctx.fillStyle = capa.color || '#ffffff';
+      ctx.fillText(capa.texto, capa.x, capa.y);
+      capa.w = ctx.measureText(capa.texto).width; // se recalcula para el próximo arrastre/selección
+    }
+    ctx.restore();
+  }
+
+  function dibujarSeleccion(ctx, capa) {
+    ctx.save();
+    ctx.strokeStyle = '#C9A227';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([5, 4]);
+    ctx.strokeRect(capa.x - 2, capa.y - 2, capa.w + 4, capa.h + 4);
+    ctx.setLineDash([]);
+    const hx = capa.x + capa.w, hy = capa.y + capa.h;
+    ctx.fillStyle = '#C9A227';
+    ctx.fillRect(hx - 6, hy - 6, 12, 12);
+    ctx.restore();
+  }
+
+  function redibujarEditor() {
+    const canvas = document.getElementById('canvas-editor-foto');
+    const ctx = canvas.getContext('2d');
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (editorBaseImageData) ctx.putImageData(editorBaseImageData, 0, 0);
+    editorCapas.forEach(capa => dibujarCapa(ctx, capa));
+    const seleccionada = editorCapas.find(c => c.id === capaSeleccionadaId);
+    if (seleccionada) dibujarSeleccion(ctx, seleccionada);
+    posicionarBotonEliminarCapa(seleccionada);
+  }
+
+  function posicionarBotonEliminarCapa(capa) {
+    const btn = document.getElementById('btn-eliminar-capa');
+    if (!capa) { btn.style.display = 'none'; return; }
+    const canvas = document.getElementById('canvas-editor-foto');
+    const rectCanvas = canvas.getBoundingClientRect();
+    const rectContenedor = document.getElementById('contenedor-canvas-editor').getBoundingClientRect();
+    const escalaX = rectCanvas.width / canvas.width;
+    const escalaY = rectCanvas.height / canvas.height;
+    const left = (rectCanvas.left - rectContenedor.left) + (capa.x + capa.w) * escalaX - 13;
+    const top = (rectCanvas.top - rectContenedor.top) + capa.y * escalaY - 13;
+    btn.style.left = left + 'px';
+    btn.style.top = top + 'px';
+    btn.style.display = 'flex';
+  }
+
+  window.eliminarCapaSeleccionada = function() {
+    if (!capaSeleccionadaId) return;
+    guardarSnapshotEditor();
+    editorCapas = editorCapas.filter(c => c.id !== capaSeleccionadaId);
+    capaSeleccionadaId = null;
+    redibujarEditor();
+  };
+
+  // --- Agregar elementos encima de la foto: imagen (pegada, del PC o por URL), sticker o texto ---
+  function agregarCapaImagenDesdeBitmap(bitmap) {
+    guardarSnapshotEditor();
+    const canvas = document.getElementById('canvas-editor-foto');
+    const ladoMax = Math.min(canvas.width, canvas.height) * 0.5; // no tapa toda la foto de entrada
+    const relacion = bitmap.width / bitmap.height || 1;
+    let w = ladoMax, h = ladoMax / relacion;
+    if (h > ladoMax) { h = ladoMax; w = ladoMax * relacion; }
+    const capa = {
+      id: 'c' + (++editorContadorId), tipo: 'imagen', bitmap, relacionAspecto: relacion,
+      x: (canvas.width - w) / 2, y: (canvas.height - h) / 2, w, h,
+    };
+    editorCapas.push(capa);
+    capaSeleccionadaId = capa.id;
+    redibujarEditor();
+  }
+
+  async function agregarCapaImagenDesdeBlob(blob) {
+    try {
+      const bitmap = await createImageBitmap(blob);
+      agregarCapaImagenDesdeBitmap(bitmap);
+    } catch (e) {
+      document.getElementById('msg-editor-foto').textContent = 'No se pudo cargar esa imagen: ' + e.message;
+    }
+  }
+
+  window.agregarCapaImagenDesdeArchivo = async function(file) {
+    if (!file) return;
+    await agregarCapaImagenDesdeBlob(file);
+    document.getElementById('input-editor-agregar-imagen').value = '';
+  };
+
+  window.editorAgregarDesdeUrl = async function() {
+    const url = prompt('Pega la URL de la imagen que quieres pegar sobre la foto:');
+    if (!url || !url.trim()) return;
+    const msg = document.getElementById('msg-editor-foto');
+    msg.textContent = 'Cargando imagen desde la URL...';
+    try {
+      const resp = await fetch(url.trim());
+      if (!resp.ok) throw new Error('respuesta ' + resp.status);
+      const blob = await resp.blob();
+      if (!blob.type.startsWith('image/')) throw new Error('esa URL no es una imagen');
+      await agregarCapaImagenDesdeBlob(blob);
+      msg.textContent = '';
+    } catch (e) {
+      msg.textContent = 'No se pudo cargar esa imagen (' + e.message + '). El sitio de origen puede no permitir usarla aquí — prueba descargarla y usar "Foto de mi PC", o cópiala y pégala con Ctrl+V.';
+    }
+  };
+
+  window.editorTogglePopoverStickers = function() {
+    const pop = document.getElementById('popover-stickers');
+    document.getElementById('popover-texto').style.display = 'none';
+    const mostrar = pop.style.display !== 'flex';
+    if (mostrar && !pop.dataset.armado) {
+      pop.innerHTML = STICKERS_DISPONIBLES.map(e =>
+        `<button type="button" onclick="editorAgregarSticker('${e}')" style="font-size:22px; background:var(--surface); border:1px solid var(--line); width:38px; height:38px; cursor:pointer;">${e}</button>`
+      ).join('') + `
+        <input type="text" id="input-sticker-personalizado" maxlength="4" placeholder="😀" style="width:48px; text-align:center; font-size:18px; padding:6px;">
+        <button type="button" class="btn-ia" style="margin-top:0;" onclick="editorAgregarStickerPersonalizado()">Agregar</button>`;
+      pop.dataset.armado = '1';
+    }
+    pop.style.display = mostrar ? 'flex' : 'none';
+  };
+
+  window.editorAgregarSticker = function(emoji) {
+    guardarSnapshotEditor();
+    const canvas = document.getElementById('canvas-editor-foto');
+    const tam = Math.round(Math.min(canvas.width, canvas.height) * 0.22);
+    const capa = {
+      id: 'c' + (++editorContadorId), tipo: 'texto', texto: emoji, color: '#ffffff', negrita: false,
+      h: tam, w: tam, x: (canvas.width - tam) / 2, y: (canvas.height - tam) / 2,
+    };
+    editorCapas.push(capa);
+    capaSeleccionadaId = capa.id;
+    redibujarEditor();
+    document.getElementById('popover-stickers').style.display = 'none';
+  };
+
+  window.editorAgregarStickerPersonalizado = function() {
+    const input = document.getElementById('input-sticker-personalizado');
+    const emoji = (input.value || '').trim();
+    if (!emoji) return;
+    editorAgregarSticker(emoji);
+    input.value = '';
+  };
+
+  window.editorTogglePopoverTexto = function() {
+    const pop = document.getElementById('popover-texto');
+    document.getElementById('popover-stickers').style.display = 'none';
+    pop.style.display = pop.style.display === 'flex' ? 'none' : 'flex';
+  };
+
+  window.editorAgregarTexto = function() {
+    const input = document.getElementById('input-texto-nuevo');
+    const texto = (input.value || '').trim();
+    if (!texto) return;
+    const color = document.getElementById('input-color-texto').value || '#ffffff';
+    const tam = parseInt(document.getElementById('input-tamano-texto').value, 10) || 40;
+    const negrita = document.getElementById('input-negrita-texto').checked;
+    guardarSnapshotEditor();
+    const canvas = document.getElementById('canvas-editor-foto');
+    const anchoAprox = tam * texto.length * 0.55;
+    const capa = {
+      id: 'c' + (++editorContadorId), tipo: 'texto', texto, color, negrita,
+      h: tam, w: anchoAprox, x: Math.max(6, (canvas.width - anchoAprox) / 2), y: (canvas.height - tam) / 2,
+    };
+    editorCapas.push(capa);
+    capaSeleccionadaId = capa.id;
+    redibujarEditor();
+    input.value = '';
+    document.getElementById('popover-texto').style.display = 'none';
+  };
+
+  // --- Arrastrar para mover, o desde la esquina inferior derecha para redimensionar ---
+  (function initEditorPointerEvents() {
+    const canvas = document.getElementById('canvas-editor-foto');
+    if (!canvas) return; // defensivo: si por lo que sea esta vista no tiene el editor de fotos en el DOM
+    let arrastre = null; // {modo:'mover'|'redimensionar', capaId, offsetX, offsetY, snapshotTomado}
+
+    function coords(e) {
+      const rect = canvas.getBoundingClientRect();
+      return {
+        x: (e.clientX - rect.left) * (canvas.width / rect.width),
+        y: (e.clientY - rect.top) * (canvas.height / rect.height),
+      };
+    }
+
+    function capaEnPunto(punto) {
+      for (let i = editorCapas.length - 1; i >= 0; i--) {
+        const c = editorCapas[i];
+        if (punto.x >= c.x && punto.x <= c.x + c.w && punto.y >= c.y && punto.y <= c.y + c.h) return c;
+      }
+      return null;
+    }
+
+    function enManijaRedimension(capa, punto) {
+      if (!capa) return false;
+      const TOL = 16;
+      return Math.abs(punto.x - (capa.x + capa.w)) <= TOL && Math.abs(punto.y - (capa.y + capa.h)) <= TOL;
+    }
+
+    canvas.addEventListener('pointerdown', (e) => {
+      const punto = coords(e);
+      const seleccionada = editorCapas.find(c => c.id === capaSeleccionadaId);
+      if (seleccionada && enManijaRedimension(seleccionada, punto)) {
+        arrastre = { modo: 'redimensionar', capaId: seleccionada.id, snapshotTomado: false };
+        canvas.setPointerCapture(e.pointerId);
+        return;
+      }
+      const capa = capaEnPunto(punto);
+      if (capa) {
+        capaSeleccionadaId = capa.id;
+        arrastre = { modo: 'mover', capaId: capa.id, offsetX: punto.x - capa.x, offsetY: punto.y - capa.y, snapshotTomado: false };
+        canvas.setPointerCapture(e.pointerId);
+        redibujarEditor();
+      } else {
+        capaSeleccionadaId = null;
+        redibujarEditor();
+      }
+    });
+
+    canvas.addEventListener('pointermove', (e) => {
+      if (!arrastre) return;
+      const capa = editorCapas.find(c => c.id === arrastre.capaId);
+      if (!capa) return;
+      if (!arrastre.snapshotTomado) { guardarSnapshotEditor(); arrastre.snapshotTomado = true; }
+      const punto = coords(e);
+      if (arrastre.modo === 'mover') {
+        capa.x = punto.x - arrastre.offsetX;
+        capa.y = punto.y - arrastre.offsetY;
+      } else {
+        const nuevoAncho = Math.max(16, punto.x - capa.x);
+        if (capa.tipo === 'imagen') {
+          capa.w = nuevoAncho;
+          capa.h = Math.max(12, nuevoAncho / capa.relacionAspecto);
+        } else {
+          capa.h = Math.max(10, punto.y - capa.y); // en texto, el arrastre controla el tamaño de letra
+        }
+      }
+      redibujarEditor();
+    });
+
+    ['pointerup', 'pointercancel'].forEach(ev => canvas.addEventListener(ev, () => { arrastre = null; }));
+  })();
+
+  // Algoritmo puro de quitar-fondo: recibe un ImageData y devuelve uno nuevo con el fondo hecho
+  // transparente, sin tocar el original. Reutilizado tanto para la foto de base como para
+  // cualquier imagen pegada encima (ver quitarFondoDeCapaSeleccionada más abajo).
+  function quitarFondoDeImageData(origen) {
+    const w = origen.width, h = origen.height;
+    const imgData = new ImageData(new Uint8ClampedArray(origen.data), w, h);
+    const data = imgData.data;
+
+    // Color de referencia del fondo: promedio de las 4 esquinas (así un pixel raro justo en una
+    // esquina no arruina la muestra).
+    const muestra = (x, y) => { const i = (y * w + x) * 4; return [data[i], data[i + 1], data[i + 2]]; };
+    const esquinas = [muestra(0, 0), muestra(w - 1, 0), muestra(0, h - 1), muestra(w - 1, h - 1)];
+    const ref = [0, 1, 2].map(c => Math.round(esquinas.reduce((s, e) => s + e[c], 0) / 4));
+
+    const TOLERANCIA = 42; // distancia de color aceptada como "esto también es fondo"
+    const distancia = (i) => {
+      const dr = data[i] - ref[0], dg = data[i + 1] - ref[1], db = data[i + 2] - ref[2];
+      return Math.sqrt(dr * dr + dg * dg + db * db);
+    };
+
+    // Relleno por inundación desde TODO el borde de la imagen: solo se vuelve transparente el
+    // fondo que está conectado con el borde — así no se hacen "agujeros" dentro del producto
+    // aunque tenga zonas del mismo color que el fondo (ej. teclas blancas de un teclado).
+    const visitado = new Uint8Array(w * h);
+    const pila = [];
+    for (let x = 0; x < w; x++) { pila.push(x, 0, x, h - 1); }
+    for (let y = 0; y < h; y++) { pila.push(0, y, w - 1, y); }
+
+    while (pila.length) {
+      const y = pila.pop(), x = pila.pop();
+      if (x < 0 || y < 0 || x >= w || y >= h) continue;
+      const p = y * w + x;
+      if (visitado[p]) continue;
+      visitado[p] = 1;
+      const i = p * 4;
+      if (distancia(i) > TOLERANCIA) continue; // ya no es fondo, no sigue expandiéndose por acá
+      data[i + 3] = 0; // transparente
+      pila.push(x + 1, y, x - 1, y, x, y + 1, x, y - 1);
+    }
+
+    return imgData;
+  }
+
+  // Aplica quitar-fondo a la imagen pegada que esté seleccionada (una capa tipo 'imagen'), sin
+  // tocar la foto de base ni el resto de las capas. Trabaja sobre la resolución real del bitmap
+  // pegado, no sobre su tamaño mostrado en pantalla, para no perder calidad.
+  async function quitarFondoDeCapaSeleccionada(capa) {
+    guardarSnapshotEditor();
+    const w = capa.bitmap.width, h = capa.bitmap.height;
+    const offscreen = document.createElement('canvas');
+    offscreen.width = w; offscreen.height = h;
+    const octx = offscreen.getContext('2d');
+    octx.drawImage(capa.bitmap, 0, 0, w, h);
+    const resultado = quitarFondoDeImageData(octx.getImageData(0, 0, w, h));
+    capa.bitmap = await createImageBitmap(resultado);
+    redibujarEditor();
+    document.getElementById('msg-editor-foto').textContent = 'Fondo eliminado de la imagen seleccionada — revisa los bordes. Si quedó incompleto, usa "Deshacer".';
+  }
+
+  window.editorQuitarFondo = async function() {
+    // Si hay una imagen pegada seleccionada, "Quitar fondo" actúa sobre ella; si no, actúa
+    // sobre la foto de base (comportamiento de siempre). Así el mismo botón sirve para ambas
+    // cosas: pegar una imagen la deja seleccionada automáticamente, lista para este paso.
+    const capaSeleccionada = editorCapas.find(c => c.id === capaSeleccionadaId);
+    if (capaSeleccionada && capaSeleccionada.tipo === 'imagen') {
+      await quitarFondoDeCapaSeleccionada(capaSeleccionada);
+      return;
+    }
+    if (!editorBaseImageData) return;
+    guardarSnapshotEditor();
+    editorBaseImageData = quitarFondoDeImageData(editorBaseImageData);
+    redibujarEditor();
+    document.getElementById('msg-editor-foto').textContent = 'Fondo eliminado de la foto de base — revisa los bordes. Si quedó incompleto, usa "Deshacer".';
+  };
+
+  window.editorMejorarImagen = function() {
+    if (!editorBaseImageData) return;
+    guardarSnapshotEditor();
+    const w = editorBaseImageData.width, h = editorBaseImageData.height;
+    const imgData = new ImageData(new Uint8ClampedArray(editorBaseImageData.data), w, h);
+    const data = imgData.data;
+
+    // 1) Estiramiento de contraste por canal (percentiles 1/99, para no dejarse arrastrar por
+    // pixeles sueltos totalmente blancos o negros) — corrige fotos apagadas o descoloridas.
+    const histR = new Array(256).fill(0), histG = new Array(256).fill(0), histB = new Array(256).fill(0);
+    let opacos = 0;
+    for (let i = 0; i < data.length; i += 4) {
+      if (data[i + 3] === 0) continue; // pixeles ya transparentes (si se quitó el fondo antes) no cuentan
+      histR[data[i]]++; histG[data[i + 1]]++; histB[data[i + 2]]++;
+      opacos++;
+    }
+    if (opacos > 0) {
+      const percentil = (hist, p) => {
+        const objetivo = opacos * p;
+        let acumulado = 0;
+        for (let v = 0; v < 256; v++) { acumulado += hist[v]; if (acumulado >= objetivo) return v; }
+        return 255;
+      };
+      const [rMin, rMax] = [percentil(histR, 0.01), percentil(histR, 0.99)];
+      const [gMin, gMax] = [percentil(histG, 0.01), percentil(histG, 0.99)];
+      const [bMin, bMax] = [percentil(histB, 0.01), percentil(histB, 0.99)];
+      const estirar = (v, min, max) => max <= min ? v : Math.max(0, Math.min(255, Math.round((v - min) * 255 / (max - min))));
+      for (let i = 0; i < data.length; i += 4) {
+        if (data[i + 3] === 0) continue;
+        data[i] = estirar(data[i], rMin, rMax);
+        data[i + 1] = estirar(data[i + 1], gMin, gMax);
+        data[i + 2] = estirar(data[i + 2], bMin, bMax);
+      }
+    }
+
+    // 2) Nitidez leve (realce simple contra el promedio de los 4 vecinos) — ayuda a que una
+    // captura de pantalla no se vea tan "plana". Se aplica sobre una copia ya con el contraste
+    // corregido, para no mezclar vecinos ya modificados con vecinos originales.
+    const copia = new Uint8ClampedArray(data);
+    const idx = (x, y) => (y * w + x) * 4;
+    const INTENSIDAD = 0.6;
+    for (let y = 1; y < h - 1; y++) {
+      for (let x = 1; x < w - 1; x++) {
+        const i = idx(x, y);
+        if (copia[i + 3] === 0) continue;
+        for (let c = 0; c < 3; c++) {
+          const centro = copia[i + c];
+          const promedioVecinos = (copia[idx(x - 1, y) + c] + copia[idx(x + 1, y) + c] + copia[idx(x, y - 1) + c] + copia[idx(x, y + 1) + c]) / 4;
+          data[i + c] = Math.max(0, Math.min(255, Math.round(centro + INTENSIDAD * (centro - promedioVecinos))));
+        }
+      }
+    }
+
+    editorBaseImageData = imgData;
+    redibujarEditor();
+    document.getElementById('msg-editor-foto').textContent = 'Brillo, contraste y nitidez ajustados automáticamente.';
+  };
+
+  window.cerrarEditorFoto = function() {
+    document.getElementById('modal-editor-foto').style.display = 'none';
+    editorHistorial = [];
+    editorCapas = [];
+    editorBaseImageData = null;
+    capaSeleccionadaId = null;
+    document.getElementById('btn-eliminar-capa').style.display = 'none';
+    document.getElementById('popover-stickers').style.display = 'none';
+    document.getElementById('popover-texto').style.display = 'none';
+  };
+
+  // Aplana la foto de base + todos los elementos pegados encima en un solo canvas (sin el
+  // recuadro de selección, que es solo una guía visual del editor) y la sube como una foto más
+  // del producto marcado en productoFotoObjetivo, reutilizando subirImagenesProductoPreparar
+  // (la misma función que usa la subida directa "de siempre").
+  window.guardarFotoEditada = async function() {
+    const msg = document.getElementById('msg-editor-foto');
+    if (!productoFotoObjetivo) {
+      msg.style.color = 'var(--rust)';
+      msg.textContent = 'No hay un producto marcado como destino — cierra el editor y usa "📷 Subir/Agregar foto" en el producto antes de pegar la captura.';
+      return;
+    }
+    const canvasVisible = document.getElementById('canvas-editor-foto');
+    const w = canvasVisible.width, h = canvasVisible.height;
+    const canvasFinal = document.createElement('canvas');
+    canvasFinal.width = w; canvasFinal.height = h;
+    const ctxFinal = canvasFinal.getContext('2d');
+    if (editorBaseImageData) ctxFinal.putImageData(editorBaseImageData, 0, 0);
+    editorCapas.forEach(capa => dibujarCapa(ctxFinal, capa));
+
+    msg.style.color = 'var(--muted)';
+    msg.textContent = 'Guardando...';
+    canvasFinal.toBlob(async (blob) => {
+      if (!blob) { msg.style.color = 'var(--rust)'; msg.textContent = 'No se pudo generar la imagen — intenta de nuevo.'; return; }
+      const archivo = new File([blob], `foto-${Date.now()}.png`, { type: 'image/png' });
+      await subirImagenesProductoPreparar(productoFotoObjetivo, [archivo]);
+      cerrarEditorFoto();
+    }, 'image/png');
   };
 
   // Modal "Fotos para Mercado Libre" — deja pegar/editar las URLs del Gestor de fotos de ML
