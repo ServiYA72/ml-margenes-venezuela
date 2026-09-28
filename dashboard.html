@@ -504,6 +504,14 @@
         </div>
       </div>
 
+      <div class="subseccion-titulo solo-dueno">Vigilancia de competencia</div>
+      <div class="grid-form solo-dueno">
+        <div style="grid-column: 1 / -1; display:flex; align-items:center; gap:10px;">
+          <input type="checkbox" id="prod-vigilar-competencia" style="width:auto; flex:0 0 auto;">
+          <label for="prod-vigilar-competencia" style="display:inline; margin:0;">Vigilar precio de competencia — revisa Mercado Libre una vez al día y avisa en Análisis de competencia si alguien vende más barato</label>
+        </div>
+      </div>
+
       <div class="subseccion-titulo">Fotos</div>
       <div class="grid-form">
         <div style="grid-column: 1 / -1;">
@@ -1062,7 +1070,7 @@
   // costo_usd y ganancia/margen ya no viven en productos/publicaciones: se movieron a productos_costos y
   // publicaciones_margenes (tablas protegidas por RLS, solo visibles para rol='dueño'). Se piden embebidas
   // aquí y normalizarCostosProducto() las vuelve a aplanar al shape de antes para el resto del código.
-  const COLUMNAS_PRODUCTO = 'id, nombre, categoria, sku, especificaciones, productos_costos(costo_usd), proveedores(id, nombre), publicaciones(id, precio_efectivo_usd, precio_bcv_usd_equiv, precio_bcv_bs, modo_ganancia, comision_ml_pct, descripcion, condicion, stock, forma_envio, condiciones_pago, horario_atencion, imagenes, estado, fotos_ml, publicaciones_margenes(margen_objetivo_pct, ganancia_real_usd, comision_ml_usd, ganancia_neta_usd))';
+  const COLUMNAS_PRODUCTO = 'id, nombre, categoria, sku, especificaciones, vigilar_competencia, productos_costos(costo_usd), proveedores(id, nombre), publicaciones(id, precio_efectivo_usd, precio_bcv_usd_equiv, precio_bcv_bs, modo_ganancia, comision_ml_pct, descripcion, condicion, stock, forma_envio, condiciones_pago, horario_atencion, imagenes, estado, fotos_ml, publicaciones_margenes(margen_objetivo_pct, ganancia_real_usd, comision_ml_usd, ganancia_neta_usd))';
 
   // Aplana productos_costos/publicaciones_margenes sobre el producto, para que el resto del código pueda
   // seguir leyendo p.costo_usd y pub.ganancia_real_usd como antes. Para rol "vendedor" estos campos quedan
@@ -1731,7 +1739,11 @@
 
     document.getElementById('prod-descripcion').value = pub.descripcion || '';
     document.getElementById('prod-condicion').value = pub.condicion || 'nuevo';
-    document.getElementById('prod-stock').value = pub.stock || 1;
+    // ?? en vez de || — un stock real de 0 (agotado) es un valor válido y no debe mostrarse ni
+    // guardarse como si fuera 1 (disponible); ver el comentario en crearProducto sobre este mismo
+    // problema al guardar.
+    document.getElementById('prod-stock').value = pub.stock ?? 1;
+    document.getElementById('prod-vigilar-competencia').checked = !!p.vigilar_competencia;
     document.getElementById('prod-envio').value = pub.forma_envio || '';
     document.getElementById('prod-pago').value = pub.condiciones_pago || '';
     document.getElementById('prod-horario').value = pub.horario_atencion || '';
@@ -1768,6 +1780,7 @@
       .forEach(id => document.getElementById(id).value = '');
     document.getElementById('prod-valor-ganancia').value = 30;
     document.getElementById('prod-comision').value = 9;
+    document.getElementById('prod-vigilar-competencia').checked = false;
     sincronizarGanancia('prod', 'usd');
     actualizarPrevisualizacionFotos();
     renderizarListaCaracteristicas([]);
@@ -3432,7 +3445,7 @@ RESULTADOS DEL CÁLCULO DE PRECIO
       return `
         <label class="fila-producto" style="cursor:pointer;">
           <span style="display:flex; align-items:center; gap:10px; flex:1; min-width:0;">
-            <input type="checkbox" class="chk-categoria-gestion" value="${escapeHtml(cat)}">
+            <input type="checkbox" class="chk-categoria-gestion" value="${escapeHtml(cat)}" style="width:auto; flex:0 0 auto;">
             <span class="fp-nombre">${escapeHtml(cat)}${sospechosa ? ' <span style="color:var(--rust); font-size:11px;">(parece no ser una categoría real)</span>' : ''}</span>
           </span>
           <span class="fp-info">${conteo[cat]} producto(s)</span>
@@ -3671,17 +3684,22 @@ RESULTADOS DEL CÁLCULO DE PRECIO
     const { data: { session } } = await supabase.auth.getSession();
     let productoId = editandoProductoId;
     const especificaciones = construirEspecificaciones();
+    // La vigilancia de competencia es una decisión de precio, así que queda igual que
+    // costo/ganancia: solo el rol dueño la puede ver o tocar (el checkbox vive bajo
+    // "solo-dueno"); para un vendedor simplemente no se toca esta columna al guardar.
+    const datosProducto = { proveedor_id, nombre, categoria, especificaciones };
+    if (esDueno()) datosProducto.vigilar_competencia = document.getElementById('prod-vigilar-competencia').checked;
 
     if (editandoProductoId) {
       const { error: errUpd } = await supabase
         .from('productos')
-        .update({ proveedor_id, nombre, categoria, especificaciones })
+        .update(datosProducto)
         .eq('id', editandoProductoId);
       if (errUpd) { msg.textContent = 'Error al actualizar: ' + errUpd.message; return; }
     } else {
       const { data: producto, error: errProd } = await supabase
         .from('productos')
-        .insert({ proveedor_id, nombre, categoria, especificaciones, creado_por: session?.user?.id })
+        .insert({ ...datosProducto, creado_por: session?.user?.id })
         .select()
         .single();
       if (errProd) { msg.textContent = 'Error: ' + errProd.message; return; }
@@ -3720,11 +3738,17 @@ RESULTADOS DEL CÁLCULO DE PRECIO
     const imagenes = document.getElementById('prod-imagenes').value
       .split(',').map(s => s.trim()).filter(Boolean);
 
+    // parseInt(...) || 1 pisaba un stock real de 0 (agotado) con 1 (disponible) en cada guardado,
+    // porque 0 es "falsy" en JS — un producto agotado que se guardaba sin tocar el stock volvía a
+    // quedar como disponible, y el filtro de stock del listado dejaba de ser confiable. Con
+    // isNaN solo se cae al default de 1 cuando el campo está realmente vacío/no numérico.
+    const stockIngresado = parseInt(document.getElementById('prod-stock').value);
+
     // Campos que siempre se pueden editar sin tocar el precio.
     const datosPublicacion = {
       descripcion: document.getElementById('prod-descripcion').value.trim(),
       condicion: document.getElementById('prod-condicion').value,
-      stock: parseInt(document.getElementById('prod-stock').value) || 1,
+      stock: isNaN(stockIngresado) ? 1 : stockIngresado,
       forma_envio: document.getElementById('prod-envio').value.trim(),
       condiciones_pago: document.getElementById('prod-pago').value.trim(),
       horario_atencion: document.getElementById('prod-horario').value.trim(),

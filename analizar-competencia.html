@@ -123,6 +123,14 @@
   <h1>Análisis de competencia</h1>
   <p class="sub">Vincula el análisis a uno de tus productos para comparar automáticamente tu precio contra la competencia. Pega el texto de la publicación (incluyendo el precio) y el sistema detecta el precio, la moneda, la forma de pago (BCV / Binance / efectivo internacional) y la región del vendedor — todo queda guardado en el historial.</p>
 
+  <div class="panel" id="panel-alertas-competencia" style="display:none; border-color: var(--rust);">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+      <h2 style="margin:0;">🔔 <span id="contador-alertas">0</span> alerta(s) de precio</h2>
+    </div>
+    <div class="hint" style="margin-top:0; margin-bottom:14px;">Nicom revisa una vez al día, sin que tengas que hacer nada, los productos que marcaste con "Vigilar precio de competencia" — esto es lo que encontró vendiéndose más barato.</div>
+    <div id="lista-alertas-competencia"></div>
+  </div>
+
   <div class="panel" id="panel-cola" style="display:none; border-color: var(--teal);">
     <h2>Comparando productos seleccionados (<span id="cola-restantes"></span> pendientes)</h2>
     <div id="cola-lista" style="font-size:13px; color:var(--muted); line-height:1.8;"></div>
@@ -144,8 +152,21 @@
     </div>
   </div>
 
+  <div class="panel" id="panel-busqueda-automatica" style="display:none;">
+    <h2>2. Busca automáticamente quién más lo está vendiendo</h2>
+    <div class="hint" style="margin-top:0;">Consulta el buscador público de Mercado Libre (el mismo que usa el sitio) y trae de una vez hasta 15 publicaciones reales — con precio, cuántos han vendido y si es tienda oficial — en vez de que tengas que ir a cazarlas una por una.</div>
+    <div style="display:flex; gap:8px; flex-wrap:wrap; margin-top:14px;">
+      <input type="text" id="busqueda-competencia-ml" placeholder="Se llena solo con el nombre del producto — edítalo si el nombre es muy largo o muy específico" style="flex:1; min-width:260px;">
+      <button class="primary" style="margin-top:0; white-space:nowrap;" onclick="buscarCompetenciaAutomatica()" id="btn-buscar-competencia">Buscar en Mercado Libre</button>
+    </div>
+    <div class="hint" id="msg-busqueda-competencia"></div>
+    <div id="resumen-posicion-competencia" style="display:none; margin-top:14px; padding:12px 14px; background:var(--surface-2); border:1px solid var(--gold); font-size:13.5px;"></div>
+    <div id="resultados-busqueda-competencia" style="margin-top:14px;"></div>
+  </div>
+
   <div class="panel">
-    <h2>2. Analizar una publicación de la competencia</h2>
+    <h2>3. Analizar una publicación puntual (pegando texto o link)</h2>
+    <div class="hint" style="margin-top:0; margin-bottom:14px;">Para cuando ya tienes un competidor específico en mente, o quieres confirmar la forma de pago real de alguno de los resultados de arriba — esto sí lee el texto completo (y las preguntas al vendedor) para detectar si cobra en BCV, Binance o exige efectivo.</div>
 
     <div style="margin-bottom:18px; padding-bottom:18px; border-bottom:1px solid var(--line);">
       <label for="in-link-ml">Link de la publicación en Mercado Libre</label>
@@ -322,7 +343,9 @@
 
   let productoActivoId = null;
 
-  const COLUMNAS_PRODUCTO_COMPETENCIA = 'id, nombre, sku, categoria, especificaciones, costo_usd, publicaciones(precio_efectivo_usd, precio_bcv_usd_equiv, precio_bcv_bs)';
+  // costo_usd no se usa en este archivo (nunca se muestra) y ahora vive en la tabla protegida
+  // productos_costos (solo rol="dueño"), así que ya no se pide en el select.
+  const COLUMNAS_PRODUCTO_COMPETENCIA = 'id, nombre, sku, categoria, especificaciones, publicaciones(precio_efectivo_usd, precio_bcv_usd_equiv, precio_bcv_bs)';
 
   async function cargarProductos() {
     const TAMANO_BLOQUE = 1000;
@@ -422,6 +445,15 @@
 
     const enlace = document.getElementById('link-buscar-ml');
     enlace.href = 'https://listado.mercadolibre.com.ve/' + encodeURIComponent(p.nombre.trim().replace(/\s+/g, '-'));
+
+    // Habilita el paso 2 (búsqueda automática) y le precarga el nombre del producto como
+    // consulta de partida — el usuario la puede editar antes de buscar si el nombre es
+    // demasiado largo/específico para que el buscador de Mercado Libre traiga resultados.
+    document.getElementById('panel-busqueda-automatica').style.display = 'block';
+    document.getElementById('busqueda-competencia-ml').value = p.nombre || '';
+    document.getElementById('resumen-posicion-competencia').style.display = 'none';
+    document.getElementById('resultados-busqueda-competencia').innerHTML = '';
+    document.getElementById('msg-busqueda-competencia').textContent = '';
   };
 
   // Detecta si un fragmento de texto suelto (ej. la respuesta del vendedor a una pregunta)
@@ -545,6 +577,159 @@
       : 'Listo — se trajo el título, precio y descripción. Las preguntas y respuestas no se pudieron leer automáticamente esta vez (Mercado Libre a veces las protege) — si el vendedor respondió algo sobre la forma de pago, agrégalo a mano en el texto de abajo.';
   };
 
+  // --- Búsqueda automática en Mercado Libre (paso 2) ---
+  // Usa buscar-precios-ml (Edge Function ya desplegada, que consulta el buscador PÚBLICO de
+  // Mercado Libre — el mismo que usa el sitio, sin necesidad de token) para traer de una vez
+  // hasta 15 publicaciones reales que compiten con el producto elegido, en vez de depender de
+  // que el usuario encuentre y pegue el link de una en una. Trae un dato que el pegado manual
+  // nunca puede conseguir: cuántas unidades ha vendido cada competidor.
+  let ultimosResultadosBusqueda = [];
+  let ultimoProductoBusqueda = null;
+
+  window.buscarCompetenciaAutomatica = async function() {
+    const productoId = productoActivoId;
+    if (!productoId) return;
+    const producto = productosCache[productoId];
+    const query = document.getElementById('busqueda-competencia-ml').value.trim();
+    const msg = document.getElementById('msg-busqueda-competencia');
+    const btn = document.getElementById('btn-buscar-competencia');
+    const resumen = document.getElementById('resumen-posicion-competencia');
+    const cont = document.getElementById('resultados-busqueda-competencia');
+
+    if (!query) { msg.style.color = 'var(--rust)'; msg.textContent = 'Escribe qué buscar.'; return; }
+
+    msg.style.color = 'var(--muted)';
+    msg.textContent = 'Buscando en Mercado Libre...';
+    resumen.style.display = 'none';
+    cont.innerHTML = '';
+    btn.disabled = true;
+
+    let data, error;
+    try {
+      ({ data, error } = await supabase.functions.invoke('buscar-precios-ml', { body: { query } }));
+    } catch (e) {
+      error = e;
+    }
+    btn.disabled = false;
+
+    if (error || !data || !data.ok) {
+      msg.style.color = 'var(--rust)';
+      msg.textContent = (data && data.error) || (error && error.message) ||
+        'No se pudo buscar en Mercado Libre en este momento. Intenta de nuevo en unos segundos, o usa el análisis puntual de abajo.';
+      return;
+    }
+
+    if (!data.resultados || data.resultados.length === 0) {
+      msg.style.color = 'var(--muted)';
+      msg.textContent = 'Mercado Libre no devolvió resultados para esa búsqueda — prueba con un término más corto o más genérico (ej. solo marca + modelo).';
+      return;
+    }
+
+    msg.style.color = 'var(--teal)';
+    msg.textContent = `${data.resultados.length} publicación(es) encontradas (de ${data.total} en total). La forma de pago (BCV/Binance/efectivo) no viene en la búsqueda — usa "Traer datos del link" abajo en la que te interese para confirmarla.`;
+
+    ultimosResultadosBusqueda = data.resultados;
+    ultimoProductoBusqueda = producto;
+    renderizarResultadosBusquedaCompetencia(data.resultados, producto);
+  };
+
+  // Convierte el precio de un resultado de búsqueda a "$ equiv. Ref. BCV" para poder ordenarlos
+  // y compararlos contra el precio propio de forma pareja, igual que normalizarPrecioCompetidor
+  // pero sin asumir ninguna clasificación (la búsqueda no trae el texto completo de la
+  // publicación, así que no se sabe si exige efectivo — se asume "referencial", el caso más
+  // común en publicaciones que ya muestran precio en dólares en el buscador).
+  function precioComparableBusqueda(resultado) {
+    if (resultado.moneda === 'VES' && tasaBCV) return resultado.precio / tasaBCV;
+    if (resultado.moneda === 'USD') return resultado.precio;
+    return null;
+  }
+
+  function renderizarResultadosBusquedaCompetencia(resultados, producto) {
+    const cont = document.getElementById('resultados-busqueda-competencia');
+    const resumen = document.getElementById('resumen-posicion-competencia');
+    const pub = producto?.pub || {};
+    const precioPropio = pub.precio_bcv_usd_equiv ? parseFloat(pub.precio_bcv_usd_equiv) : null;
+
+    const conPrecioComparable = resultados
+      .map((r, i) => ({ ...r, _idx: i, _comparable: precioComparableBusqueda(r) }))
+      .filter(r => r._comparable !== null)
+      .sort((a, b) => a._comparable - b._comparable);
+
+    const masVendidoId = resultados.reduce((mejor, r, i) =>
+      (r.vendidos || 0) > (resultados[mejor]?.vendidos || 0) ? i : mejor, 0);
+
+    if (precioPropio && conPrecioComparable.length > 0) {
+      const masBaratos = conPrecioComparable.filter(r => r._comparable < precioPropio).length;
+      const total = conPrecioComparable.length;
+      resumen.style.display = 'block';
+      if (masBaratos === 0) {
+        resumen.innerHTML = `<span style="color:var(--teal);">✓ Tu precio ($${precioPropio.toFixed(2)}) es el más barato de los ${total} resultados encontrados.</span>`;
+      } else {
+        resumen.innerHTML = `Tu precio (<b>$${precioPropio.toFixed(2)}</b> Ref. BCV) quedaría en el puesto <b>${masBaratos + 1} de ${total}</b> — hay ${masBaratos} vendiendo más barato que vos ahora mismo.`;
+      }
+    } else {
+      resumen.style.display = 'none';
+    }
+
+    cont.innerHTML = resultados.map((r, i) => {
+      const comparable = precioComparableBusqueda(r);
+      const masBarato = precioPropio && comparable !== null && comparable < precioPropio;
+      const masCaro = precioPropio && comparable !== null && comparable > precioPropio;
+      return `
+        <div class="resultado-card" style="display:flex; gap:14px; align-items:flex-start;">
+          ${r.thumbnail ? `<img src="${escapeHtml(r.thumbnail)}" alt="" style="width:64px; height:64px; object-fit:contain; background:var(--surface); flex-shrink:0;">` : ''}
+          <div style="flex:1; min-width:0;">
+            <div class="titulo" style="margin-bottom:6px;"><a href="${escapeHtml(r.link)}" target="_blank" style="color:var(--paper); text-decoration:none; border-bottom:1px solid var(--line);">${escapeHtml(r.titulo)}</a></div>
+            <div class="badges">
+              <span class="badge" style="${masBarato ? 'color:var(--rust); border-color:var(--rust);' : masCaro ? 'color:var(--teal); border-color:var(--teal);' : ''}">
+                ${r.moneda === 'VES' ? 'Bs ' + Number(r.precio).toLocaleString('es-VE') : '$' + Number(r.precio).toFixed(2)}
+                ${comparable !== null ? ' (≈$' + comparable.toFixed(2) + ' Ref. BCV)' : ''}
+              </span>
+              ${r.vendidos ? `<span class="badge" style="${i === masVendidoId ? 'color:var(--gold); border-color:var(--gold);' : ''}">${i === masVendidoId ? '🔥 ' : ''}${r.vendidos} vendido(s)</span>` : ''}
+              ${r.tienda_oficial ? `<span class="badge">🏬 Tienda oficial</span>` : ''}
+              <span class="badge">${r.condicion === 'new' ? 'Nuevo' : r.condicion === 'used' ? 'Usado' : escapeHtml(r.condicion || '—')}</span>
+            </div>
+          </div>
+          <button class="secondary" style="margin:0; padding:8px 12px; font-size:12px; white-space:nowrap;" onclick="guardarResultadoBusquedaCompetencia(${i})">Guardar en historial</button>
+        </div>`;
+    }).join('');
+  }
+
+  // Guarda un resultado puntual de la búsqueda automática en el mismo historial que usa el
+  // análisis manual — reutiliza clasificarPublicacion() sobre el título (best-effort: rara vez
+  // el título solo menciona la forma de pago, así que casi siempre quedará "ambiguo", que es lo
+  // honesto dado lo que se sabe en este punto) y guarda vendidos/tienda oficial/link en notas.
+  window.guardarResultadoBusquedaCompetencia = async function(idx) {
+    const r = ultimosResultadosBusqueda[idx];
+    if (!r) return;
+    const producto = ultimoProductoBusqueda;
+    const msg = document.getElementById('msg-busqueda-competencia');
+
+    const resultado = clasificarPublicacion(r.titulo || '');
+    const comparable = precioComparableBusqueda(r);
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const notas = `Fuente: búsqueda automática en Mercado Libre. Vendidos: ${r.vendidos ?? '—'}. ${r.tienda_oficial ? 'Tienda oficial. ' : ''}Link: ${r.link}`;
+
+    const { error } = await supabase.from('analisis_competencia').insert({
+      producto_id: producto ? producto.id : null,
+      producto_nombre_libre: producto ? producto.nombre : null,
+      competidor_texto: r.titulo || '',
+      precio_detectado: r.precio,
+      moneda_detectada: r.moneda,
+      clasificacion: resultado.clasificacion,
+      region: null,
+      precio_equiv_usd_bcv: comparable,
+      notas,
+      creado_por: session?.user?.id
+    });
+
+    if (error) { msg.style.color = 'var(--rust)'; msg.textContent = 'Error al guardar: ' + error.message; return; }
+    msg.style.color = 'var(--teal)';
+    msg.textContent = 'Guardado en el historial de abajo.';
+    await cargarHistorial();
+  };
+
   window.actualizarVistaPrevia = function() {
     const campo = document.getElementById('in-texto');
     const texto = campo.value;
@@ -659,7 +844,7 @@
     // Siempre se busca directo por ID, sin depender de si ya estaba en la caché
     const { data: prodDirecto, error: errorProd } = await supabase
       .from('productos')
-      .select('id, nombre, sku, categoria, especificaciones, costo_usd, publicaciones(precio_efectivo_usd, precio_bcv_usd_equiv, precio_bcv_bs)')
+      .select('id, nombre, sku, categoria, especificaciones, publicaciones(precio_efectivo_usd, precio_bcv_usd_equiv, precio_bcv_bs)')
       .eq('id', actualId)
       .maybeSingle();
 
@@ -796,9 +981,69 @@
     return d.innerHTML;
   }
 
+  // Alertas automáticas de vigilancia de competencia — las genera sola, una vez al día, la
+  // función vigilar-competencia (pg_cron) para los productos marcados con "Vigilar precio de
+  // competencia" en dashboard.html. RLS ya filtra por tenant, así que este select solo trae
+  // lo de este negocio.
+  async function cargarAlertas() {
+    const { data } = await supabase
+      .from('alertas_competencia')
+      .select('*')
+      .eq('vista', false)
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    const panel = document.getElementById('panel-alertas-competencia');
+    const cont = document.getElementById('lista-alertas-competencia');
+    const contador = document.getElementById('contador-alertas');
+
+    if (!data || data.length === 0) { panel.style.display = 'none'; return; }
+
+    panel.style.display = 'block';
+    contador.textContent = data.length;
+
+    cont.innerHTML = data.map(a => {
+      const propio = a.precio_propio_usd_bcv != null ? parseFloat(a.precio_propio_usd_bcv) : null;
+      const competidor = a.competidor_precio_equiv_usd_bcv != null ? parseFloat(a.competidor_precio_equiv_usd_bcv) : null;
+      const diffPct = (propio !== null && competidor !== null && competidor > 0) ? ((propio - competidor) / competidor) * 100 : null;
+      return `
+        <div class="resultado-card" style="border-color:var(--rust); margin-bottom:12px;">
+          <div class="titulo">${escapeHtml(a.producto_nombre || 'Producto')}</div>
+          <div class="detalle" style="margin-bottom:8px;">
+            ${propio !== null ? `Tu precio: <b>$${propio.toFixed(2)}</b> Ref. BCV` : ''}
+            ${diffPct !== null ? ` — <span style="color:var(--rust);">${diffPct.toFixed(1)}% más caro</span> que este competidor` : ''}
+          </div>
+          <div style="font-size:13px; margin-bottom:8px;">
+            <a href="${escapeHtml(a.competidor_link || '#')}" target="_blank" style="color:var(--paper); text-decoration:none; border-bottom:1px solid var(--line);">${escapeHtml(a.competidor_titulo || '')}</a>
+          </div>
+          <div class="badges" style="margin-bottom:10px;">
+            <span class="badge" style="color:var(--rust); border-color:var(--rust);">
+              ${a.competidor_moneda === 'VES' ? 'Bs ' + Number(a.competidor_precio).toLocaleString('es-VE') : '$' + Number(a.competidor_precio).toFixed(2)}
+              ${competidor !== null ? ' (≈$' + competidor.toFixed(2) + ' Ref. BCV)' : ''}
+            </span>
+            ${a.competidor_vendidos ? `<span class="badge">${a.competidor_vendidos} vendido(s)</span>` : ''}
+            ${a.competidor_tienda_oficial ? `<span class="badge">🏬 Tienda oficial</span>` : ''}
+          </div>
+          <button class="secondary" style="margin:0 8px 0 0; padding:6px 12px; font-size:12px;" onclick="marcarAlertaVista('${a.id}')">Descartar</button>
+          ${a.producto_id ? `<button class="primary" style="margin:0; padding:6px 12px; font-size:12px;" onclick="reajustarDesdeAlerta('${a.id}', '${a.producto_id}')">Reajustar precio →</button>` : ''}
+        </div>`;
+    }).join('');
+  }
+
+  window.marcarAlertaVista = async function(id) {
+    await supabase.from('alertas_competencia').update({ vista: true }).eq('id', id);
+    await cargarAlertas();
+  };
+
+  window.reajustarDesdeAlerta = async function(id, productoId) {
+    await supabase.from('alertas_competencia').update({ vista: true }).eq('id', id);
+    window.location.href = 'dashboard.html?editar=' + encodeURIComponent(productoId);
+  };
+
   (async function init() {
     await cargarTasas();
     await cargarProductos();
+    await cargarAlertas();
     await cargarHistorial();
     cargarCola();
   })();
