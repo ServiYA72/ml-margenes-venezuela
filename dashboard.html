@@ -1709,18 +1709,26 @@
       tipoPubSelect.value = 'custom';
     }
     document.getElementById('prod-comision').value = comisionGuardada;
-    aplicarTipoPublicacion('prod');
-    sincronizarGanancia('prod', 'usd');
 
-    // Snapshot de lo que quedó cargado — ver la declaración de valoresPrecioAlAbrirEdicion.
-    // Se toma DESPUÉS de aplicarTipoPublicacion/sincronizarGanancia para reflejar los valores
-    // reales que terminaron en los inputs (ellas pueden redondear/ajustar la comisión).
+    // Snapshot de lo que quedó cargado — ver la declaración de valoresPrecioAlAbrirEdicion. Se
+    // toma ACÁ, ANTES de aplicarTipoPublicacion/sincronizarGanancia, porque esas dos ya disparan
+    // el primer cálculo de actualizarComparacionComisiones() (los cuadros de precio) y esa
+    // función necesita el snapshot listo desde ese primer cálculo para poder mostrar el precio
+    // TAL COMO quedó guardado, en vez de uno recién calculado con la tasa BCV/Binance de HOY (ver
+    // el comentario junto a "sinCambiosDesdeApertura" en actualizarComparacionComisiones). Ninguna
+    // de las dos funciones modifica costo/modo/gananciaValor/comisión más allá de lo ya cargado
+    // arriba (solo ajustan el campo de % y el estilo del input de comisión), así que tomar el
+    // snapshot acá en vez de después es equivalente y evita ese primer cálculo mal comparado.
     valoresPrecioAlAbrirEdicion = {
       costo: parseFloat(document.getElementById('prod-costo').value),
       modo: document.getElementById('prod-modo-ganancia').value,
       valorGanancia: parseFloat(document.getElementById('prod-valor-ganancia').value),
-      comision: parseFloat(document.getElementById('prod-comision').value)
+      comision: comisionGuardada
     };
+
+    aplicarTipoPublicacion('prod');
+    sincronizarGanancia('prod', 'usd');
+
     document.getElementById('prod-descripcion').value = pub.descripcion || '';
     document.getElementById('prod-condicion').value = pub.condicion || 'nuevo';
     document.getElementById('prod-stock').value = pub.stock || 1;
@@ -3520,6 +3528,28 @@ RESULTADOS DEL CÁLCULO DE PRECIO
     const comisionActual = parseFloat(document.getElementById(prefix + '-comision').value);
     const tipoPub = document.getElementById(prefix + '-tipo-publicacion')?.value;
 
+    // Si estamos editando un producto que YA tiene un precio guardado, y ninguno de los 4 valores
+    // que determinan el precio (costo, modo, ganancia, comisión) se tocó desde que se abrió la
+    // edición, el recuadro de la comisión que coincide con la ya guardada debe mostrar el precio
+    // TAL COMO quedó guardado — no uno recién calculado con la tasa BCV/Binance de HOY. La tasa
+    // cambia seguido, así que recalcular siempre acá hacía parecer que "el precio cambió solo" al
+    // simplemente abrir un producto para editarlo, aunque nada se hubiera tocado ni guardado.
+    // Apenas el usuario cambie de verdad algo, esto deja de aplicar y todo vuelve a calcularse en
+    // vivo con la tasa actual (para previsualizar cuál sería el precio nuevo).
+    const publicacionPrevia = (prefix === 'prod' && editandoProductoId) ? productosCache[editandoProductoId]?.pub : null;
+    const sinCambiosDesdeApertura = !!(publicacionPrevia && publicacionPrevia.precio_efectivo_usd != null && valoresPrecioAlAbrirEdicion &&
+      costo === valoresPrecioAlAbrirEdicion.costo &&
+      modo === valoresPrecioAlAbrirEdicion.modo &&
+      valor === valoresPrecioAlAbrirEdicion.valorGanancia &&
+      comisionActual === valoresPrecioAlAbrirEdicion.comision);
+    const dGuardado = sinCambiosDesdeApertura ? {
+      precio_efectivo_usd: publicacionPrevia.precio_efectivo_usd,
+      precio_bcv_bs: publicacionPrevia.precio_bcv_bs,
+      precio_bcv_usd_equiv: publicacionPrevia.precio_bcv_usd_equiv,
+      comision_ml_usd: publicacionPrevia.comision_ml_usd,
+      ganancia_neta_usd: publicacionPrevia.ganancia_neta_usd
+    } : null;
+
     const { data: clasica } = await supabase.rpc('calcular_precios', { p_costo_usd: costo, p_modo: modo, p_valor: valor, p_comision_ml_pct: 11, p_tasa_bcv: tasaBCV, p_tasa_binance: tasaBinance });
     const { data: premium } = await supabase.rpc('calcular_precios', { p_costo_usd: costo, p_modo: modo, p_valor: valor, p_comision_ml_pct: 15, p_tasa_bcv: tasaBCV, p_tasa_binance: tasaBinance });
     let personalizada = null;
@@ -3533,12 +3563,18 @@ RESULTADOS DEL CÁLCULO DE PRECIO
     if (miSecuencia !== secuenciaComparacion) return;
 
     if (!clasica || !premium) { cont.style.display = 'none'; return; }
-    const c = clasica[0], p = premium[0];
+    // El recuadro cuya comisión coincide con la ya guardada usa dGuardado (el precio real,
+    // publicado) en vez del resultado recién calculado — ver sinCambiosDesdeApertura arriba.
+    const c = (dGuardado && comisionActual === 11) ? dGuardado : clasica[0];
+    const p = (dGuardado && comisionActual === 15) ? dGuardado : premium[0];
+    const datosPersonalizada = personalizada
+      ? ((dGuardado && comisionActual !== 11 && comisionActual !== 15) ? dGuardado : personalizada[0])
+      : null;
     const etiquetaGanancia = modo === 'neta' ? `quedarte con $${valor.toFixed(2)} netos` : `ganar $${valor.toFixed(2)} brutos`;
 
     const fila = (nombre, d, comisionPct, activa) => `
       <div style="flex:1; min-width:260px; border:1px solid ${activa ? 'var(--gold)' : 'var(--line)'}; padding:12px 14px;">
-        <div style="font-weight:600; margin-bottom:8px;">${nombre}${activa ? ' ✓' : ''}</div>
+        <div style="font-weight:600; margin-bottom:8px;">${nombre}${activa ? (sinCambiosDesdeApertura ? ' ✓ (guardado)' : ' ✓') : ''}</div>
         <div style="font-size:13px; line-height:1.9;">
           <div>Precio en efectivo (cash): <b style="color:var(--gold)">$${parseFloat(d.precio_efectivo_usd).toFixed(2)}</b></div>
           <div>Precio a publicar en Bs (BCV): <b style="color:var(--teal)">Bs ${parseFloat(d.precio_bcv_bs).toLocaleString('es-VE',{maximumFractionDigits:2})}</b></div>
@@ -3554,7 +3590,7 @@ RESULTADOS DEL CÁLCULO DE PRECIO
       <div style="display:flex; gap:16px; flex-wrap:wrap;">
         ${fila('Clásica (11%)', c, 11, tipoPub === '11')}
         ${fila('Premium (15%)', p, 15, tipoPub === '15')}
-        ${personalizada ? fila(`Personalizada (${comisionActual}%)`, personalizada[0], comisionActual, tipoPub === 'custom') : ''}
+        ${datosPersonalizada ? fila(`Personalizada (${comisionActual}%)`, datosPersonalizada, comisionActual, tipoPub === 'custom') : ''}
       </div>
     `;
   };
