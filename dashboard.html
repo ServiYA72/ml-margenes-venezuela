@@ -2567,7 +2567,6 @@ DETALLES DEL PRODUCTO
 • Forma de envío: ${p.pub.forma_envio || '—'}
 • Condiciones de pago: ${p.pub.condiciones_pago || '—'}
 • Horario de atención: ${p.pub.horario_atencion || '—'}
-• Descripción: ${(p.pub.descripcion && p.pub.descripcion.trim()) || '—'}
 
 --------------------------------------------------
 RESULTADOS DEL CÁLCULO DE PRECIO
@@ -2575,6 +2574,10 @@ RESULTADOS DEL CÁLCULO DE PRECIO
 📌 PRECIO A PUBLICAR EN MERCADOLIBRE:
 • Precio Final en Bolívares: ${fmtVes(precioPublicarVes)} VES
 • Precio Ref. en Dólares (BCV): $${fmtUsd(precioPublicarUsdBcv)} USD
+
+💰 GANANCIA (precio obtenido − costo del producto):
+• Costo del producto: $${fmtUsd(costo)} USD (${fmtVes(costo * tasaBCV)} VES a tasa BCV)
+• Ganancia neta real: $${fmtUsd(usdtFinales - costo)} USD (${fmtVes((usdtFinales - costo) * tasaBCV)} VES a tasa BCV)
 
 📊 DESGLOSE OPERATIVO:
 • Meta Neta Requerida: $${fmtUsd(metaUsdt)} USDT (${fmtVes(baseVes)} VES)
