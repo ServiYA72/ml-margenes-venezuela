@@ -246,6 +246,74 @@
     </div>
     <div class="empty" id="empty-ventas" style="display:none;">Todavía no hay ventas registradas.</div>
   </div>
+
+  <div class="panel">
+    <h2>Apartados (reservas con abono)</h2>
+    <p class="sub" style="margin-bottom:20px;">Reserva un producto para un cliente con un abono parcial — el saldo pendiente queda visible hasta que se complete el pago. Nota: esto no descuenta el stock automáticamente todavía, así que evita ofrecer la última unidad de algo apartado a otro cliente.</p>
+
+    <label for="buscador-productos-apartado">Producto a reservar</label>
+    <input type="text" id="buscador-productos-apartado" placeholder="Busca por nombre, código, categoría o marca..." oninput="filtrarListaProductosApartado()">
+    <div id="lista-productos-buscador-apartado" style="max-height: 220px; overflow-y: auto; border: 1px solid var(--line); margin-top: 12px;"></div>
+
+    <div class="producto-elegido" id="producto-elegido-panel-apartado">
+      <div class="nombre" id="pea-nombre"></div>
+      <div class="precios" id="pea-precios"></div>
+    </div>
+
+    <label for="buscador-clientes-apartado" style="margin-top:16px;">Cliente</label>
+    <input type="text" id="buscador-clientes-apartado" placeholder="Busca un cliente ya registrado, o escribe uno nuevo abajo..." oninput="filtrarListaClientesApartado()">
+    <div id="lista-clientes-buscador-apartado" style="max-height: 160px; overflow-y: auto; border: 1px solid var(--line); margin-top: 12px; display:none;"></div>
+
+    <div id="cliente-elegido-panel-apartado" style="display:none; margin-top:12px; padding:10px 14px; background:var(--surface-2); border:1px solid var(--gold); font-size:13px;">
+      Cliente seleccionado: <b id="cliente-elegido-nombre-apartado"></b>
+      <button class="secondary" style="margin:0 0 0 12px; padding:4px 10px; font-size:11px;" onclick="quitarClienteElegidoApartado()">Quitar</button>
+    </div>
+
+    <div class="grid-form" id="form-nuevo-cliente-apartado" style="margin-top:14px;">
+      <div>
+        <label for="ca-nombre">Nombre del cliente</label>
+        <input type="text" id="ca-nombre" placeholder="Nombre completo">
+      </div>
+      <div>
+        <label for="ca-telefono">Teléfono</label>
+        <input type="text" id="ca-telefono" placeholder="0412-1234567">
+      </div>
+    </div>
+
+    <div class="grid-form" style="margin-top:14px;">
+      <div>
+        <label for="ap-total">Precio total acordado ($)</label>
+        <input type="number" step="0.01" id="ap-total" placeholder="0.00">
+      </div>
+      <div>
+        <label for="ap-abono">Abono inicial ($)</label>
+        <input type="number" step="0.01" id="ap-abono" placeholder="0.00">
+      </div>
+      <div>
+        <label for="ap-metodo">Método de pago del abono</label>
+        <select id="ap-metodo">
+          <option value="efectivo">Efectivo</option>
+          <option value="zelle">Zelle</option>
+          <option value="pago_movil">Pago Móvil</option>
+          <option value="transferencia">Transferencia bancaria</option>
+          <option value="binance">Binance / USDT</option>
+          <option value="otro">Otro</option>
+        </select>
+      </div>
+    </div>
+    <label for="ap-notas">Notas (opcional)</label>
+    <textarea id="ap-notas" rows="2" placeholder="Ej: entrega cuando complete el pago, fecha límite, etc."></textarea>
+
+    <button class="primary" onclick="registrarApartado()">Registrar apartado</button>
+    <button class="secondary" onclick="limpiarFormularioApartado()">Limpiar</button>
+    <div class="msg" id="msg-apartado"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Apartados activos</h2>
+    <div id="lista-apartados"></div>
+    <div class="empty" id="empty-apartados" style="display:none;">Todavía no hay apartados registrados.</div>
+  </div>
 </main>
 
 <script type="module">
@@ -601,12 +669,262 @@
     }
   }
 
+  // ===== Apartados (reservas con abono) =====
+  // Reutiliza productosCache/clientesCache (ya cargados arriba) pero con su propio estado y sus
+  // propios elementos del DOM, separados de los del formulario de "Registrar venta" — así ambos
+  // formularios pueden convivir en la misma página sin pisarse.
+  let productoElegidoApartadoId = null;
+  let clienteElegidoApartadoId = null;
+  let apartadosCache = {};
+
+  window.filtrarListaProductosApartado = function() {
+    const qCompleto = normalizarTexto(document.getElementById('buscador-productos-apartado').value);
+    const todos = Object.values(productosCache);
+    if (!qCompleto) { renderizarListaProductosApartado(todos); return; }
+    const palabras = qCompleto.split(/\s+/).filter(p => p.length >= 2);
+    const filtrados = todos.filter(p => {
+      const marca = p.especificaciones?.marca || '';
+      const haystack = normalizarTexto([p.nombre, p.sku, p.categoria, marca].filter(Boolean).join(' '));
+      return palabras.every(palabra => haystack.includes(palabra));
+    });
+    renderizarListaProductosApartado(filtrados);
+  };
+
+  function renderizarListaProductosApartado(lista) {
+    const cont = document.getElementById('lista-productos-buscador-apartado');
+    cont.innerHTML = '';
+    if (lista.length === 0) { cont.innerHTML = '<div class="empty">Ningún producto coincide con la búsqueda.</div>'; return; }
+    lista.forEach(p => {
+      const pub = p.pub || {};
+      const fila = document.createElement('div');
+      fila.className = 'fila-producto' + (p.id === productoElegidoApartadoId ? ' activa' : '');
+      fila.innerHTML = `
+        <span class="fp-nombre">${escapeHtml(p.nombre)}</span>
+        <span class="fp-info">
+          <span style="color:var(--muted)">stock: ${pub.stock ?? '—'}</span>
+          <span style="color:var(--gold)">$${pub.precio_efectivo_usd ? parseFloat(pub.precio_efectivo_usd).toFixed(2) : '—'} cash</span>
+        </span>
+      `;
+      fila.onclick = () => elegirProductoApartado(p.id);
+      cont.appendChild(fila);
+    });
+  }
+
+  window.elegirProductoApartado = function(id) {
+    productoElegidoApartadoId = id;
+    const p = productosCache[id];
+    if (!p) return;
+    const pub = p.pub || {};
+    filtrarListaProductosApartado();
+
+    const panel = document.getElementById('producto-elegido-panel-apartado');
+    panel.style.display = 'block';
+    document.getElementById('pea-nombre').textContent = p.nombre;
+    document.getElementById('pea-precios').innerHTML =
+      `Stock disponible: <b style="color:var(--paper)">${pub.stock ?? '—'}</b>
+       &nbsp;·&nbsp; efectivo <b style="color:var(--gold)">$${pub.precio_efectivo_usd ? parseFloat(pub.precio_efectivo_usd).toFixed(2) : '—'}</b>`;
+
+    const campoTotal = document.getElementById('ap-total');
+    if (!campoTotal.value && pub.precio_efectivo_usd) campoTotal.value = parseFloat(pub.precio_efectivo_usd).toFixed(2);
+  };
+
+  window.filtrarListaClientesApartado = function() {
+    const q = normalizarTexto(document.getElementById('buscador-clientes-apartado').value);
+    const cont = document.getElementById('lista-clientes-buscador-apartado');
+    if (!q) { cont.style.display = 'none'; cont.innerHTML = ''; return; }
+    const palabras = q.split(/\s+/).filter(p => p.length >= 2);
+    const filtrados = Object.values(clientesCache).filter(c => {
+      const haystack = normalizarTexto([c.nombre, c.documento, c.telefono, c.seudonimo].filter(Boolean).join(' '));
+      return palabras.every(p => haystack.includes(p));
+    });
+    if (filtrados.length === 0) {
+      cont.style.display = 'block';
+      cont.innerHTML = '<div class="empty">Ningún cliente coincide — puedes escribirlo como nuevo abajo.</div>';
+      return;
+    }
+    cont.style.display = 'block';
+    cont.innerHTML = '';
+    filtrados.forEach(c => {
+      const fila = document.createElement('div');
+      fila.className = 'fila-producto';
+      fila.innerHTML = `<span class="fp-nombre">${escapeHtml(c.nombre)}</span><span class="fp-info">${escapeHtml(c.documento || c.seudonimo || '')}</span>`;
+      fila.onclick = () => elegirClienteApartado(c.id);
+      cont.appendChild(fila);
+    });
+  };
+
+  window.elegirClienteApartado = function(id) {
+    clienteElegidoApartadoId = id;
+    const c = clientesCache[id];
+    document.getElementById('cliente-elegido-panel-apartado').style.display = 'block';
+    document.getElementById('cliente-elegido-nombre-apartado').textContent = c.nombre + (c.documento ? ' — ' + c.documento : '');
+    document.getElementById('lista-clientes-buscador-apartado').style.display = 'none';
+    document.getElementById('buscador-clientes-apartado').value = '';
+    document.getElementById('form-nuevo-cliente-apartado').style.display = 'none';
+  };
+
+  window.quitarClienteElegidoApartado = function() {
+    clienteElegidoApartadoId = null;
+    document.getElementById('cliente-elegido-panel-apartado').style.display = 'none';
+    document.getElementById('form-nuevo-cliente-apartado').style.display = 'grid';
+  };
+
+  window.registrarApartado = async function() {
+    const msg = document.getElementById('msg-apartado');
+    const total = parseFloat(document.getElementById('ap-total').value);
+    const abono = parseFloat(document.getElementById('ap-abono').value) || 0;
+    const metodo = document.getElementById('ap-metodo').value;
+    const notas = document.getElementById('ap-notas').value.trim();
+    const nombreNuevo = document.getElementById('ca-nombre').value.trim();
+    const telefonoNuevo = document.getElementById('ca-telefono').value.trim();
+
+    if (!productoElegidoApartadoId) { msg.className = 'msg err'; msg.textContent = 'Elige el producto a reservar.'; return; }
+    if (!clienteElegidoApartadoId && !nombreNuevo) { msg.className = 'msg err'; msg.textContent = 'Elige un cliente existente o escribe al menos su nombre.'; return; }
+    if (isNaN(total) || total <= 0) { msg.className = 'msg err'; msg.textContent = 'Escribe el precio total acordado.'; return; }
+    if (abono < 0 || abono > total) { msg.className = 'msg err'; msg.textContent = 'El abono no puede ser mayor que el precio total.'; return; }
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const p = productosCache[productoElegidoApartadoId];
+    const clienteNombre = clienteElegidoApartadoId ? clientesCache[clienteElegidoApartadoId].nombre : nombreNuevo;
+    const clienteTelefono = clienteElegidoApartadoId ? (clientesCache[clienteElegidoApartadoId].telefono || null) : (telefonoNuevo || null);
+
+    const { data: nuevoApartado, error: errIns } = await supabase.from('apartados').insert({
+      producto_id: productoElegidoApartadoId,
+      producto_nombre_historico: p.nombre,
+      cliente_id: clienteElegidoApartadoId,
+      cliente_nombre: clienteNombre,
+      cliente_telefono: clienteTelefono,
+      precio_total_usd: total,
+      abonado_usd: abono,
+      estado: abono >= total ? 'completado' : 'activo',
+      notas: notas || null,
+      creado_por: session?.user?.id
+    }).select().single();
+
+    if (errIns) { msg.className = 'msg err'; msg.textContent = 'Error al guardar el apartado: ' + errIns.message; return; }
+
+    if (abono > 0) {
+      const { error: errAbono } = await supabase.from('apartados_abonos').insert({
+        apartado_id: nuevoApartado.id,
+        monto_usd: abono,
+        metodo_pago: metodo,
+        registrado_por: session?.user?.id
+      });
+      if (errAbono) { msg.className = 'msg err'; msg.textContent = 'El apartado se guardó, pero hubo un error registrando el abono inicial: ' + errAbono.message; }
+    }
+
+    msg.className = 'msg ok';
+    msg.textContent = 'Apartado registrado.';
+    limpiarFormularioApartado();
+    await cargarApartados();
+  };
+
+  window.limpiarFormularioApartado = function() {
+    productoElegidoApartadoId = null;
+    document.getElementById('producto-elegido-panel-apartado').style.display = 'none';
+    document.getElementById('buscador-productos-apartado').value = '';
+    filtrarListaProductosApartado();
+
+    clienteElegidoApartadoId = null;
+    document.getElementById('cliente-elegido-panel-apartado').style.display = 'none';
+    document.getElementById('form-nuevo-cliente-apartado').style.display = 'grid';
+    document.getElementById('buscador-clientes-apartado').value = '';
+    document.getElementById('lista-clientes-buscador-apartado').style.display = 'none';
+    ['ca-nombre', 'ca-telefono'].forEach(id => document.getElementById(id).value = '');
+
+    document.getElementById('ap-total').value = '';
+    document.getElementById('ap-abono').value = '';
+    document.getElementById('ap-notas').value = '';
+  };
+
+  async function cargarApartados() {
+    const { data } = await supabase
+      .from('apartados')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(100);
+
+    apartadosCache = {};
+    (data || []).forEach(a => { apartadosCache[a.id] = a; });
+
+    const cont = document.getElementById('lista-apartados');
+    const empty = document.getElementById('empty-apartados');
+    if (!data || data.length === 0) { cont.innerHTML = ''; empty.style.display = 'block'; return; }
+    empty.style.display = 'none';
+
+    const ESTADO_TEXTO = { activo: 'Activo', completado: 'Completado', cancelado: 'Cancelado' };
+    const ESTADO_COLOR = { activo: 'var(--gold)', completado: 'var(--teal)', cancelado: 'var(--muted)' };
+
+    cont.innerHTML = data.map(a => {
+      const saldo = Math.max(0, parseFloat(a.precio_total_usd) - parseFloat(a.abonado_usd));
+      const fecha = new Date(a.created_at).toLocaleDateString('es-VE', { day: '2-digit', month: 'short', year: 'numeric' });
+      return `
+        <div style="padding:14px 16px; margin-bottom:12px; background:var(--surface-2); border:1px solid ${a.estado === 'activo' ? 'var(--gold)' : 'var(--line)'};">
+          <div style="display:flex; justify-content:space-between; align-items:start; gap:10px; flex-wrap:wrap;">
+            <div>
+              <div style="font-weight:600; font-size:14px;">${escapeHtml(a.producto_nombre_historico)}</div>
+              <div style="font-size:12.5px; color:var(--muted); margin-top:2px;">${escapeHtml(a.cliente_nombre)}${a.cliente_telefono ? ' — ' + escapeHtml(a.cliente_telefono) : ''} · ${fecha}</div>
+            </div>
+            <span class="pill" style="color:${ESTADO_COLOR[a.estado]}; border-color:${ESTADO_COLOR[a.estado]};">${ESTADO_TEXTO[a.estado]}</span>
+          </div>
+          <div style="margin-top:10px; font-family:'IBM Plex Mono', monospace; font-size:13px; display:flex; gap:18px; flex-wrap:wrap;">
+            <span>Total: <b>$${parseFloat(a.precio_total_usd).toFixed(2)}</b></span>
+            <span style="color:var(--teal);">Abonado: <b>$${parseFloat(a.abonado_usd).toFixed(2)}</b></span>
+            <span style="color:${saldo > 0 ? 'var(--rust)' : 'var(--teal)'};">Saldo: <b>$${saldo.toFixed(2)}</b></span>
+          </div>
+          ${a.notas ? `<div style="margin-top:8px; font-size:12.5px; color:var(--muted);">${escapeHtml(a.notas)}</div>` : ''}
+          ${a.estado === 'activo' ? `
+            <div style="margin-top:12px; display:flex; gap:8px; flex-wrap:wrap; align-items:center;" id="abono-form-${a.id}">
+              <input type="number" step="0.01" id="abono-monto-${a.id}" placeholder="Monto del abono" style="width:140px;">
+              <select id="abono-metodo-${a.id}" style="width:160px;">
+                <option value="efectivo">Efectivo</option>
+                <option value="zelle">Zelle</option>
+                <option value="pago_movil">Pago Móvil</option>
+                <option value="transferencia">Transferencia</option>
+                <option value="binance">Binance/USDT</option>
+                <option value="otro">Otro</option>
+              </select>
+              <button class="secondary" style="margin:0; padding:8px 12px; font-size:12px;" onclick="registrarAbono('${a.id}')">Registrar abono</button>
+              <button class="secondary" style="margin:0; padding:8px 12px; font-size:12px; color:var(--rust); border-color:var(--rust);" onclick="cancelarApartado('${a.id}')">Cancelar apartado</button>
+            </div>
+          ` : ''}
+        </div>`;
+    }).join('');
+  }
+
+  window.registrarAbono = async function(id) {
+    const a = apartadosCache[id];
+    if (!a) return;
+    const monto = parseFloat(document.getElementById(`abono-monto-${id}`).value);
+    const metodo = document.getElementById(`abono-metodo-${id}`).value;
+    if (isNaN(monto) || monto <= 0) { alert('Escribe un monto válido para el abono.'); return; }
+
+    const { data: { session } } = await supabase.auth.getSession();
+    const { error: errAbono } = await supabase.from('apartados_abonos').insert({
+      apartado_id: id, monto_usd: monto, metodo_pago: metodo, registrado_por: session?.user?.id
+    });
+    if (errAbono) { alert('Error al registrar el abono: ' + errAbono.message); return; }
+
+    const nuevoAbonado = parseFloat(a.abonado_usd) + monto;
+    const nuevoEstado = nuevoAbonado >= parseFloat(a.precio_total_usd) ? 'completado' : 'activo';
+    await supabase.from('apartados').update({ abonado_usd: nuevoAbonado, estado: nuevoEstado, updated_at: new Date().toISOString() }).eq('id', id);
+
+    await cargarApartados();
+  };
+
+  window.cancelarApartado = async function(id) {
+    if (!confirm('¿Cancelar este apartado? El cliente no continuará con la reserva.')) return;
+    await supabase.from('apartados').update({ estado: 'cancelado', updated_at: new Date().toISOString() }).eq('id', id);
+    await cargarApartados();
+  };
+
   (async function init() {
     await initSesion();
     await cargarTasas();
     await cargarProductos();
     await cargarClientes();
     await cargarVentas();
+    await cargarApartados();
     preseleccionarDesdeUrl();
   })();
 </script>
