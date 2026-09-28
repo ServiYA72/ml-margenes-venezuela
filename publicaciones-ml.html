@@ -244,8 +244,19 @@
     </div>
 
     <div class="panel">
-      <h2><span class="paso-num">3</span> Descarga tu planilla ya lista</h2>
-      <div class="hint" style="margin-top:0;">Se le agregan a tu Excel: título, SKU, foto(s), precio, stock y descripción de cada producto elegido arriba.</div>
+      <h2><span class="paso-num">3</span> Completa las características técnicas con IA (opcional)</h2>
+      <div class="hint" style="margin-top:0;">Mercado Libre pide columnas técnicas muy específicas por categoría (ej. "Factor de forma del disco rígido y SSD") que casi nunca coinciden con lo que ya cargaste en el Dashboard. Este paso le pide a la IA que las complete leyendo los nombres exactos que trae TU archivo — nunca inventa: si no hay certeza, deja la columna en blanco para que la completes a mano.</div>
+      <button class="secondary" onclick="generarCaracteristicasConIA()">✨ Completar con IA</button>
+      <div class="hint" id="msg-caracteristicas-ia"></div>
+      <div id="revision-caracteristicas-ia" style="display:none; margin-top:14px; overflow-x:auto;">
+        <div class="hint" style="margin-top:0;">Revisá y corregí lo que haga falta antes de generar la planilla — esto se usa en el paso 4.</div>
+        <table id="tabla-revision-caracteristicas" style="width:100%; border-collapse:collapse; font-size:12.5px;"></table>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2><span class="paso-num">4</span> Descarga tu planilla ya lista</h2>
+      <div class="hint" style="margin-top:0;">Se le agregan a tu Excel: título, SKU, foto(s), precio, stock, descripción y, si completaste el paso 3, las características técnicas de cada producto elegido arriba.</div>
       <button class="primary" onclick="generarPlantillaPreparar()">Generar y descargar</button>
       <div class="hint" id="msg-generar-preparar"></div>
 
@@ -1002,6 +1013,12 @@
                               // quirúrgicamente y así conservar 100% los colores y el diseño
                               // originales de Mercado Libre (ver generarPlantillaPreparar).
   let seleccionadosPreparar = []; // productos elegidos para esta tanda
+  // Valores que la IA sugirió (o el usuario corrigió a mano en la tabla de revisión) para las
+  // columnas de "Características del producto" de la categoría actual — ver
+  // generarCaracteristicasConIA() y detectarAtributosCaracteristicas().
+  // Forma: { [productoId]: { [nombreColumnaExacto]: valor } }
+  let valoresCaracteristicasIA = {};
+  let atributosCaracteristicasActual = []; // [{ col, nombre }] de la última detección — se reusa al generar la planilla final
 
   // La planilla real de Mercado Libre ("Publicar masivamente") NO trae códigos de campo tipo
   // SKU/TITLE en la fila 1 como sí trae el export de "Fichas técnicas" — trae encabezados en
@@ -1059,6 +1076,9 @@
         // en adelante — seguían efectivamente vacías). Ahora se empieza a escribir en la fila 8.
         filaDatosInicio: f + 5,
         normFila, // encabezados normalizados de TODA la fila — se usa para emparejar características técnicas
+        filaOriginal: fila, // encabezados TAL CUAL los escribe Mercado Libre (con tildes/mayúsculas) — se
+                            // usa para mandarle a la IA los nombres exactos de columna (ver
+                            // detectarAtributosCaracteristicas) y para mostrarlos en la tabla de revisión.
         col: {
           titulo: colTitulo,
           sku: colSku,
@@ -1095,6 +1115,37 @@
         resultado.push({ col, valor: String(valor), tipo: 'texto' });
       }
     });
+    return resultado;
+  }
+
+  // Detecta las columnas de la sección "Características del producto" de la planilla real que
+  // subió el usuario, para pedirle a la IA que las complete (ver generarCaracteristicasConIA).
+  // Mercado Libre pone el título de esa sección 2 filas arriba de la fila de encabezados (ver
+  // detectarEncabezadosPlantilla) — ej. fila 2 "Características del producto" cubriendo desde la
+  // columna "Marca" en adelante, cuando los encabezados reales están en la fila 4. Se toman TODAS
+  // las columnas con encabezado desde ahí hasta el final de la fila, salvo Marca/Modelo (que ya
+  // se completan aparte, con una lógica específica) y las columnas internas de fórmula que trae
+  // Mercado Libre (Resumen de errores, BUYBOX_FORMULA, HIDDEN_PICTURES).
+  function detectarAtributosCaracteristicas(matriz, enc) {
+    const filaGrupos = matriz[enc.filaEncabezado - 2] || [];
+    const normGrupos = filaGrupos.map(normalizarEncabezado);
+    let colInicio = normGrupos.findIndex(v => v.includes('caracteristicas del producto'));
+    if (colInicio === -1) colInicio = normGrupos.findIndex(v => v.includes('caracteristicas'));
+    // Respaldo si Mercado Libre algún día no trae ese título de sección: empezar justo después de
+    // Modelo, que en todas las categorías vistas hasta ahora es la última columna fija antes de
+    // las técnicas propias de la categoría.
+    if (colInicio === -1) colInicio = (enc.col.modelo !== -1 ? enc.col.modelo + 1 : -1);
+    if (colInicio === -1) return [];
+
+    const excluir = new Set([enc.col.marca, enc.col.modelo].filter(c => c >= 0));
+    const resultado = [];
+    for (let c = colInicio; c < enc.normFila.length; c++) {
+      const nombre = (enc.filaOriginal[c] || '').toString().trim();
+      const norm = enc.normFila[c];
+      if (!nombre || excluir.has(c)) continue;
+      if (norm.includes('formula') || norm.includes('hidden') || norm.includes('resumen de errores')) continue;
+      resultado.push({ col: c, nombre });
+    }
     return resultado;
   }
 
@@ -1542,23 +1593,164 @@
     await refrescarInfoPreparar();
   };
 
-  window.generarPlantillaPreparar = async function() {
-    const msg = document.getElementById('msg-generar-preparar');
-    document.getElementById('resultado-generado').style.display = 'none';
-    if (!workbookPreparar) { msg.style.color = 'var(--rust)'; msg.textContent = 'Primero sube, en el paso 2, el Excel que descargaste de Mercado Libre.'; return; }
-    if (seleccionadosPreparar.length === 0) { msg.style.color = 'var(--rust)'; msg.textContent = 'Primero elige al menos un producto en el paso 1.'; return; }
-
-    msg.style.color = 'var(--muted)';
-    msg.textContent = 'Confirmando precio, stock, fotos y descripción de cada producto...';
-
+  // Lee la hoja actualmente elegida en el paso 2 y detecta sus encabezados — lo usan tanto
+  // "Completar con IA" (paso 3) como "Generar y descargar" (paso 4), para no leer el archivo dos
+  // veces con lógicas distintas. Devuelve null (y ya deja el mensaje de error puesto en `msg`) si
+  // no hay archivo cargado o la hoja no tiene columnas de Título/SKU reconocibles.
+  function leerMatrizYEncabezadosActual(msg) {
+    if (!workbookPreparar) {
+      msg.style.color = 'var(--rust)'; msg.textContent = 'Primero sube, en el paso 2, el Excel que descargaste de Mercado Libre.';
+      return null;
+    }
+    if (seleccionadosPreparar.length === 0) {
+      msg.style.color = 'var(--rust)'; msg.textContent = 'Primero elige al menos un producto en el paso 1.';
+      return null;
+    }
     const nombreHoja = document.getElementById('select-hoja-preparar').value;
     const ws = workbookPreparar.Sheets[nombreHoja];
     const matriz = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
     const enc = detectarEncabezadosPlantilla(matriz);
-
     if (!enc) {
-      msg.style.color = 'var(--rust)'; msg.textContent = 'Esta hoja no tiene columnas de Título/SKU reconocibles.'; return;
+      msg.style.color = 'var(--rust)'; msg.textContent = 'Esta hoja no tiene columnas de Título/SKU reconocibles.';
+      return null;
     }
+    return { nombreHoja, ws, matriz, enc };
+  }
+
+  // Junta nombre/marca/sku/categoría/características ya conocidas de los productos elegidos —
+  // lo usan tanto generarCaracteristicasConIA (paso 3) como generarPlantillaPreparar (paso 4).
+  async function obtenerDatosProductosSeleccionados() {
+    const idsSeleccionados = seleccionadosPreparar.map(p => p.id);
+    const { data: filasEspecificaciones } = await supabase
+      .from('productos')
+      .select('id, especificaciones')
+      .in('id', idsSeleccionados);
+    const especificacionesPorProducto = {};
+    (filasEspecificaciones || []).forEach(row => { especificacionesPorProducto[row.id] = row.especificaciones || {}; });
+    return especificacionesPorProducto;
+  }
+
+  window.generarCaracteristicasConIA = async function() {
+    const msg = document.getElementById('msg-caracteristicas-ia');
+    const boton = event?.target;
+    msg.style.color = 'var(--muted)'; msg.textContent = 'Leyendo tu planilla...';
+    document.getElementById('revision-caracteristicas-ia').style.display = 'none';
+
+    const leido = leerMatrizYEncabezadosActual(msg);
+    if (!leido) return;
+    const { matriz, enc } = leido;
+
+    const atributos = detectarAtributosCaracteristicas(matriz, enc);
+    atributosCaracteristicasActual = atributos;
+    if (atributos.length === 0) {
+      msg.style.color = '';
+      msg.textContent = 'Esta categoría no trae columnas de características propias para completar — pasa directo al paso 4.';
+      return;
+    }
+
+    const especificacionesPorProducto = await obtenerDatosProductosSeleccionados();
+    const categoriaTexto = (matriz[0] && matriz[0][0]) ? String(matriz[0][0]) : '';
+    const nombresAtributos = atributos.map(a => a.nombre);
+
+    const payloadProductos = seleccionadosPreparar.map(p => {
+      const esp = especificacionesPorProducto[p.id] || {};
+      const detalles = (esp.caracteristicas && typeof esp.caracteristicas === 'object') ? esp.caracteristicas : {};
+      const conocidas = Object.entries(detalles)
+        .filter(([, v]) => v)
+        .map(([clave, valor]) => ({ clave, valor: String(valor) }));
+      if (esp.marca) conocidas.push({ clave: 'Marca', valor: String(esp.marca) });
+      return { id: p.id, nombre: p.nombre, marca: esp.marca || '', sku: p.sku || '', categoria: categoriaTexto, caracteristicas_conocidas: conocidas };
+    });
+
+    if (boton) { boton.disabled = true; }
+    msg.style.color = 'var(--muted)';
+    msg.textContent = `Completando características con IA para ${payloadProductos.length} producto(s)...`;
+
+    try {
+      // Se manda en tandas de 20 productos por llamada, para no pasarnos del límite de la función.
+      const TAMANO_TANDA = 20;
+      valoresCaracteristicasIA = {};
+      for (let i = 0; i < payloadProductos.length; i += TAMANO_TANDA) {
+        const tanda = payloadProductos.slice(i, i + TAMANO_TANDA);
+        const { data, error } = await supabase.functions.invoke('generar-caracteristicas-ml', {
+          body: { atributos: nombresAtributos, productos: tanda }
+        });
+        if (error) { msg.style.color = 'var(--rust)'; msg.textContent = 'No se pudo completar con IA: ' + error.message; return; }
+        if (!data?.ok) { msg.style.color = 'var(--rust)'; msg.textContent = data?.error || 'No se pudo completar con IA.'; return; }
+        (data.resultados || []).forEach(r => {
+          const mapa = {};
+          (r.valores || []).forEach(v => { if (v.clave && v.valor) mapa[v.clave] = v.valor; });
+          valoresCaracteristicasIA[r.id] = mapa;
+        });
+      }
+
+      renderizarRevisionCaracteristicas(atributos);
+      const totalCompletados = Object.values(valoresCaracteristicasIA).reduce((acc, m) => acc + Object.keys(m).length, 0);
+      msg.style.color = 'var(--teal)';
+      msg.textContent = totalCompletados > 0
+        ? `Listo — revisa los valores sugeridos abajo antes de generar la planilla en el paso 4. Lo que no aparece ahí, la IA prefirió dejarlo en blanco por falta de certeza.`
+        : 'La IA no tuvo certeza para ninguna columna de este lote — complétalas a mano en Mercado Libre.';
+    } catch (e) {
+      msg.style.color = 'var(--rust)';
+      msg.textContent = 'Ocurrió un error inesperado: ' + e.message;
+    } finally {
+      if (boton) boton.disabled = false;
+    }
+  };
+
+  // Tabla editable con lo que sugirió la IA — solo muestra las columnas de atributos que
+  // recibieron al menos un valor para algún producto de la tanda (si mostráramos las ~25 columnas
+  // técnicas completas sería ilegible). Cada celda es un input de texto: lo que quede escrito ahí
+  // al momento de generar la planilla (paso 4) es lo que se usa, así que el usuario puede corregir
+  // o borrar cualquier sugerencia antes de continuar.
+  function renderizarRevisionCaracteristicas(atributos) {
+    const cont = document.getElementById('revision-caracteristicas-ia');
+    const tabla = document.getElementById('tabla-revision-caracteristicas');
+    const atributosConDatos = atributos.filter(a =>
+      seleccionadosPreparar.some(p => valoresCaracteristicasIA[p.id] && valoresCaracteristicasIA[p.id][a.nombre] !== undefined)
+    );
+    if (atributosConDatos.length === 0) { cont.style.display = 'none'; return; }
+
+    const thead = '<thead><tr><th style="text-align:left; padding:6px 8px; border-bottom:1px solid var(--line);">Producto</th>' +
+      atributosConDatos.map(a => `<th style="text-align:left; padding:6px 8px; border-bottom:1px solid var(--line); white-space:nowrap;">${escapeHtml(a.nombre)}</th>`).join('') +
+      '</tr></thead>';
+    const filas = seleccionadosPreparar.map(p => {
+      const celdas = atributosConDatos.map(a => {
+        const valor = (valoresCaracteristicasIA[p.id] && valoresCaracteristicasIA[p.id][a.nombre]) || '';
+        return `<td style="padding:4px 6px;"><input type="text" data-producto="${escapeHtml(p.id)}" data-atributo="${escapeHtml(a.nombre)}" value="${escapeHtml(valor)}" style="width:130px; background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:5px 7px; font-size:12px;"></td>`;
+      }).join('');
+      return `<tr><td style="padding:6px 8px; white-space:nowrap;">${escapeHtml(p.nombre)}</td>${celdas}</tr>`;
+    }).join('');
+    tabla.innerHTML = thead + '<tbody>' + filas + '</tbody>';
+    cont.style.display = 'block';
+  }
+
+  // Antes de generar la planilla (paso 4), vuelca a valoresCaracteristicasIA lo que haya en los
+  // inputs de la tabla de revisión — así una corrección o un borrado manual del paso 3 se respeta,
+  // en vez de quedarse con la sugerencia original de la IA que quedó guardada ahí.
+  function sincronizarValoresCaracteristicasIADesdeTabla() {
+    document.querySelectorAll('#tabla-revision-caracteristicas input[data-producto]').forEach(input => {
+      const productoId = input.dataset.producto;
+      const atributo = input.dataset.atributo;
+      if (!productoId || !atributo) return;
+      if (!valoresCaracteristicasIA[productoId]) valoresCaracteristicasIA[productoId] = {};
+      const valor = input.value.trim();
+      if (valor) valoresCaracteristicasIA[productoId][atributo] = valor;
+      else delete valoresCaracteristicasIA[productoId][atributo];
+    });
+  }
+
+  window.generarPlantillaPreparar = async function() {
+    const msg = document.getElementById('msg-generar-preparar');
+    document.getElementById('resultado-generado').style.display = 'none';
+
+    msg.style.color = 'var(--muted)';
+    msg.textContent = 'Confirmando precio, stock, fotos y descripción de cada producto...';
+
+    const leido = leerMatrizYEncabezadosActual(msg);
+    if (!leido) return;
+    const { nombreHoja, matriz, enc } = leido;
+    sincronizarValoresCaracteristicasIADesdeTabla();
 
     // Se reconsulta por si acabas de subir una foto y el caché de los chips todavía no la reflejaba.
     await refrescarInfoPreparar();
@@ -1681,6 +1873,21 @@
         .map(([clave, valor]) => ({ clave, valor }));
       emparejarCaracteristicasConColumnas(enc.normFila, columnasFijas, paresRestantes).forEach(({ col, valor, tipo }) => {
         valores.push({ col, valor, tipo });
+        columnasVisibles.add(col);
+      });
+
+      // Características completadas con IA en el paso 3 (o corregidas a mano en esa tabla de
+      // revisión) — como ya vienen atadas al nombre EXACTO de columna de esta misma planilla
+      // (ver detectarAtributosCaracteristicas), se escriben directo por índice, sin necesidad de
+      // volver a emparejar por texto. Si una columna ya quedó llena arriba (por ejemplo porque
+      // coincidió exacto con una característica ya cargada en el Dashboard), esa versión manda.
+      const yaEscritas = new Set(valores.map(v => v.col));
+      const sugeridasIA = valoresCaracteristicasIA[p.id] || {};
+      atributosCaracteristicasActual.forEach(({ col, nombre }) => {
+        if (yaEscritas.has(col)) return;
+        const valor = sugeridasIA[nombre];
+        if (valor === undefined || valor === '') return;
+        valores.push({ col, valor: String(valor), tipo: 'texto' });
         columnasVisibles.add(col);
       });
 
