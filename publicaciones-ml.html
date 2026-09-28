@@ -47,6 +47,15 @@
 
   .panel { background: var(--surface); border: 1px solid var(--line); padding: 22px; margin-bottom: 24px; }
   .panel h2 { font-family: 'Fraunces', serif; font-weight: 400; font-size: 18px; margin: 0 0 14px 0; }
+  /* Cabecera clicable para paneles plegables (Repositorio de plantillas) — mismo lenguaje visual
+     que ya usa el Dashboard para sus secciones opcionales (Márgenes por categoría, Catálogo web). */
+  .panel-toggle { display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
+  .panel-toggle-icono { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  .badge-contador {
+    display: inline-flex; align-items: center; justify-content: center; min-width: 16px; height: 16px;
+    padding: 0 5px; border-radius: 8px; background: var(--gold); color: var(--ink); font-size: 10.5px;
+    font-weight: 700; margin-left: 6px;
+  }
   .hint { font-size: 12px; color: var(--muted); margin-top: 8px; line-height: 1.6; }
   label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
   input[type="text"] {
@@ -127,7 +136,11 @@
   .chip-nombre-wrap { position: relative; flex: 1; min-width: 0; }
   .chip-producto .chip-nombre { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: default; }
   .chip-popover-precio {
-    display: none; position: absolute; top: 100%; left: 0; margin-top: 6px; z-index: 50;
+    /* Se abre hacia ARRIBA (bottom:100%), no hacia abajo — con varios productos elegidos, uno
+       debajo del otro, si se abriera hacia abajo taparía el nombre del producto siguiente y no
+       dejaría pasarle el mouse por encima para revisar el suyo. Abriéndose hacia arriba, invade
+       espacio que el usuario ya recorrió (o el panel de arriba), nunca el próximo chip. */
+    display: none; position: absolute; bottom: 100%; left: 0; margin-bottom: 6px; z-index: 50;
     background: var(--surface); border: 1px solid var(--gold); padding: 12px 14px; width: 250px;
     font-size: 12.5px; box-shadow: 0 8px 20px rgba(0,0,0,0.45); white-space: normal;
   }
@@ -272,12 +285,52 @@
       </div>
     </div>
 
+    <div id="modal-plantilla-producto" class="modal-fondo" style="display:none;">
+      <div class="modal-caja">
+        <h3 style="margin:0 0 10px;">Plantilla de Mercado Libre para este producto</h3>
+        <div class="hint" style="margin-top:0;" id="hint-plantilla-producto"></div>
+        <label for="select-plantilla-producto">Categoría a usar</label>
+        <select id="select-plantilla-producto" style="width:100%; background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:10px 12px; font-size:14px;"></select>
+        <div class="hint" id="msg-modal-plantilla" style="margin-top:8px;"></div>
+        <div style="display:flex; gap:8px; margin-top:14px;">
+          <button type="button" class="primary" onclick="guardarPlantillaProductoModal()" style="margin-top:0;">Guardar</button>
+          <button type="button" class="chip-subir-foto" onclick="cerrarModalPlantillaProducto()">Cancelar</button>
+        </div>
+      </div>
+    </div>
+
     <div class="panel">
-      <h2><span class="paso-num">2</span> Sube el Excel vacío que descargaste de Mercado Libre</h2>
-      <div class="hint" style="margin-top:0;">El mismo archivo del paso "Publicar → Masivamente" de Mercado Libre. Lo necesitas solo la primera vez por categoría — si ya lo tienes en tu computadora de una tanda anterior, sirve el mismo.</div>
-      <label for="input-plantilla-preparar" class="subir-archivo" style="margin-top:12px;">📄 Elegir archivo Excel</label>
-      <input type="file" id="input-plantilla-preparar" accept=".xlsx,.xls" style="display:none;" onchange="cargarPlantillaPreparar(this.files[0])">
-      <div class="hint" id="msg-plantilla-preparar"></div>
+      <div class="panel-toggle" onclick="toggleRepositorioPlantillas()">
+        <h2 style="margin:0;">📁 Repositorio de plantillas de Mercado Libre<span id="badge-plantillas-guardadas" class="badge-contador" style="display:none;"></span></h2>
+        <span id="icono-repositorio-plantillas" class="panel-toggle-icono">Mostrar ▾</span>
+      </div>
+      <div id="contenido-repositorio-plantillas" style="display:none; margin-top:14px;">
+        <div class="hint" style="margin-top:0;">Guarda aquí, una sola vez por categoría, el Excel vacío que descargas de Mercado Libre (Publicar → Masivamente). Al elegir productos de esa categoría en el paso 1, el sistema reconoce sola cuál plantilla usar, sin tener que volver a subirla.</div>
+        <div id="lista-plantillas-guardadas" style="margin-top:14px; display:flex; flex-direction:column; gap:8px;"></div>
+        <div style="margin-top:16px; display:flex; gap:10px; align-items:end; flex-wrap:wrap;">
+          <div style="flex:1; min-width:180px;">
+            <label for="input-nueva-categoria-plantilla">Categoría</label>
+            <input type="text" id="input-nueva-categoria-plantilla" placeholder="Ej: Laptops" list="lista-categorias-plantilla">
+            <datalist id="lista-categorias-plantilla"></datalist>
+          </div>
+          <label for="input-subir-plantilla-nueva" class="subir-archivo" style="margin-top:0;">📄 Elegir archivo y guardar</label>
+          <input type="file" id="input-subir-plantilla-nueva" accept=".xlsx,.xls" style="display:none;" onchange="subirPlantillaNuevaDesdeRepositorio(this.files[0])">
+        </div>
+        <div class="hint" id="msg-repositorio-plantillas"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2><span class="paso-num">2</span> Excel para Mercado Libre</h2>
+      <div class="hint" style="margin-top:0;">Se detecta solo, según la categoría de los productos que elegiste arriba — si es la primera vez que usas esa categoría, se guarda en el repositorio para no tener que subirla de nuevo.</div>
+
+      <div id="estado-plantilla-auto"></div>
+
+      <div id="subida-manual-plantilla" style="display:none; margin-top:12px;">
+        <label for="input-plantilla-preparar" class="subir-archivo" style="margin-top:0;">📄 Elegir archivo Excel</label>
+        <input type="file" id="input-plantilla-preparar" accept=".xlsx,.xls" style="display:none;" onchange="cargarPlantillaPreparar(this.files[0])">
+        <div class="hint" id="msg-plantilla-preparar"></div>
+      </div>
 
       <div id="bloque-preparar" style="display:none; margin-top:16px;">
         <div id="categoria-auto" class="categoria-detectada" style="display:none;"></div>
@@ -403,6 +456,12 @@
   let publicadosCache = []; // publicaciones ya vinculadas, con lo necesario para resincronizar precio (ver sincronizarPreciosDesdeFicha)
   let tenantIdActual = null; // necesario para armar la ruta de subida de fotos, igual que en dashboard.html
   let tasaBCV = null, tasaBinance = null; // necesarias para recalcular precio/ganancia igual que en dashboard.html (ver calcular_precios)
+  // Repositorio de plantillas de Mercado Libre (una por categoría, ver tabla plantillas_ml) — se
+  // guarda una sola vez por categoría y se reconoce sola cuando el producto elegido pertenece a
+  // ella, en vez de tener que resubir el mismo Excel en cada tanda.
+  let plantillasMlCache = [];
+  let plantillaOverridePorProducto = {}; // productoId -> categoría elegida a mano en el chip (ver abrirModalPlantillaProducto), cuando la propia del producto no es la que corresponde
+  let categoriaParaSubirPlantilla = null; // qué categoría se guarda en el repositorio si la próxima subida manual del paso 2 resulta válida
 
   (async function init() {
     const { data: { session } } = await supabase.auth.getSession();
@@ -416,6 +475,7 @@
     await cargarTasas();
     await cargarProductosCache();
     await cargarPublicados();
+    await cargarPlantillasMlCache();
     preseleccionarDesdeUrl();
   })();
 
@@ -462,7 +522,10 @@
     // costo_usd ya no es una columna de productos: se movió a la tabla protegida productos_costos
     // (RLS: solo rol="dueño" puede leerla) — se trae embebida y se aplana abajo al mismo nombre
     // plano de siempre, para no tener que tocar el resto del archivo que ya espera p.costo_usd.
-    const COLUMNAS = 'id, nombre, sku, especificaciones, productos_costos(costo_usd)';
+    // categoria se agregó para el repositorio de plantillas de Mercado Libre (ver
+    // plantillasMlCache / categoriaEfectivaProducto): permite reconocer sola qué plantilla
+    // corresponde a cada producto elegido en el paso 1, sin tener que preguntarlo cada vez.
+    const COLUMNAS = 'id, nombre, sku, categoria, especificaciones, productos_costos(costo_usd)';
     let todos = [];
     let desde = 0;
     while (true) {
@@ -1456,26 +1519,52 @@
     return texto.split(MARCADOR_SUGERENCIA_IA).map(p => p.trim()).filter(Boolean).join('\n\n');
   }
 
+  // Sube manualmente el Excel de esta tanda — se usa tanto cuando ninguna categoría de las
+  // elegidas tiene plantilla guardada (o hay varias distintas) como cuando el usuario elige
+  // "Usar otra" sobre una que sí está guardada. Si categoriaParaSubirPlantilla está definida
+  // (ver renderizarEstadoPlantillaPaso2 / usarOtraPlantillaManual), esta subida también se
+  // guarda en el repositorio para no tener que volver a pedirla la próxima vez.
   window.cargarPlantillaPreparar = async function(file) {
     const msg = document.getElementById('msg-plantilla-preparar');
-    const bloque = document.getElementById('bloque-preparar');
     if (!file) return;
     msg.style.color = 'var(--muted)';
     msg.textContent = 'Leyendo la planilla...';
-    bloque.style.display = 'none';
+    document.getElementById('bloque-preparar').style.display = 'none';
 
+    let buffer;
     try {
-      bufferPreparar = await file.arrayBuffer();
-      // XLSX.read se usa solo para LEER (encontrar columnas, fila "Obligatorio", próxima fila
-      // libre) — nunca se vuelve a escribir con esta librería. Por eso se clona el buffer antes:
-      // XLSX.read puede quedarse con una referencia interna al ArrayBuffer original.
-      workbookPreparar = XLSX.read(bufferPreparar.slice(0), { type: 'array' });
+      buffer = await file.arrayBuffer();
     } catch (e) {
       msg.style.color = 'var(--rust)';
       msg.textContent = 'No se pudo leer el archivo.';
+      return;
+    }
+
+    const categoriaDestino = categoriaParaSubirPlantilla;
+    const ok = await leerYMostrarPlantilla(buffer, msg);
+    if (ok && categoriaDestino) {
+      const hojaElegida = document.getElementById('select-hoja-preparar').value;
+      await guardarPlantillaEnRepositorio(categoriaDestino, file.name, buffer, hojaElegida);
+      categoriaParaSubirPlantilla = null;
+    }
+  };
+
+  // Lee un buffer de Excel de Mercado Libre y llena el bloque "categoría detectada / elegir
+  // hoja" — la usan tanto la subida manual de arriba como el auto-cargado desde el repositorio
+  // (ver renderizarEstadoPlantillaPaso2). hojaPreferida preselecciona la hoja guardada cuando el
+  // archivo trae varias (ver plantillas_ml.hoja). Devuelve true si se pudo leer correctamente.
+  async function leerYMostrarPlantilla(buffer, msg, hojaPreferida) {
+    try {
+      bufferPreparar = buffer;
+      // XLSX.read se usa solo para LEER (encontrar columnas, fila "Obligatorio", próxima fila
+      // libre) — nunca se vuelve a escribir con esta librería. Por eso se clona el buffer antes:
+      // XLSX.read puede quedarse con una referencia interna al ArrayBuffer original.
+      workbookPreparar = XLSX.read(buffer.slice(0), { type: 'array' });
+    } catch (e) {
+      if (msg) { msg.style.color = 'var(--rust)'; msg.textContent = 'No se pudo leer el archivo.'; }
       workbookPreparar = null;
       bufferPreparar = null;
-      return;
+      return false;
     }
 
     const HOJAS_IGNORAR = new Set(['Ayuda', 'ayuda', 'extra info', 'hidden']);
@@ -1486,11 +1575,13 @@
     });
 
     if (hojasValidas.length === 0) {
-      msg.style.color = 'var(--rust)';
-      msg.textContent = 'Este no parece ser el Excel de Mercado Libre — asegúrate de subir el que descargaste en Publicar → Masivamente (no otro archivo).';
+      if (msg) {
+        msg.style.color = 'var(--rust)';
+        msg.textContent = 'Este no parece ser el Excel de Mercado Libre — asegúrate de subir el que descargaste en Publicar → Masivamente (no otro archivo).';
+      }
       workbookPreparar = null;
       bufferPreparar = null;
-      return;
+      return false;
     }
 
     const autoDiv = document.getElementById('categoria-auto');
@@ -1507,13 +1598,278 @@
     } else {
       // Solo si el archivo trae más de una categoría hace falta que el usuario elija.
       select.innerHTML = hojasValidas.map(n => `<option value="${escapeHtml(n)}">${escapeHtml(n)}</option>`).join('');
+      if (hojaPreferida && hojasValidas.includes(hojaPreferida)) select.value = hojaPreferida;
       autoDiv.style.display = 'none';
       elegirDiv.style.display = 'block';
     }
 
+    if (msg) { msg.style.color = 'var(--teal)'; msg.textContent = 'Listo, se leyó el archivo correctamente.'; }
+    document.getElementById('bloque-preparar').style.display = 'block';
+    return true;
+  }
+
+  // --- Repositorio de plantillas de Mercado Libre (una por categoría) ---------------------------
+
+  async function cargarPlantillasMlCache() {
+    const { data, error } = await supabase.from('plantillas_ml').select('*').order('categoria');
+    if (error) { console.error('Error cargando plantillas_ml', error); return; }
+    plantillasMlCache = data || [];
+    renderizarRepositorioPlantillas();
+  }
+
+  function buscarPlantillaGuardada(categoria) {
+    if (!categoria) return null;
+    const norm = normalizarTexto(categoria);
+    return plantillasMlCache.find(t => normalizarTexto(t.categoria) === norm) || null;
+  }
+
+  // La categoría "efectiva" de un producto para elegir plantilla: la que el usuario forzó a mano
+  // en el chip (ver abrirModalPlantillaProducto) si la hay, o si no la propia categoria del
+  // producto (Dashboard). Puede devolver null si el producto no tiene ninguna de las dos.
+  function categoriaEfectivaProducto(productoId) {
+    if (plantillaOverridePorProducto[productoId]) return plantillaOverridePorProducto[productoId];
+    const p = productosCache.find(x => x.id === productoId);
+    return p && p.categoria ? p.categoria : null;
+  }
+
+  function renderizarRepositorioPlantillas() {
+    const badge = document.getElementById('badge-plantillas-guardadas');
+    if (plantillasMlCache.length > 0) { badge.textContent = String(plantillasMlCache.length); badge.style.display = 'inline-flex'; }
+    else badge.style.display = 'none';
+
+    const lista = document.getElementById('lista-plantillas-guardadas');
+    lista.innerHTML = plantillasMlCache.length === 0
+      ? '<div class="empty">Todavía no guardaste ninguna plantilla.</div>'
+      : plantillasMlCache.map(t => `
+        <div class="fila-producto">
+          <span class="fp-nombre"><b>${escapeHtml(t.categoria)}</b> — ${escapeHtml(t.nombre_archivo)}</span>
+          <span class="fp-info">
+            <button type="button" class="chip-subir-foto" onclick="reemplazarPlantillaRepositorio('${escapeHtml(t.categoria)}')">🔁 Reemplazar</button>
+            <button type="button" class="chip-subir-foto" onclick="eliminarPlantillaRepositorio('${t.id}')" style="color:var(--rust);">🗑️ Eliminar</button>
+          </span>
+        </div>`).join('');
+
+    // El datalist de categorías combina las que ya tienen productos (para sugerir bien al
+    // escribir) con las que ya tienen plantilla guardada.
+    const categorias = new Set(productosCache.map(p => p.categoria).filter(Boolean));
+    plantillasMlCache.forEach(t => categorias.add(t.categoria));
+    document.getElementById('lista-categorias-plantilla').innerHTML =
+      [...categorias].sort().map(c => `<option value="${escapeHtml(c)}"></option>`).join('');
+  }
+
+  window.toggleRepositorioPlantillas = function() {
+    const cont = document.getElementById('contenido-repositorio-plantillas');
+    const icono = document.getElementById('icono-repositorio-plantillas');
+    const abierta = cont.style.display === 'block';
+    cont.style.display = abierta ? 'none' : 'block';
+    icono.textContent = abierta ? 'Mostrar ▾' : 'Ocultar ▴';
+  };
+
+  // Sube un archivo directo desde el panel del repositorio (no depende de que haya una tanda en
+  // curso en el paso 1/2) — valida que sea una planilla de Mercado Libre reconocible antes de
+  // guardarla, igual que hace leerYMostrarPlantilla, pero sobre variables propias para no pisar
+  // lo que ya esté cargado en el paso 2 si el usuario está a mitad de preparar algo.
+  window.subirPlantillaNuevaDesdeRepositorio = async function(file) {
+    const msg = document.getElementById('msg-repositorio-plantillas');
+    const inputArchivo = document.getElementById('input-subir-plantilla-nueva');
+    const categoria = document.getElementById('input-nueva-categoria-plantilla').value.trim();
+    if (!file) return;
+    if (!categoria) {
+      msg.style.color = 'var(--rust)';
+      msg.textContent = 'Escribe primero a qué categoría corresponde esta plantilla.';
+      inputArchivo.value = '';
+      return;
+    }
+    msg.style.color = 'var(--muted)';
+    msg.textContent = 'Leyendo y guardando...';
+
+    let buffer;
+    try { buffer = await file.arrayBuffer(); } catch (e) {
+      msg.style.color = 'var(--rust)'; msg.textContent = 'No se pudo leer el archivo.'; inputArchivo.value = ''; return;
+    }
+    let workbookTmp;
+    try { workbookTmp = XLSX.read(buffer.slice(0), { type: 'array' }); } catch (e) { workbookTmp = null; }
+    const HOJAS_IGNORAR = new Set(['Ayuda', 'ayuda', 'extra info', 'hidden']);
+    const hojasValidas = workbookTmp ? workbookTmp.SheetNames.filter(n => {
+      if (HOJAS_IGNORAR.has(n)) return false;
+      const matriz = XLSX.utils.sheet_to_json(workbookTmp.Sheets[n], { header: 1, defval: '' });
+      return !!detectarEncabezadosPlantilla(matriz);
+    }) : [];
+    if (hojasValidas.length === 0) {
+      msg.style.color = 'var(--rust)';
+      msg.textContent = 'Este no parece ser el Excel de Mercado Libre — asegúrate de subir el que descargaste en Publicar → Masivamente.';
+      inputArchivo.value = '';
+      return;
+    }
+    // Si trae varias hojas válidas, se usa la que mejor coincide con el nombre de categoría
+    // escrito; si ninguna coincide, la primera.
+    const normCat = normalizarTexto(categoria);
+    const hoja = hojasValidas.find(h => normalizarTexto(h) === normCat) || hojasValidas[0];
+
+    await guardarPlantillaEnRepositorio(categoria, file.name, buffer, hoja);
     msg.style.color = 'var(--teal)';
-    msg.textContent = 'Listo, se leyó el archivo correctamente.';
-    bloque.style.display = 'block';
+    msg.textContent = `Guardada la plantilla para "${categoria}".`;
+    document.getElementById('input-nueva-categoria-plantilla').value = '';
+    inputArchivo.value = '';
+  };
+
+  window.reemplazarPlantillaRepositorio = function(categoria) {
+    document.getElementById('input-nueva-categoria-plantilla').value = categoria;
+    document.getElementById('input-subir-plantilla-nueva').click();
+  };
+
+  window.eliminarPlantillaRepositorio = async function(id) {
+    if (!confirm('¿Eliminar esta plantilla del repositorio? La próxima vez que elijas productos de esa categoría, habrá que subirla de nuevo.')) return;
+    const plantilla = plantillasMlCache.find(t => t.id === id);
+    if (!plantilla) return;
+    await supabase.from('plantillas_ml').delete().eq('id', id);
+    await supabase.storage.from('plantillas-ml').remove([plantilla.storage_path]);
+    await cargarPlantillasMlCache();
+    await renderizarEstadoPlantillaPaso2();
+  };
+
+  // Sube el buffer al bucket plantillas-ml y guarda/actualiza la fila en plantillas_ml — la usan
+  // tanto la subida manual del paso 2 (cuando falta la plantilla de la categoría elegida) como el
+  // panel del repositorio (agregar nueva / reemplazar).
+  async function guardarPlantillaEnRepositorio(categoria, nombreArchivo, buffer, hoja) {
+    const msgs = [document.getElementById('msg-plantilla-preparar'), document.getElementById('msg-repositorio-plantillas')].filter(Boolean);
+    if (!tenantIdActual) return;
+    const extension = (nombreArchivo.split('.').pop() || 'xlsx').toLowerCase().replace(/[^a-z0-9]/g, '') || 'xlsx';
+    const rutaArchivo = `${tenantIdActual}/${categoria.replace(/[^a-zA-Z0-9]+/g, '-')}-${Date.now()}.${extension}`;
+    const { error: errorSubida } = await supabase.storage.from('plantillas-ml').upload(rutaArchivo, buffer, {
+      cacheControl: '31536000', upsert: false,
+      contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    });
+    if (errorSubida) {
+      msgs.forEach(m => { m.style.color = 'var(--rust)'; m.textContent = 'La planilla se leyó bien pero no se pudo guardar en el repositorio: ' + errorSubida.message; });
+      return;
+    }
+
+    // Si ya había una plantilla guardada para esta categoría, se reemplaza (y se borra el
+    // archivo viejo del storage para no dejar basura acumulada).
+    const anterior = buscarPlantillaGuardada(categoria);
+    const { error: errorUpsert } = await supabase.from('plantillas_ml').upsert({
+      tenant_id: tenantIdActual, categoria, nombre_archivo: nombreArchivo, storage_path: rutaArchivo,
+      hoja: hoja || null, updated_at: new Date().toISOString()
+    }, { onConflict: 'tenant_id,categoria' });
+    if (errorUpsert) {
+      msgs.forEach(m => { m.style.color = 'var(--rust)'; m.textContent = 'No se pudo guardar en el repositorio: ' + errorUpsert.message; });
+      await supabase.storage.from('plantillas-ml').remove([rutaArchivo]);
+      return;
+    }
+    if (anterior && anterior.storage_path !== rutaArchivo) {
+      await supabase.storage.from('plantillas-ml').remove([anterior.storage_path]);
+    }
+    await cargarPlantillasMlCache();
+    await renderizarEstadoPlantillaPaso2();
+  }
+
+  // Decide, según las categorías de los productos elegidos en el paso 1, si hay que auto-cargar
+  // una plantilla guardada, pedir que se suba una nueva para esa categoría, o avisar que hay
+  // varias categorías distintas en la misma tanda (Mercado Libre exige una planilla por
+  // categoría). Se llama cada vez que cambia la selección de productos o sus categorías
+  // efectivas (ver renderizarChipsPreparar / guardarPlantillaProductoModal).
+  async function renderizarEstadoPlantillaPaso2() {
+    const cont = document.getElementById('estado-plantilla-auto');
+    const manualDiv = document.getElementById('subida-manual-plantilla');
+    if (!cont || !manualDiv) return;
+
+    if (seleccionadosPreparar.length === 0) {
+      cont.innerHTML = '';
+      manualDiv.style.display = 'none';
+      categoriaParaSubirPlantilla = null;
+      return;
+    }
+
+    const categoriasEfectivas = [...new Set(seleccionadosPreparar.map(p => categoriaEfectivaProducto(p.id)).filter(Boolean))];
+
+    if (categoriasEfectivas.length === 0) {
+      cont.innerHTML = `<div class="hint" style="margin-top:0; color:var(--gold);">Ninguno de los productos elegidos tiene categoría asignada, así que no se puede detectar la plantilla sola — súbela manualmente para esta tanda (asígnales categoría en el Dashboard para que la próxima vez sea automático).</div>`;
+      manualDiv.style.display = 'block';
+      categoriaParaSubirPlantilla = null;
+      return;
+    }
+
+    if (categoriasEfectivas.length > 1) {
+      cont.innerHTML = `<div class="hint" style="margin-top:0; color:var(--gold);">Elegiste productos de varias categorías (${categoriasEfectivas.map(c => `<b>${escapeHtml(c)}</b>`).join(', ')}) — Mercado Libre exige una planilla por categoría. Genera esta tanda solo con productos de una categoría a la vez (o ajusta la plantilla de cada uno con el botón 📁 de su chip), o sube el Excel manualmente si de verdad corresponden a la misma planilla.</div>`;
+      manualDiv.style.display = 'block';
+      categoriaParaSubirPlantilla = null;
+      return;
+    }
+
+    const categoria = categoriasEfectivas[0];
+    const guardada = buscarPlantillaGuardada(categoria);
+
+    if (!guardada) {
+      cont.innerHTML = `<div class="hint" style="margin-top:0; color:var(--gold);">No tienes una plantilla guardada para <b>${escapeHtml(categoria)}</b> todavía — súbela una vez (el Excel vacío que descargaste de Mercado Libre) y queda lista para la próxima.</div>`;
+      manualDiv.style.display = 'block';
+      categoriaParaSubirPlantilla = categoria;
+      return;
+    }
+
+    cont.innerHTML = `
+      <div class="categoria-detectada">
+        <span>✓ Usando la plantilla guardada para <b>${escapeHtml(categoria)}</b> (${escapeHtml(guardada.nombre_archivo)})</span>
+        <button type="button" class="chip-subir-foto" onclick="usarOtraPlantillaManual('${escapeHtml(categoria)}')">Usar otra</button>
+      </div>`;
+    manualDiv.style.display = 'none';
+    categoriaParaSubirPlantilla = null;
+
+    const msg = document.getElementById('msg-plantilla-preparar');
+    const { data: bytes, error } = await supabase.storage.from('plantillas-ml').download(guardada.storage_path);
+    if (error || !bytes) {
+      cont.innerHTML += `<div class="hint" style="color:var(--rust); margin-top:8px;">No se pudo cargar la plantilla guardada — súbela de nuevo.</div>`;
+      categoriaParaSubirPlantilla = categoria;
+      manualDiv.style.display = 'block';
+      return;
+    }
+    const buffer = await bytes.arrayBuffer();
+    await leerYMostrarPlantilla(buffer, msg, guardada.hoja);
+  }
+
+  window.usarOtraPlantillaManual = function(categoria) {
+    categoriaParaSubirPlantilla = categoria;
+    document.getElementById('subida-manual-plantilla').style.display = 'block';
+    document.getElementById('bloque-preparar').style.display = 'none';
+  };
+
+  // Modal "Plantilla de Mercado Libre para este producto" — deja forzar a mano, por producto,
+  // qué categoría de plantilla usar (ver categoriaEfectivaProducto), para cuando la categoría
+  // propia del producto no coincide con ninguna plantilla guardada, o el usuario prefiere otra.
+  let plantillaProductoObjetivo = null;
+
+  window.abrirModalPlantillaProducto = function(productoId) {
+    plantillaProductoObjetivo = productoId;
+    const p = productosCache.find(x => x.id === productoId);
+    const propia = p && p.categoria ? p.categoria : null;
+    const hint = document.getElementById('hint-plantilla-producto');
+    hint.textContent = propia
+      ? `Este producto tiene categoría "${propia}" en el Dashboard. Si la plantilla guardada para esa categoría no es la correcta, elige otra aquí abajo.`
+      : `Este producto no tiene categoría asignada en el Dashboard — elige a mano cuál plantilla usar para él.`;
+
+    const select = document.getElementById('select-plantilla-producto');
+    const opciones = [`<option value="">${propia ? '(usar la categoría del producto: ' + escapeHtml(propia) + ')' : '(sin categoría — elige una)'}</option>`]
+      .concat(plantillasMlCache.map(t => `<option value="${escapeHtml(t.categoria)}">${escapeHtml(t.categoria)}</option>`));
+    select.innerHTML = opciones.join('');
+    select.value = plantillaOverridePorProducto[productoId] || '';
+
+    document.getElementById('msg-modal-plantilla').textContent = '';
+    document.getElementById('modal-plantilla-producto').style.display = 'flex';
+  };
+
+  window.cerrarModalPlantillaProducto = function() {
+    document.getElementById('modal-plantilla-producto').style.display = 'none';
+    plantillaProductoObjetivo = null;
+  };
+
+  window.guardarPlantillaProductoModal = async function() {
+    const productoId = plantillaProductoObjetivo;
+    if (!productoId) return;
+    const valor = document.getElementById('select-plantilla-producto').value;
+    if (valor) plantillaOverridePorProducto[productoId] = valor;
+    else delete plantillaOverridePorProducto[productoId];
+    cerrarModalPlantillaProducto();
+    renderizarChipsPreparar();
   };
 
   window.buscarParaPreparar = function(texto) {
@@ -1585,6 +1941,15 @@
         ? `<button type="button" class="chip-fotos-btn ok" title="Tiene URLs del Gestor de fotos de Mercado Libre — click para editarlas" onclick="abrirModalFotosML('${p.id}')">✓ Fotos ML</button>`
         : `<button type="button" class="chip-fotos-btn falta" title="Sin esto la planilla sale rechazada como &quot;vacía&quot; al subirla a Mercado Libre. Click para pegar las URLs del Gestor de fotos." onclick="abrirModalFotosML('${p.id}')">⚠ Falta URLs ML</button>`;
 
+      // Categoría usada para elegir sola cuál plantilla del repositorio corresponde a este
+      // producto (ver categoriaEfectivaProducto/renderizarEstadoPlantillaPaso2) — clickeable
+      // para forzar otra a mano si la propia del producto no es la correcta.
+      const categoriaPlantilla = categoriaEfectivaProducto(p.id);
+      const tienePlantillaGuardada = categoriaPlantilla && !!buscarPlantillaGuardada(categoriaPlantilla);
+      const estadoPlantilla = categoriaPlantilla
+        ? `<button type="button" class="chip-fotos-btn ${tienePlantillaGuardada ? 'ok' : 'falta'}" title="Categoría usada para elegir la plantilla de Mercado Libre de este producto — click para cambiarla" onclick="abrirModalPlantillaProducto('${p.id}')">📁 ${escapeHtml(categoriaPlantilla)}</button>`
+        : `<button type="button" class="chip-fotos-btn falta" title="Sin categoría asignada — click para elegir a mano qué plantilla de Mercado Libre usar" onclick="abrirModalPlantillaProducto('${p.id}')">📁 Sin categoría</button>`;
+
       // Al pasar el mouse sobre el nombre: precio y ganancia de ESTE producto, para decidir ahí
       // mismo si conviene ajustar el precio antes de publicarlo. "Dejar así" no hace nada (con
       // sacar el mouse alcanza) — está para que quede clara la pregunta. "Editar" abre el
@@ -1619,10 +1984,15 @@
           </span>
           ${estadoFotos}
           ${estadoFotosML}
+          ${estadoPlantilla}
           <button type="button" class="chip-subir-foto" onclick="dispararSubidaFoto('${p.id}')">📷 ${numFotos > 0 ? 'Agregar' : 'Subir'} foto</button>
           <button type="button" class="chip-quitar" onclick="quitarDePreparar('${p.id}')">×</button>
         </div>`;
     }).join('');
+    // Las categorías de lo elegido pueden haber cambiado (se agregó/quitó un producto, o se
+    // forzó una plantilla a mano) — se re-evalúa qué mostrar en el paso 2 sin bloquear el
+    // render de los chips (es una consulta a Storage, no hace falta esperarla aquí).
+    renderizarEstadoPlantillaPaso2().catch(e => console.error('Error actualizando estado de plantilla', e));
   }
 
   // Abre el producto en una pestaña nueva del Dashboard, ya listo para editar (mismo enlace que
