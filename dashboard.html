@@ -103,6 +103,10 @@
     font-family: 'IBM Plex Sans', sans-serif;
   }
   .tab.active { color: var(--paper); border-bottom-color: var(--gold); }
+  .tab .badge-num {
+    display: inline-block; margin-left: 4px; padding: 1px 7px; font-size: 11px;
+    background: var(--rust); color: #fff; border-radius: 10px; vertical-align: 2px;
+  }
 
   section.view { display: none; }
   section.view.active { display: block; }
@@ -287,6 +291,7 @@
   <div class="tabs">
     <button class="tab active" id="tab-proveedores" onclick="switchView('proveedores', this)">Proveedores</button>
     <button class="tab" id="tab-productos" onclick="switchView('productos', this)">Productos</button>
+    <button class="tab" id="tab-leads" onclick="switchView('leads', this)">Leads del catálogo<span class="badge-num" id="badge-leads-pendientes" style="display:none;"></span></button>
   </div>
 
   <!-- PROVEEDORES -->
@@ -719,6 +724,18 @@
       </div>
     </div>
   </section>
+
+  <!-- LEADS DEL CATÁLOGO -->
+  <section class="view" id="view-leads">
+    <div class="panel">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+        <h2 style="margin:0;">Leads del catálogo</h2>
+      </div>
+      <div class="hint" style="margin-top:0; margin-bottom:16px;">Cada vez que alguien arma un carrito en tu Catálogo público y le da "Enviar por WhatsApp", queda registrado acá — aunque la conversación de WhatsApp pase fuera del sistema o nunca conteste. Así no se pierde de vista a nadie que mostró interés real.</div>
+      <div id="lista-leads-catalogo"></div>
+      <div class="empty" id="empty-leads-catalogo" style="display:none;">Todavía no hay leads del catálogo. En cuanto alguien envíe un carrito por WhatsApp desde tu Catálogo público, aparece acá.</div>
+    </div>
+  </section>
 </main>
 
 <div id="modal-desglose" style="display:none; position:fixed; inset:0; background:rgba(15,27,23,0.85); z-index:50; align-items:center; justify-content:center; padding:24px;">
@@ -818,6 +835,59 @@
     if (!esDueno() || valor === null || valor === undefined) return '—';
     return (prefijo || '$') + parseFloat(valor).toFixed(2);
   }
+
+  // Leads del catálogo — cada carrito que alguien envió por WhatsApp desde el Catálogo público,
+  // guardado automáticamente por la función registrar-lead-catalogo (ver catalogo.html). RLS ya
+  // filtra por tenant, así que este select solo trae lo de este negocio.
+  async function cargarLeadsCatalogo() {
+    const { data } = await supabase
+      .from('catalogo_leads')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(100);
+
+    const cont = document.getElementById('lista-leads-catalogo');
+    const empty = document.getElementById('empty-leads-catalogo');
+    const badge = document.getElementById('badge-leads-pendientes');
+
+    if (!data || data.length === 0) {
+      cont.innerHTML = '';
+      empty.style.display = 'block';
+      badge.style.display = 'none';
+      return;
+    }
+    empty.style.display = 'none';
+
+    const pendientes = data.filter(l => !l.atendido).length;
+    if (pendientes > 0) { badge.textContent = pendientes; badge.style.display = 'inline-block'; }
+    else badge.style.display = 'none';
+
+    cont.innerHTML = data.map(l => {
+      const fecha = new Date(l.created_at).toLocaleString('es-VE', { dateStyle: 'medium', timeStyle: 'short' });
+      const items = Array.isArray(l.items) ? l.items : [];
+      const listaItems = items.map(it =>
+        `<div>${escapeHtml(it.nombre || 'Producto')} — Cant: ${it.cantidad ?? 1}${it.precio_efectivo_usd != null ? ` — $${parseFloat(it.precio_efectivo_usd).toFixed(2)} c/u` : ''}</div>`
+      ).join('');
+      return `
+        <div style="padding:14px 16px; margin-bottom:12px; background:var(--surface-2); border:1px solid ${l.atendido ? 'var(--line)' : 'var(--gold)'};">
+          <div style="display:flex; justify-content:space-between; align-items:start; gap:10px; flex-wrap:wrap;">
+            <div style="font-size:12px; color:var(--muted);">${fecha}</div>
+            ${l.total_usd != null ? `<div style="font-weight:600;">$${parseFloat(l.total_usd).toFixed(2)}</div>` : ''}
+          </div>
+          <div style="margin-top:8px; font-size:13.5px; line-height:1.6;">${listaItems}</div>
+          <div style="margin-top:10px;">
+            ${l.atendido
+              ? `<span style="font-size:12px; color:var(--teal);">✓ Atendido</span>`
+              : `<button class="add" style="padding:6px 12px; font-size:12px;" onclick="marcarLeadAtendido('${l.id}')">Marcar como atendido</button>`}
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  window.marcarLeadAtendido = async function(id) {
+    await supabase.from('catalogo_leads').update({ atendido: true }).eq('id', id);
+    await cargarLeadsCatalogo();
+  };
 
   window.switchView = function(view, btn) {
     document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -3844,6 +3914,7 @@ RESULTADOS DEL CÁLCULO DE PRECIO
     await checkSession();
     await cargarTasas();
     await cargarProveedores();
+    await cargarLeadsCatalogo();
     await cargarMargenesCategoria();
     await cargarConfiguracionVentas();
     aplicarPredeterminadosVenta(); // el formulario arranca en modo "producto nuevo"

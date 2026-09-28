@@ -287,7 +287,7 @@
       <div id="carrito-lista" style="margin-top:14px;"></div>
       <div id="carrito-total" style="margin-top:6px; padding-top:14px; border-top:1px dashed var(--line); font-size:15px; font-weight:600; display:none;"></div>
       <div id="carrito-acciones" style="display:flex; gap:10px; margin-top:18px; flex-wrap:wrap;">
-        <a class="btn-whatsapp grande" id="btn-enviar-carrito" style="flex:1; min-width:200px;" href="#" target="_blank" rel="noopener">💬 Enviar carrito por WhatsApp</a>
+        <a class="btn-whatsapp grande" id="btn-enviar-carrito" style="flex:1; min-width:200px;" href="#" target="_blank" rel="noopener" onclick="registrarLeadCarrito()">💬 Enviar carrito por WhatsApp</a>
         <button onclick="vaciarCarrito()" style="padding:12px 16px; font-size:12.5px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line); cursor:pointer;">Vaciar carrito</button>
       </div>
     </div>
@@ -477,11 +477,33 @@
       });
       texto += `\n\nTotal estimado: ${fmtUsd(total)}`;
       btnEnviar.href = `https://wa.me/${WHATSAPP_NUMERO}?text=${encodeURIComponent(texto)}`;
+      btnEnviar.dataset.mensaje = texto;
       btnEnviar.style.display = 'flex';
     } else {
       btnEnviar.style.display = 'none';
     }
   }
+
+  // Deja un rastro de que alguien mostró interés real (qué productos, cuántos, cuándo), aunque la
+  // conversación de WhatsApp pase fuera del sistema y no se sepa quién es hasta que escriba. Nunca
+  // debe bloquear ni retrasar el envío del WhatsApp — por eso no se espera (no "await") y cualquier
+  // fallo se ignora en silencio: el botón sigue abriendo WhatsApp igual pase lo que pase acá.
+  window.registrarLeadCarrito = function() {
+    const items = Object.values(carrito);
+    if (items.length === 0) return;
+    const total = items.reduce((acc, it) => acc + (Number(it.precio_efectivo_usd) || 0) * it.cantidad, 0);
+    const mensaje = document.getElementById('btn-enviar-carrito').dataset.mensaje || '';
+    supabase.functions.invoke('registrar-lead-catalogo', {
+      body: {
+        tenant_slug: TENANT_SLUG,
+        items: items.map(it => ({
+          producto_id: it.id, nombre: it.nombre, cantidad: it.cantidad, precio_efectivo_usd: it.precio_efectivo_usd
+        })),
+        total_usd: total,
+        mensaje
+      }
+    }).catch(() => {}); // silencioso a propósito — ver comentario arriba
+  };
 
   // Actualiza el número en la burbuja del carrito (en el encabezado) y el estado de todos los
   // botones "🛒 Agregar al carrito" visibles ahora mismo (en la grilla y/o en el detalle abierto),
