@@ -124,7 +124,18 @@
     display: flex; align-items: center; gap: 10px; background: var(--surface-2); border: 1px solid var(--line);
     padding: 8px 10px; font-size: 12.5px;
   }
-  .chip-producto .chip-nombre { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chip-nombre-wrap { position: relative; flex: 1; min-width: 0; }
+  .chip-producto .chip-nombre { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: default; }
+  .chip-popover-precio {
+    display: none; position: absolute; top: 100%; left: 0; margin-top: 6px; z-index: 50;
+    background: var(--surface); border: 1px solid var(--gold); padding: 12px 14px; width: 250px;
+    font-size: 12.5px; box-shadow: 0 8px 20px rgba(0,0,0,0.45); white-space: normal;
+  }
+  .chip-nombre-wrap:hover .chip-popover-precio { display: block; }
+  .chip-popover-precio .fila-precio { display: flex; justify-content: space-between; gap: 10px; margin-bottom: 5px; }
+  .chip-popover-precio .fila-precio b { color: var(--teal); }
+  .chip-popover-precio .pregunta { margin-top: 8px; padding-top: 8px; border-top: 1px dashed var(--line); color: var(--muted); }
+  .chip-popover-precio .acciones { display: flex; gap: 6px; margin-top: 8px; }
   .chip-producto .chip-fotos { font-size: 11px; white-space: nowrap; }
   .chip-producto .chip-fotos.ok { color: var(--teal); }
   .chip-producto .chip-fotos.falta { color: var(--rust); }
@@ -137,6 +148,22 @@
     background: none; border: none; color: var(--muted); cursor: pointer; font-size: 15px; line-height: 1; padding: 0 2px;
   }
   .chip-quitar:hover { color: var(--rust); }
+  .chip-fotos-btn {
+    font-size: 11px; border: 1px solid var(--line); background: none; padding: 5px 9px; cursor: pointer; white-space: nowrap;
+  }
+  .chip-fotos-btn.ok { color: var(--teal); }
+  .chip-fotos-btn.ok:hover { border-color: var(--teal); }
+  .chip-fotos-btn.falta { color: var(--rust); }
+  .chip-fotos-btn.falta:hover { border-color: var(--rust); }
+
+  .modal-fondo {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 200;
+    display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  .modal-caja {
+    background: var(--surface); border: 1px solid var(--line); padding: 22px; max-width: 520px; width: 100%;
+    max-height: 90vh; overflow-y: auto;
+  }
 
   .fila-revisar {
     display: flex; align-items: flex-start; justify-content: space-between; gap: 14px;
@@ -216,7 +243,7 @@
 
     <div class="panel">
       <h2><span class="paso-num">1</span> Elige los productos</h2>
-      <div class="hint" style="margin-top:0;">Busca y agrega los que vas a publicar en esta tanda. Si a alguno le falta foto, súbesela aquí mismo — no hace falta ir al catálogo.</div>
+      <div class="hint" style="margin-top:0;">Busca y agrega los que vas a publicar en esta tanda. Si a alguno le falta foto — o las URLs del Gestor de fotos de Mercado Libre — cárgalas aquí mismo, no hace falta ir al Dashboard ni al catálogo.</div>
 
       <label for="buscar-preparar">Buscar producto</label>
       <div style="position:relative;">
@@ -225,6 +252,24 @@
       </div>
       <div id="chips-seleccionados" style="display:flex; flex-direction:column; gap:8px; margin-top:14px;"></div>
       <input type="file" id="input-foto-chip" accept="image/jpeg,image/png,image/webp" multiple style="display:none;" onchange="subirFotoParaPreparar(this.files)">
+    </div>
+
+    <div id="modal-fotos-ml" class="modal-fondo" style="display:none;">
+      <div class="modal-caja">
+        <h3 style="margin:0 0 10px;">Fotos para Mercado Libre</h3>
+        <div class="hint" style="margin-top:0;">Mercado Libre exige que las fotos de la planilla vengan de <em>su propio</em> Gestor de fotos — una URL de este sistema (u otra externa) no sirve, aunque sea una imagen válida, y por eso la planilla sale rechazada como "vacía". Pasos: 1) Abre el Gestor de fotos con el botón de abajo. 2) Crea un grupo de fotos para este producto y sube las mismas imágenes. 3) Presiona "Copiar URLs" y pégalas aquí.</div>
+        <div style="margin:12px 0;">
+          <a href="https://www.mercadolibre.com.ve/gestion_de_fotos?from=excel" target="_blank" rel="noopener" class="chip-subir-foto" style="display:inline-block; text-decoration:none; padding:8px 12px;">🖼️ Abrir Gestor de fotos de Mercado Libre</a>
+        </div>
+        <label for="input-fotos-ml-modal">URLs (separadas por coma)</label>
+        <textarea id="input-fotos-ml-modal" rows="4" placeholder="https://http2.mlstatic.com/..., https://http2.mlstatic.com/..." style="width:100%; background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:10px 12px; font-size:13px; font-family:'IBM Plex Sans', sans-serif; resize:vertical;"></textarea>
+        <div class="hint" style="color:var(--gold);">Son válidas solo por 2 días — si tardas más en subir la planilla a Mercado Libre, genera las URLs de nuevo antes de publicar.</div>
+        <div class="hint" id="msg-modal-fotos-ml" style="margin-top:8px;"></div>
+        <div style="display:flex; gap:8px; margin-top:14px;">
+          <button type="button" class="primary" onclick="guardarFotosMlModal()" style="margin-top:0;">Guardar</button>
+          <button type="button" class="chip-subir-foto" onclick="cerrarModalFotosML()">Cancelar</button>
+        </div>
+      </div>
     </div>
 
     <div class="panel">
@@ -1492,16 +1537,20 @@
   // dos veces lo mismo y el chip siempre refleja lo último que se subió.
   let infoPrepararPorProducto = {};
   let productoFotoObjetivo = null; // qué producto recibe la próxima foto que se suba desde un chip
+  let productoFotosMlObjetivo = null; // qué producto se está editando en el modal de "Fotos para Mercado Libre"
 
   async function refrescarInfoPreparar() {
     if (seleccionadosPreparar.length === 0) { infoPrepararPorProducto = {}; renderizarChipsPreparar(); return; }
     const ids = seleccionadosPreparar.map(p => p.id);
     const { data } = await supabase
       .from('publicaciones')
-      .select('producto_id, precio_bcv_usd_equiv, stock, imagenes, descripcion, fotos_ml')
+      .select('producto_id, precio_bcv_usd_equiv, precio_bcv_bs, stock, imagenes, descripcion, fotos_ml, publicaciones_margenes(ganancia_neta_usd)')
       .in('producto_id', ids);
     infoPrepararPorProducto = {};
-    (data || []).forEach(row => { infoPrepararPorProducto[row.producto_id] = row; });
+    (data || []).forEach(row => {
+      row.ganancia_neta_usd = row.publicaciones_margenes ? row.publicaciones_margenes.ganancia_neta_usd : null;
+      infoPrepararPorProducto[row.producto_id] = row;
+    });
     renderizarChipsPreparar();
   }
 
@@ -1533,11 +1582,41 @@
       // para el Catálogo/Cotizaciones y Mercado Libre las rechaza si se usan en su planilla.
       const tieneFotosML = !!(infoPrepararPorProducto[p.id]?.fotos_ml && infoPrepararPorProducto[p.id].fotos_ml.trim());
       const estadoFotosML = tieneFotosML
-        ? `<span class="chip-fotos ok" title="Tiene URLs del Gestor de fotos de Mercado Libre">✓ Fotos ML</span>`
-        : `<span class="chip-fotos falta" title="Sin esto la planilla sale rechazada como &quot;vacía&quot; al subirla a Mercado Libre. Cárgalas editando este producto en el Dashboard.">⚠ Falta URLs ML</span>`;
+        ? `<button type="button" class="chip-fotos-btn ok" title="Tiene URLs del Gestor de fotos de Mercado Libre — click para editarlas" onclick="abrirModalFotosML('${p.id}')">✓ Fotos ML</button>`
+        : `<button type="button" class="chip-fotos-btn falta" title="Sin esto la planilla sale rechazada como &quot;vacía&quot; al subirla a Mercado Libre. Click para pegar las URLs del Gestor de fotos." onclick="abrirModalFotosML('${p.id}')">⚠ Falta URLs ML</button>`;
+
+      // Al pasar el mouse sobre el nombre: precio y ganancia de ESTE producto, para decidir ahí
+      // mismo si conviene ajustar el precio antes de publicarlo. "Dejar así" no hace nada (con
+      // sacar el mouse alcanza) — está para que quede clara la pregunta. "Editar" abre el
+      // producto en una PESTAÑA NUEVA del Dashboard (no navega fuera de Publicaciones ML), así
+      // que al guardar y cerrar esa pestaña, esta sigue exactamente donde estaba: productos
+      // elegidos, Excel ya subido, todo intacto.
+      const info = infoPrepararPorProducto[p.id];
+      const tienePrecio = info && info.precio_bcv_usd_equiv !== null && info.precio_bcv_usd_equiv !== undefined;
+      const popoverPrecio = tienePrecio ? `
+          <div class="chip-popover-precio">
+            <div class="fila-precio"><span>Precio en ML</span><b>$${parseFloat(info.precio_bcv_usd_equiv).toFixed(2)}</b></div>
+            ${info.precio_bcv_bs ? `<div class="fila-precio"><span>En bolívares</span><span>Bs ${parseFloat(info.precio_bcv_bs).toLocaleString('es-VE', { maximumFractionDigits: 0 })}</span></div>` : ''}
+            <div class="fila-precio"><span>Ganancia neta</span><b style="color:var(--gold)">${info.ganancia_neta_usd != null ? '$' + parseFloat(info.ganancia_neta_usd).toFixed(2) : '—'}</b></div>
+            <div class="pregunta">¿Dejar el precio así o ajustarlo antes de publicar?</div>
+            <div class="acciones">
+              <button type="button" class="chip-subir-foto">Dejar así</button>
+              <button type="button" class="chip-subir-foto" style="color:var(--gold); border-color:var(--gold);" onclick="editarProductoEnDashboard('${p.id}')">✏️ Editar</button>
+            </div>
+          </div>` : `
+          <div class="chip-popover-precio">
+            <div style="color:var(--rust);">Este producto todavía no tiene precio cargado.</div>
+            <div class="acciones">
+              <button type="button" class="chip-subir-foto" style="color:var(--gold); border-color:var(--gold);" onclick="editarProductoEnDashboard('${p.id}')">✏️ Cargar precio</button>
+            </div>
+          </div>`;
+
       return `
         <div class="chip-producto">
-          <span class="chip-nombre" title="${escapeHtml(p.nombre)}">${escapeHtml(p.nombre)}</span>
+          <span class="chip-nombre-wrap">
+            <span class="chip-nombre" title="${escapeHtml(p.nombre)}">${escapeHtml(p.nombre)}</span>
+            ${popoverPrecio}
+          </span>
           ${estadoFotos}
           ${estadoFotosML}
           <button type="button" class="chip-subir-foto" onclick="dispararSubidaFoto('${p.id}')">📷 ${numFotos > 0 ? 'Agregar' : 'Subir'} foto</button>
@@ -1545,6 +1624,18 @@
         </div>`;
     }).join('');
   }
+
+  // Abre el producto en una pestaña nueva del Dashboard, ya listo para editar (mismo enlace que
+  // usa "Reajustar precio" desde Análisis de competencia) — se abre aparte a propósito para no
+  // perder el flujo de esta pantalla (productos elegidos, Excel ya subido, etc.).
+  window.editarProductoEnDashboard = function(productoId) {
+    window.open('dashboard.html?editar=' + encodeURIComponent(productoId), '_blank');
+  };
+
+  // Al volver a esta pestaña (por ejemplo, después de guardar en la pestaña nueva del Dashboard)
+  // se refresca el precio/ganancia mostrado en el popover, para no quedarse viendo un valor
+  // desactualizado si algo se ajustó allá.
+  window.addEventListener('focus', () => { if (seleccionadosPreparar.length > 0) refrescarInfoPreparar(); });
 
   // Abre el selector de archivos del navegador para el producto de este chip, reutilizando un
   // único input oculto (no hace falta crear uno por chip).
@@ -1588,6 +1679,52 @@
     document.getElementById('input-foto-chip').value = '';
     productoFotoObjetivo = null;
     await refrescarInfoPreparar();
+  };
+
+  // Modal "Fotos para Mercado Libre" — deja pegar/editar las URLs del Gestor de fotos de ML
+  // directo desde la tarjeta del producto en este paso 1, sin tener que ir al Dashboard (antes
+  // el chip "⚠ Falta URLs ML" solo avisaba y mandaba a editar el producto en otra pantalla).
+  window.abrirModalFotosML = function(productoId) {
+    productoFotosMlObjetivo = productoId;
+    const actuales = infoPrepararPorProducto[productoId]?.fotos_ml || '';
+    document.getElementById('input-fotos-ml-modal').value = actuales;
+    document.getElementById('msg-modal-fotos-ml').textContent = '';
+    document.getElementById('modal-fotos-ml').style.display = 'flex';
+  };
+
+  window.cerrarModalFotosML = function() {
+    document.getElementById('modal-fotos-ml').style.display = 'none';
+    productoFotosMlObjetivo = null;
+  };
+
+  window.guardarFotosMlModal = async function() {
+    const productoId = productoFotosMlObjetivo;
+    const msg = document.getElementById('msg-modal-fotos-ml');
+    if (!productoId) return;
+
+    const fotosMl = document.getElementById('input-fotos-ml-modal').value.trim();
+    msg.style.color = 'var(--muted)';
+    msg.textContent = 'Guardando...';
+
+    // Igual que al subir una foto normal desde el chip: el producto puede no tener todavía
+    // ninguna fila en "publicaciones" (si nunca se le asignó precio/stock) — en ese caso se crea
+    // en borrador solo para poder guardar las URLs.
+    const { data: existente } = await supabase.from('publicaciones').select('id').eq('producto_id', productoId).maybeSingle();
+    let error;
+    if (existente) {
+      ({ error } = await supabase.from('publicaciones').update({ fotos_ml: fotosMl || null }).eq('id', existente.id));
+    } else {
+      ({ error } = await supabase.from('publicaciones').insert({ producto_id: productoId, fotos_ml: fotosMl || null, estado: 'borrador' }));
+    }
+
+    if (error) {
+      msg.style.color = 'var(--rust)';
+      msg.textContent = 'No se pudo guardar: ' + error.message;
+      return;
+    }
+
+    await refrescarInfoPreparar();
+    cerrarModalFotosML();
   };
 
   // Lee la hoja actualmente elegida en el paso 2 y detecta sus encabezados — lo usan tanto
