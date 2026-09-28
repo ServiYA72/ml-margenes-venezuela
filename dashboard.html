@@ -554,13 +554,52 @@
       <h2>Productos con margen calculado</h2>
 
       <div style="display:flex; gap:12px; align-items:end; flex-wrap:wrap; margin-bottom:16px; padding-bottom:16px; border-bottom:1px solid var(--line);">
-        <div class="solo-dueno">
-          <label for="bulk-porcentaje" style="display:block; font-size:12px; color:var(--muted); margin-bottom:6px;">Aplicar % de ganancia a los seleccionados</label>
-          <div style="display:flex; gap:8px;">
+        <div class="solo-dueno" style="width:100%;">
+          <div style="display:flex; gap:24px; flex-wrap:wrap; align-items:flex-start;">
+            <div>
+              <label style="display:block; font-size:12px; color:var(--muted); margin-bottom:6px;">Aplicar a</label>
+              <div style="display:flex; gap:14px; flex-wrap:wrap; font-size:13px;">
+                <label style="display:flex; align-items:center; gap:5px; cursor:pointer;"><input type="radio" name="bulk-alcance" value="seleccionados" checked onchange="actualizarUIBulk()"> Seleccionados en la tabla</label>
+                <label style="display:flex; align-items:center; gap:5px; cursor:pointer;"><input type="radio" name="bulk-alcance" value="proveedor" onchange="actualizarUIBulk()"> Todo un proveedor</label>
+                <label style="display:flex; align-items:center; gap:5px; cursor:pointer;"><input type="radio" name="bulk-alcance" value="inventario" onchange="actualizarUIBulk()"> Todo el inventario</label>
+              </div>
+              <select id="bulk-alcance-proveedor" style="display:none; margin-top:8px; background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:8px 10px; font-size:13px; width:100%;">
+                <option value="">Selecciona un proveedor</option>
+              </select>
+            </div>
+
+            <div>
+              <label style="display:block; font-size:12px; color:var(--muted); margin-bottom:6px;">Cómo calcular el %</label>
+              <div style="display:flex; gap:14px; flex-wrap:wrap; font-size:13px;">
+                <label style="display:flex; align-items:center; gap:5px; cursor:pointer;"><input type="radio" name="bulk-modo" value="unico" checked onchange="actualizarUIBulk()"> Un mismo % para todos</label>
+                <label style="display:flex; align-items:center; gap:5px; cursor:pointer;"><input type="radio" name="bulk-modo" value="escalonado" onchange="actualizarUIBulk()"> Escalonado por costo</label>
+              </div>
+            </div>
+          </div>
+
+          <div class="hint" style="margin-top:8px; margin-bottom:0;">Solo se aplica a productos que ya tienen un precio cargado — los que todavía no tienen precio se siguen cargando uno por uno.</div>
+
+          <div id="bulk-modo-unico" style="margin-top:12px; display:flex; gap:8px; align-items:center;">
             <input type="number" step="0.5" id="bulk-porcentaje" placeholder="Ej: 25" style="width:100px; background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:9px 10px; font-size:14px;">
-            <button class="add" id="btn-aplicar-masivo" style="padding:9px 16px; font-size:13px;" onclick="aplicarPorcentajeMasivo()">Aplicar</button>
-            <button class="add" id="btn-detener-masivo" style="display:none; padding:9px 16px; font-size:13px; background:var(--rust); color:var(--paper);" onclick="detenerAplicacionMasiva()">Detener</button>
-            <button class="add" id="btn-revertir-masivo" style="display:none; padding:9px 16px; font-size:13px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line);" onclick="revertirAplicacionMasiva()">Revertir cambios</button>
+            <span style="font-size:12px; color:var(--muted);">% de ganancia</span>
+          </div>
+
+          <div id="bulk-modo-escalonado" style="display:none; margin-top:12px;">
+            <div class="hint" style="margin-top:0; margin-bottom:8px;">% de ganancia según el costo de cada producto — se recuerdan los últimos valores usados. Deja en blanco un tramo si no quieres tocar esos productos.</div>
+            <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(130px,1fr)); gap:10px; max-width:820px;">
+              <div><label style="display:block; font-size:11px; color:var(--muted); margin-bottom:4px;">Costo $0 – $100</label><input type="number" step="0.5" id="bulk-tramo-0" placeholder="%" style="width:100%; background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:8px; font-size:13px;"></div>
+              <div><label style="display:block; font-size:11px; color:var(--muted); margin-bottom:4px;">Costo $101 – $200</label><input type="number" step="0.5" id="bulk-tramo-1" placeholder="%" style="width:100%; background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:8px; font-size:13px;"></div>
+              <div><label style="display:block; font-size:11px; color:var(--muted); margin-bottom:4px;">Costo $201 – $300</label><input type="number" step="0.5" id="bulk-tramo-2" placeholder="%" style="width:100%; background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:8px; font-size:13px;"></div>
+              <div><label style="display:block; font-size:11px; color:var(--muted); margin-bottom:4px;">Costo $301 – $500</label><input type="number" step="0.5" id="bulk-tramo-3" placeholder="%" style="width:100%; background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:8px; font-size:13px;"></div>
+              <div><label style="display:block; font-size:11px; color:var(--muted); margin-bottom:4px;">Costo $501 – $1000</label><input type="number" step="0.5" id="bulk-tramo-4" placeholder="%" style="width:100%; background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:8px; font-size:13px;"></div>
+              <div><label style="display:block; font-size:11px; color:var(--muted); margin-bottom:4px;">Costo mayor a $1000</label><input type="number" step="0.5" id="bulk-tramo-5" placeholder="%" style="width:100%; background:var(--surface-2); border:1px solid var(--line); color:var(--paper); padding:8px; font-size:13px;"></div>
+            </div>
+          </div>
+
+          <div style="margin-top:14px; display:flex; gap:8px;">
+            <button class="add" id="btn-aplicar-masivo" style="padding:9px 16px; font-size:13px; margin-top:0;" onclick="aplicarPorcentajeMasivo()">Aplicar</button>
+            <button class="add" id="btn-detener-masivo" style="display:none; padding:9px 16px; font-size:13px; background:var(--rust); color:var(--paper); margin-top:0;" onclick="detenerAplicacionMasiva()">Detener</button>
+            <button class="add" id="btn-revertir-masivo" style="display:none; padding:9px 16px; font-size:13px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line); margin-top:0;" onclick="revertirAplicacionMasiva()">Revertir cambios</button>
           </div>
         </div>
         <div style="flex:1;"></div>
@@ -983,13 +1022,27 @@
         limpiezaProveedor.appendChild(opt);
       });
     }
+
+    // refrescar el selector de proveedor de "Aplicar % de ganancia" (alcance = un proveedor completo)
+    const bulkProveedor = document.getElementById('bulk-alcance-proveedor');
+    if (bulkProveedor) {
+      const valorPrevioBulk = bulkProveedor.value;
+      bulkProveedor.innerHTML = '<option value="">Selecciona un proveedor</option>';
+      (data || []).forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.id;
+        opt.textContent = p.nombre;
+        bulkProveedor.appendChild(opt);
+      });
+      bulkProveedor.value = valorPrevioBulk;
+    }
   }
 
   // Condiciones de venta predeterminadas: un único renglón por cuenta (tenant) con el texto que
   // se precarga en "Forma de envío / Condiciones de pago / Horario de atención" cada vez que se
   // abre el formulario para un producto NUEVO. No se aplica al editar un producto existente,
   // porque ese producto ya tiene sus propios valores guardados (que pueden ser distintos).
-  let configuracionVentasCache = { forma_envio_default: '', condiciones_pago_default: '', horario_atencion_default: '', descripcion_default: '', catalogo_solo_con_fotos: true };
+  let configuracionVentasCache = { forma_envio_default: '', condiciones_pago_default: '', horario_atencion_default: '', descripcion_default: '', catalogo_solo_con_fotos: true, tramos_escalonado: null };
 
   async function cargarConfiguracionVentas() {
     const { data } = await supabase.from('configuracion_ventas').select('*').maybeSingle();
@@ -999,7 +1052,8 @@
         condiciones_pago_default: data.condiciones_pago_default || '',
         horario_atencion_default: data.horario_atencion_default || '',
         descripcion_default: data.descripcion_default || '',
-        catalogo_solo_con_fotos: data.catalogo_solo_con_fotos !== false
+        catalogo_solo_con_fotos: data.catalogo_solo_con_fotos !== false,
+        tramos_escalonado: Array.isArray(data.tramos_escalonado) ? data.tramos_escalonado : null
       };
     }
     document.getElementById('cfg-envio').value = configuracionVentasCache.forma_envio_default;
@@ -1007,6 +1061,14 @@
     document.getElementById('cfg-horario').value = configuracionVentasCache.horario_atencion_default;
     document.getElementById('cfg-descripcion').value = configuracionVentasCache.descripcion_default;
     document.getElementById('cfg-catalogo-solo-fotos').checked = configuracionVentasCache.catalogo_solo_con_fotos;
+
+    // Precarga los últimos % escalonados usados (herramienta "Aplicar % de ganancia" > Escalonado por costo)
+    if (configuracionVentasCache.tramos_escalonado) {
+      configuracionVentasCache.tramos_escalonado.forEach((v, i) => {
+        const el = document.getElementById('bulk-tramo-' + i);
+        if (el && v !== null && v !== undefined) el.value = v;
+      });
+    }
   }
 
   // Guardado aparte de "Guardar predeterminados" (que solo aplica a productos NUEVOS): este
@@ -1224,9 +1286,30 @@
   async function refrescarProductosPorId(ids) {
     const idsUnicos = [...new Set((ids || []).filter(Boolean))];
     if (idsUnicos.length === 0) return;
-    const { data, error } = await supabase.from('productos').select(COLUMNAS_PRODUCTO).in('id', idsUnicos);
-    if (error) { await cargarProductos(); return; } // ante cualquier duda, no dejar la tabla desactualizada
-    fusionarProductosEnCache(data);
+
+    // Con pocos ids (el caso normal: guardar/editar un producto, o aplicar % a un grupo chico
+    // seleccionado a mano) un solo .in(...) alcanza. Con una lista grande — por ejemplo, aplicar
+    // % de ganancia a "todo un proveedor" o a "todo el inventario" — meter miles de ids en un solo
+    // .in(...) arma una URL demasiado larga y el servidor la rechaza con "Bad Request" (mismo
+    // problema ya resuelto para borrar en eliminarEnLotes), así que de ahí para arriba se trocea
+    // en tandas y, si de todos modos algo falla, se recarga todo el catálogo para no dejar la
+    // tabla desincronizada.
+    const TAMANO_LOTE = 300;
+    if (idsUnicos.length > TAMANO_LOTE) {
+      let todos = [];
+      for (let i = 0; i < idsUnicos.length; i += TAMANO_LOTE) {
+        const lote = idsUnicos.slice(i, i + TAMANO_LOTE);
+        const { data, error } = await supabase.from('productos').select(COLUMNAS_PRODUCTO).in('id', lote);
+        if (error) { await cargarProductos(); return; }
+        todos = todos.concat(data || []);
+      }
+      fusionarProductosEnCache(todos);
+    } else {
+      const { data, error } = await supabase.from('productos').select(COLUMNAS_PRODUCTO).in('id', idsUnicos);
+      if (error) { await cargarProductos(); return; } // ante cualquier duda, no dejar la tabla desactualizada
+      fusionarProductosEnCache(data);
+    }
+
     actualizarFiltroCategorias();
     renderizarTablaProductos();
     actualizarProductosSinCategoria();
@@ -2883,8 +2966,15 @@ RESULTADOS DEL CÁLCULO DE PRECIO
         }
 
         const pub = p.pub || {};
-        const precioUsd = parseFloat(pub.precio_bcv_usd_equiv ?? pub.precio_efectivo_usd ?? 0) || 0;
-        const precioBs = parseFloat(pub.precio_bcv_bs ?? 0) || 0;
+        // REGLA DE NEGOCIO — no cambiar: el Catálogo en PDF y el Catálogo web (catalogo.html)
+        // SIEMPRE muestran precio_efectivo_usd (el precio de contado/directo, sin el margen extra
+        // que cubre la comisión de Mercado Libre) — nunca precio_bcv_usd_equiv ni precio_bcv_bs,
+        // que ya llevan ese % de ML metido adentro y son solo para la publicación en Mercado
+        // Libre. El monto en bolívares se calcula igual que en catalogo.html: precio_efectivo_usd
+        // × tasa Binance del día (no se usa precio_bcv_bs guardado, que puede quedar desactualizado
+        // si cambió la tasa desde el último cálculo de precios).
+        const precioUsd = parseFloat(pub.precio_efectivo_usd ?? 0) || 0;
+        const precioBs = tasaBinance ? precioUsd * tasaBinance : (parseFloat(pub.precio_bcv_bs ?? 0) || 0);
         const marca = p.especificaciones?.marca ? p.especificaciones.marca + ' — ' : '';
         const descripcion = descripcionParaCatalogoPdf(pub.descripcion);
         const stock = pub.stock;
@@ -3184,21 +3274,118 @@ RESULTADOS DEL CÁLCULO DE PRECIO
   let masivoDetenido = false;
   let ultimoRespaldoMasivo = null;
 
+  window.actualizarUIBulk = function() {
+    const alcance = document.querySelector('input[name="bulk-alcance"]:checked')?.value || 'seleccionados';
+    document.getElementById('bulk-alcance-proveedor').style.display = (alcance === 'proveedor') ? 'block' : 'none';
+
+    const modo = document.querySelector('input[name="bulk-modo"]:checked')?.value || 'unico';
+    document.getElementById('bulk-modo-unico').style.display = (modo === 'unico') ? 'flex' : 'none';
+    document.getElementById('bulk-modo-escalonado').style.display = (modo === 'escalonado') ? 'block' : 'none';
+  };
+
+  // Tramos de costo para el modo "Escalonado por costo": índice 0-5, en el mismo orden que los
+  // 6 campos bulk-tramo-0..5 de la UI y que el array tramos_escalonado guardado en configuracion_ventas.
+  function obtenerTramoIndice(costo) {
+    if (costo <= 100) return 0;
+    if (costo <= 200) return 1;
+    if (costo <= 300) return 2;
+    if (costo <= 500) return 3;
+    if (costo <= 1000) return 4;
+    return 5;
+  }
+
+  // Devuelve el % a aplicar a un producto según el modo elegido, o null si no se le puede
+  // calcular (modo único sin costo no aplica aquí; modo escalonado sin costo, o con el tramo que
+  // le corresponde vacío).
+  function obtenerPorcentajeParaProducto(p, modo, pctUnico, tramosPct) {
+    if (modo === 'unico') return pctUnico;
+    const costo = parseFloat(p.costo_usd);
+    if (isNaN(costo)) return null;
+    const pct = tramosPct[obtenerTramoIndice(costo)];
+    return (pct === null || pct === undefined || isNaN(pct)) ? null : pct;
+  }
+
+  // Arma la lista de productos objetivo según el alcance elegido (seleccionados en la tabla,
+  // todo un proveedor, o todo el inventario) — siempre a partir de productosCache completo, no
+  // de las filas <tr> renderizadas (que solo muestran la página actual de 100). Por decisión del
+  // usuario, en todos los casos se deja afuera a los productos que todavía no tienen precio
+  // cargado (sin publicación) — esos se siguen precificando uno por uno como hasta ahora.
+  function obtenerAlcanceMasivo() {
+    const alcance = document.querySelector('input[name="bulk-alcance"]:checked')?.value || 'seleccionados';
+    let productos;
+    if (alcance === 'seleccionados') {
+      productos = obtenerSeleccionados().map(id => productosCache[id]).filter(Boolean);
+    } else if (alcance === 'proveedor') {
+      const provId = document.getElementById('bulk-alcance-proveedor').value;
+      if (!provId) return { error: 'Selecciona un proveedor.' };
+      productos = Object.values(productosCache).filter(p => p.proveedores?.id === provId);
+    } else {
+      productos = Object.values(productosCache);
+    }
+
+    const conPrecio = productos.filter(p => p.pub && p.pub.id);
+    return { productos: conPrecio, omitidosSinPrecio: productos.length - conPrecio.length, alcance };
+  }
+
+  async function guardarTramosEscalonadoRecordados(tramosPct) {
+    try {
+      const tramos_escalonado = tramosPct.map(v => (v === null || isNaN(v)) ? null : v);
+      await supabase.from('configuracion_ventas')
+        .upsert({ ...configuracionVentasCache, tramos_escalonado, updated_at: new Date().toISOString() });
+      configuracionVentasCache.tramos_escalonado = tramos_escalonado;
+    } catch (e) {
+      console.error('No se pudieron recordar los % escalonados', e);
+    }
+  }
+
   window.aplicarPorcentajeMasivo = async function() {
     const msg = document.getElementById('msg-bulk');
     if (!esDueno()) { msg.style.color = 'var(--rust)'; msg.textContent = 'Esta función requiere rol dueño.'; return; }
-    const pct = parseFloat(document.getElementById('bulk-porcentaje').value);
-    const seleccionados = obtenerSeleccionados();
-
-    if (isNaN(pct)) { msg.style.color = 'var(--rust)'; msg.textContent = 'Escribe un porcentaje válido.'; return; }
-    if (seleccionados.length === 0) { msg.style.color = 'var(--rust)'; msg.textContent = 'Selecciona al menos un producto.'; return; }
     if (!tasaBCV || !tasaBinance) { msg.style.color = 'var(--rust)'; msg.textContent = 'No hay tasas de cambio cargadas.'; return; }
 
+    const modo = document.querySelector('input[name="bulk-modo"]:checked')?.value || 'unico';
+    let pctUnico = null;
+    let tramosPct = null;
+
+    if (modo === 'unico') {
+      pctUnico = parseFloat(document.getElementById('bulk-porcentaje').value);
+      if (isNaN(pctUnico)) { msg.style.color = 'var(--rust)'; msg.textContent = 'Escribe un porcentaje válido.'; return; }
+    } else {
+      tramosPct = [0, 1, 2, 3, 4, 5].map(i => {
+        const v = document.getElementById('bulk-tramo-' + i).value;
+        return v === '' ? null : parseFloat(v);
+      });
+      if (tramosPct.every(v => v === null || isNaN(v))) {
+        msg.style.color = 'var(--rust)'; msg.textContent = 'Escribe al menos un % en algún tramo.'; return;
+      }
+      guardarTramosEscalonadoRecordados(tramosPct); // se recuerdan para la próxima vez, no bloquea el aplicar
+    }
+
+    const alcanceInfo = obtenerAlcanceMasivo();
+    if (alcanceInfo.error) { msg.style.color = 'var(--rust)'; msg.textContent = alcanceInfo.error; return; }
+    const { productos, omitidosSinPrecio, alcance } = alcanceInfo;
+
+    if (productos.length === 0) {
+      msg.style.color = 'var(--rust)';
+      msg.textContent = (alcance === 'seleccionados')
+        ? 'Selecciona al menos un producto.'
+        : (omitidosSinPrecio > 0 ? 'Ninguno de los productos de este alcance tiene precio cargado todavía.' : 'No hay productos en este alcance.');
+      return;
+    }
+
+    // Con "todo un proveedor" o "todo el inventario" se puede afectar de golpe una cantidad grande
+    // de precios en vivo del catálogo — se pide confirmación antes de arrancar (se puede revertir
+    // después, pero mejor evitar el susto).
+    if (alcance !== 'seleccionados' && productos.length > 15) {
+      const avisoOmitidos = omitidosSinPrecio > 0 ? ` (se omiten ${omitidosSinPrecio} sin precio cargado)` : '';
+      if (!confirm(`Esto va a recalcular el precio de ${productos.length} producto(s)${avisoOmitidos}. ¿Continuar?`)) return;
+    }
+
     // Respaldo de los valores actuales, por si luego se quiere revertir
-    ultimoRespaldoMasivo = seleccionados.map(id => {
-      const pub = productosCache[id]?.pub || {};
+    ultimoRespaldoMasivo = productos.map(p => {
+      const pub = p.pub || {};
       return {
-        producto_id: id,
+        producto_id: p.id,
         publicacion_id: pub.id ?? null,
         modo_ganancia: pub.modo_ganancia ?? null,
         precio_efectivo_usd: pub.precio_efectivo_usd ?? null,
@@ -3216,57 +3403,72 @@ RESULTADOS DEL CÁLCULO DE PRECIO
     document.getElementById('btn-revertir-masivo').style.display = 'none';
 
     msg.style.color = 'var(--muted)';
-    msg.textContent = `Aplicando a 0 / ${seleccionados.length}...`;
+    msg.textContent = `Aplicando 0 / ${productos.length}...`;
     let hechos = 0;
+    let omitidosSinTramo = 0;
 
-    for (const id of seleccionados) {
+    // Se procesa en tandas chicas en paralelo (no todo de golpe, no uno por uno) — con "todo el
+    // inventario" (miles de productos) uno por uno tardaría demasiado, y mandarlo todo junto
+    // satura al navegador y al servidor.
+    const TAMANO_LOTE = 8;
+    for (let inicio = 0; inicio < productos.length; inicio += TAMANO_LOTE) {
       if (masivoDetenido) break;
+      const lote = productos.slice(inicio, inicio + TAMANO_LOTE);
 
-      const p = productosCache[id];
-      if (!p) continue;
-      const comision = p.pub?.comision_ml_pct || 11;
-      const { data: calculo, error: errCalc } = await supabase.rpc('calcular_precios', {
-        p_costo_usd: parseFloat(p.costo_usd),
-        p_modo: 'porcentaje',
-        p_valor: pct,
-        p_comision_ml_pct: comision,
-        p_tasa_bcv: tasaBCV,
-        p_tasa_binance: tasaBinance
-      });
-      if (!errCalc && calculo) {
-        const c = calculo[0];
-        await supabase.from('publicaciones').update({
-          modo_ganancia: 'porcentaje',
-          precio_efectivo_usd: c.precio_efectivo_usd,
-          precio_bcv_usd_equiv: c.precio_bcv_usd_equiv,
-          precio_bcv_bs: c.precio_bcv_bs
-        }).eq('producto_id', id);
-        if (p.pub?.id) {
-          await guardarMargenPublicacion(p.pub.id, {
-            ganancia_real_usd: c.ganancia_deseada_usd,
-            comision_ml_usd: c.comision_ml_usd,
-            ganancia_neta_usd: c.ganancia_neta_usd
-          });
+      await Promise.all(lote.map(async p => {
+        const pct = obtenerPorcentajeParaProducto(p, modo, pctUnico, tramosPct);
+        if (pct === null) { omitidosSinTramo++; return; }
+
+        const comision = p.pub?.comision_ml_pct || 11;
+        const { data: calculo, error: errCalc } = await supabase.rpc('calcular_precios', {
+          p_costo_usd: parseFloat(p.costo_usd),
+          p_modo: 'porcentaje',
+          p_valor: pct,
+          p_comision_ml_pct: comision,
+          p_tasa_bcv: tasaBCV,
+          p_tasa_binance: tasaBinance
+        });
+        if (!errCalc && calculo) {
+          const c = calculo[0];
+          await supabase.from('publicaciones').update({
+            modo_ganancia: 'porcentaje',
+            precio_efectivo_usd: c.precio_efectivo_usd,
+            precio_bcv_usd_equiv: c.precio_bcv_usd_equiv,
+            precio_bcv_bs: c.precio_bcv_bs
+          }).eq('producto_id', p.id);
+          if (p.pub?.id) {
+            await guardarMargenPublicacion(p.pub.id, {
+              ganancia_real_usd: c.ganancia_deseada_usd,
+              comision_ml_usd: c.comision_ml_usd,
+              ganancia_neta_usd: c.ganancia_neta_usd
+            });
+          }
+          hechos++;
         }
-        hechos++;
-      }
-      msg.textContent = `Aplicando ${hechos} / ${seleccionados.length}...`;
+      }));
+
+      msg.textContent = `Aplicando ${Math.min(inicio + TAMANO_LOTE, productos.length)} / ${productos.length}...`;
     }
 
     document.getElementById('btn-aplicar-masivo').style.display = 'inline-block';
     document.getElementById('btn-detener-masivo').style.display = 'none';
     document.getElementById('btn-revertir-masivo').style.display = 'inline-block';
 
+    let mensajeFinal = masivoDetenido
+      ? `Detenido: se alcanzaron a actualizar ${hechos} de ${productos.length} producto(s).`
+      : `Listo: ${hechos} de ${productos.length} producto(s) actualizados.`;
+    if (omitidosSinPrecio > 0) mensajeFinal += ` ${omitidosSinPrecio} sin precio cargado no se tocaron.`;
+    if (omitidosSinTramo > 0) mensajeFinal += ` ${omitidosSinTramo} sin % definido para su rango de costo.`;
+    mensajeFinal += ' Puedes revertir si te equivocaste.';
+
     msg.style.color = 'var(--teal)';
-    msg.textContent = masivoDetenido
-      ? `Detenido: se alcanzaron a actualizar ${hechos} de ${seleccionados.length} productos. Puedes revertir si quieres deshacerlo.`
-      : `Listo: ${hechos} de ${seleccionados.length} productos actualizados con ${pct}% de ganancia. Puedes revertir si te equivocaste.`;
-    await refrescarProductosPorId(seleccionados);
+    msg.textContent = mensajeFinal;
+    await refrescarProductosPorId(productos.map(p => p.id));
   };
 
   window.detenerAplicacionMasiva = function() {
     masivoDetenido = true;
-    document.getElementById('msg-bulk').textContent = 'Deteniendo... se completará el producto actual y parará ahí.';
+    document.getElementById('msg-bulk').textContent = 'Deteniendo... se completará la tanda actual y parará ahí.';
   };
 
   window.revertirAplicacionMasiva = async function() {
@@ -3277,14 +3479,21 @@ RESULTADOS DEL CÁLCULO DE PRECIO
     if (!confirm(`¿Revertir el último cambio masivo en ${ultimoRespaldoMasivo.length} producto(s)?`)) return;
 
     msg.style.color = 'var(--muted)';
-    msg.textContent = 'Revirtiendo...';
+    msg.textContent = `Revirtiendo 0 / ${ultimoRespaldoMasivo.length}...`;
 
-    for (const item of ultimoRespaldoMasivo) {
-      const { producto_id, publicacion_id, ganancia_real_usd, comision_ml_usd, ganancia_neta_usd, ...valoresPub } = item;
-      await supabase.from('publicaciones').update(valoresPub).eq('producto_id', producto_id);
-      if (publicacion_id) {
-        await guardarMargenPublicacion(publicacion_id, { ganancia_real_usd, comision_ml_usd, ganancia_neta_usd });
-      }
+    const TAMANO_LOTE = 8;
+    let hechos = 0;
+    for (let inicio = 0; inicio < ultimoRespaldoMasivo.length; inicio += TAMANO_LOTE) {
+      const lote = ultimoRespaldoMasivo.slice(inicio, inicio + TAMANO_LOTE);
+      await Promise.all(lote.map(async item => {
+        const { producto_id, publicacion_id, ganancia_real_usd, comision_ml_usd, ganancia_neta_usd, ...valoresPub } = item;
+        await supabase.from('publicaciones').update(valoresPub).eq('producto_id', producto_id);
+        if (publicacion_id) {
+          await guardarMargenPublicacion(publicacion_id, { ganancia_real_usd, comision_ml_usd, ganancia_neta_usd });
+        }
+        hechos++;
+      }));
+      msg.textContent = `Revirtiendo ${Math.min(inicio + TAMANO_LOTE, ultimoRespaldoMasivo.length)} / ${ultimoRespaldoMasivo.length}...`;
     }
 
     const idsRevertidos = ultimoRespaldoMasivo.map(item => item.producto_id);
