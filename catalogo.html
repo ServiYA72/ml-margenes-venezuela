@@ -104,6 +104,25 @@
   .tp-stock { font-size: 11px; margin-top: 8px; display: inline-flex; align-items: center; gap: 5px; width: fit-content; padding: 3px 8px; border: 1px solid var(--line); }
   .tp-stock.disponible { color: var(--teal); border-color: var(--teal); }
   .tp-stock.agotado { color: var(--rust); border-color: var(--rust); }
+  .tp-aviso-hint { font-size: 10.5px; color: var(--muted); margin-top: 4px; }
+
+  .bloque-aviso-restock { margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--line); }
+  .aviso-restock-titulo { font-size: 12.5px; color: var(--paper); font-weight: 600; margin-bottom: 8px; }
+  .form-aviso-restock { display: flex; gap: 6px; }
+  .form-aviso-restock input {
+    flex: 1; min-width: 0; background: var(--surface-2); border: 1px solid var(--line); color: var(--paper);
+    padding: 9px 10px; font-size: 12.5px; font-family: 'IBM Plex Sans', sans-serif;
+  }
+  .form-aviso-restock input:focus { outline: none; border-color: var(--gold); }
+  .form-aviso-restock button {
+    background: var(--surface-2); color: var(--gold); border: 1px solid var(--gold); padding: 9px 14px;
+    font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; font-family: 'IBM Plex Sans', sans-serif;
+  }
+  .form-aviso-restock button:hover:not(:disabled) { background: var(--gold); color: var(--ink); }
+  .form-aviso-restock button:disabled { opacity: .6; cursor: default; }
+  .msg-aviso-restock { font-size: 11.5px; margin-top: 8px; min-height: 14px; }
+  .msg-aviso-restock.ok { color: var(--teal); }
+  .msg-aviso-restock.error { color: var(--rust); }
 
   .btn-whatsapp {
     display: flex; align-items: center; justify-content: center; gap: 7px;
@@ -628,6 +647,7 @@
             <div class="tp-precio-bs">${fmtBs(p.precio_bs)} pagando en bolívares</div>
           </div>
           ${p.stock != null ? `<div class="tp-stock ${agotado ? 'agotado' : 'disponible'}">${agotado ? 'Agotado' : 'Disponible'}</div>` : ''}
+          ${agotado ? `<div class="tp-aviso-hint">🔔 Toca para dejar tu WhatsApp y avisarte</div>` : ''}
           <button class="btn-carrito ${carrito[p.id] ? 'activo' : ''}" data-id="${p.id}" onclick="event.stopPropagation(); toggleCarrito('${p.id}')">${carrito[p.id] ? '✓ En tu carrito' : '🛒 Agregar al carrito'}</button>
           ${WHATSAPP_NUMERO && !agotado ? `<a class="btn-whatsapp" href="${linkWhatsApp(p)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">💬 Pedir por WhatsApp</a>` : ''}
         </div>
@@ -638,11 +658,17 @@
   // Ventana de detalle: descripción completa y características técnicas del producto (marca,
   // modelo, etc. — lo que se cargó en el Dashboard). Las tarjetas de la grilla se quedan livianas
   // a propósito; esto solo se arma cuando el visitante hace clic en un producto puntual.
+  // Id del producto que está abierto ahora mismo en el modal de detalle — lo usa
+  // enviarAvisoRestock() para saber a cuál producto asociar la solicitud sin tener que pasarlo
+  // por cada botón (el modal solo muestra un producto a la vez).
+  let detalleProductoIdActual = null;
+
   window.abrirDetalle = function(id) {
     const p = productosPorId[id];
     if (!p) return;
     const nombre = (p.nombre || '').trim();
     const agotado = p.stock != null && p.stock <= 0;
+    detalleProductoIdActual = id;
 
     galeriaActual = (Array.isArray(p.fotos_todas) && p.fotos_todas.length > 0)
       ? p.fotos_todas
@@ -658,6 +684,7 @@
       ${p.stock != null ? `<div class="tp-stock ${agotado ? 'agotado' : 'disponible'}" style="margin-top:8px;">${agotado ? 'Agotado' : 'Disponible'}</div>` : ''}
       <button class="btn-carrito grande ${carrito[p.id] ? 'activo' : ''}" data-id="${p.id}" onclick="toggleCarrito('${p.id}')">${carrito[p.id] ? '✓ En tu carrito' : '🛒 Agregar al carrito'}</button>
       ${WHATSAPP_NUMERO && !agotado ? `<a class="btn-whatsapp grande" href="${linkWhatsApp(p)}" target="_blank" rel="noopener">💬 Pedir este producto por WhatsApp</a>` : ''}
+      ${agotado ? bloqueAvisoRestockHtml() : ''}
     `;
 
     const descripcion = descripcionSoloIA(p.descripcion);
@@ -683,6 +710,57 @@
 
   window.cerrarDetalle = function() {
     document.getElementById('modal-fondo').classList.remove('visible');
+  };
+
+  // Formulario "avísame cuando llegue" que se agrega debajo del precio cuando un producto está
+  // agotado. Guarda el WhatsApp del visitante vía la función registrar-aviso-restock (con service
+  // role, porque esta página no tiene sesión — mismo patrón que registrarLeadCarrito) para que el
+  // negocio lo notifique manualmente desde el Dashboard cuando vuelva a haber stock.
+  function bloqueAvisoRestockHtml() {
+    return `
+      <div class="bloque-aviso-restock" id="bloque-aviso-restock">
+        <div class="aviso-restock-titulo">🔔 Avísame cuando llegue</div>
+        <div class="form-aviso-restock">
+          <input type="tel" id="input-aviso-telefono" placeholder="Tu WhatsApp (ej: 0424...)" inputmode="tel">
+          <button type="button" onclick="enviarAvisoRestock()">Avisarme</button>
+        </div>
+        <div class="msg-aviso-restock" id="msg-aviso-restock"></div>
+      </div>
+    `;
+  }
+
+  window.enviarAvisoRestock = async function() {
+    const id = detalleProductoIdActual;
+    const p = productosPorId[id];
+    if (!id || !p) return;
+    const inputTel = document.getElementById('input-aviso-telefono');
+    const btn = document.querySelector('#bloque-aviso-restock button');
+    const msg = document.getElementById('msg-aviso-restock');
+    const telefono = (inputTel.value || '').trim();
+    const digitos = telefono.replace(/\D/g, '');
+    if (digitos.length < 7) {
+      msg.textContent = 'Escribe un número de WhatsApp válido.';
+      msg.className = 'msg-aviso-restock error';
+      return;
+    }
+    inputTel.disabled = true;
+    if (btn) btn.disabled = true;
+    msg.textContent = 'Guardando...';
+    msg.className = 'msg-aviso-restock';
+    try {
+      const { data, error } = await supabase.functions.invoke('registrar-aviso-restock', {
+        body: { tenant_slug: TENANT_SLUG, producto_id: id, producto_nombre: p.nombre, cliente_telefono: telefono }
+      });
+      if (error || !data || data.ok !== true) throw new Error((data && data.error) || (error && error.message) || 'Error desconocido');
+      const bloque = document.getElementById('bloque-aviso-restock');
+      if (bloque) bloque.innerHTML = `<div class="msg-aviso-restock ok">✓ Listo, te avisaremos por WhatsApp cuando vuelva a haber stock.</div>`;
+    } catch (e) {
+      console.error('No se pudo registrar el aviso de restock', e);
+      msg.textContent = 'No se pudo guardar — intenta de nuevo en un momento.';
+      msg.className = 'msg-aviso-restock error';
+      inputTel.disabled = false;
+      if (btn) btn.disabled = false;
+    }
   };
 
   document.addEventListener('keydown', (e) => {

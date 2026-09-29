@@ -292,6 +292,7 @@
     <button class="tab active" id="tab-proveedores" onclick="switchView('proveedores', this)">Proveedores</button>
     <button class="tab" id="tab-productos" onclick="switchView('productos', this)">Productos</button>
     <button class="tab" id="tab-leads" onclick="switchView('leads', this)">Leads del catálogo<span class="badge-num" id="badge-leads-pendientes" style="display:none;"></span></button>
+    <button class="tab" id="tab-avisos-restock" onclick="switchView('avisos-restock', this)">Avisos de restock<span class="badge-num" id="badge-avisos-pendientes" style="display:none;"></span></button>
   </div>
 
   <!-- PROVEEDORES -->
@@ -777,6 +778,18 @@
       <div class="empty" id="empty-leads-catalogo" style="display:none;">Todavía no hay leads del catálogo. En cuanto alguien envíe un carrito por WhatsApp desde tu Catálogo público, aparece acá.</div>
     </div>
   </section>
+
+  <!-- AVISOS DE RESTOCK -->
+  <section class="view" id="view-avisos-restock">
+    <div class="panel">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+        <h2 style="margin:0;">Avisos de restock</h2>
+      </div>
+      <div class="hint" style="margin-top:0; margin-bottom:16px;">Cuando un producto aparece "Agotado" en tu Catálogo público, el visitante puede dejar su WhatsApp para que le avises cuando vuelva a haber stock. Acá aparecen esas solicitudes — las que ya tienen stock disponible salen primero, listas para notificar. La notificación se manda a mano por WhatsApp; "Marcar notificado" solo la saca de esta lista.</div>
+      <div id="lista-avisos-restock"></div>
+      <div class="empty" id="empty-avisos-restock" style="display:none;">Todavía no hay solicitudes de "avísame cuando llegue" pendientes.</div>
+    </div>
+  </section>
 </main>
 
 <div id="modal-desglose" style="display:none; position:fixed; inset:0; background:rgba(15,27,23,0.85); z-index:50; align-items:center; justify-content:center; padding:24px;">
@@ -928,6 +941,73 @@
   window.marcarLeadAtendido = async function(id) {
     await supabase.from('catalogo_leads').update({ atendido: true }).eq('id', id);
     await cargarLeadsCatalogo();
+  };
+
+  // Avisos de restock — solicitudes de "avísame cuando llegue" dejadas en el Catálogo público
+  // sobre productos agotados, guardadas por la función registrar-aviso-restock (ver catalogo.html).
+  // Se cruzan con el stock actual de publicaciones para separar "ya se puede notificar" de
+  // "todavía está agotado", sin necesitar una columna aparte que haya que mantener sincronizada.
+  async function cargarAvisosRestock() {
+    const { data } = await supabase
+      .from('avisos_restock')
+      .select('*')
+      .eq('notificado', false)
+      .order('created_at', { ascending: false })
+      .limit(200);
+
+    const cont = document.getElementById('lista-avisos-restock');
+    const empty = document.getElementById('empty-avisos-restock');
+    const badge = document.getElementById('badge-avisos-pendientes');
+
+    if (!data || data.length === 0) {
+      cont.innerHTML = '';
+      empty.style.display = 'block';
+      badge.style.display = 'none';
+      return;
+    }
+    empty.style.display = 'none';
+    badge.textContent = data.length;
+    badge.style.display = 'inline-block';
+
+    const productoIds = [...new Set(data.map(a => a.producto_id).filter(Boolean))];
+    const stockPorProducto = {};
+    if (productoIds.length > 0) {
+      const { data: pubs } = await supabase.from('publicaciones').select('producto_id, stock').in('producto_id', productoIds);
+      (pubs || []).forEach(pu => { stockPorProducto[pu.producto_id] = pu.stock; });
+    }
+
+    function filaAvisoHtml(a) {
+      const fecha = new Date(a.created_at).toLocaleString('es-VE', { dateStyle: 'medium', timeStyle: 'short' });
+      const stock = stockPorProducto[a.producto_id];
+      const listo = (stock ?? 0) > 0;
+      const telLimpio = (a.cliente_telefono || '').replace(/\D/g, '');
+      const mensaje = `Hola${a.cliente_nombre ? ' ' + a.cliente_nombre : ''}, te escribimos porque nos pediste que te avisáramos: ya volvió a haber stock de "${a.producto_nombre_historico}". ¿Te interesa todavía?`;
+      return `
+        <div style="padding:14px 16px; margin-bottom:12px; background:var(--surface-2); border:1px solid ${listo ? 'var(--teal)' : 'var(--line)'};">
+          <div style="display:flex; justify-content:space-between; align-items:start; gap:10px; flex-wrap:wrap;">
+            <div style="font-size:12px; color:var(--muted);">${fecha}</div>
+            <div style="font-size:12px; font-weight:600; ${listo ? 'color:var(--teal);' : 'color:var(--gold);'}">${listo ? `✓ Ya hay stock (${stock})` : (stock != null ? 'Sigue agotado' : 'Sin dato de stock')}</div>
+          </div>
+          <div style="margin-top:6px; font-size:13.5px; font-weight:600;">${escapeHtml(a.producto_nombre_historico)}</div>
+          <div style="margin-top:4px; font-size:13px; color:var(--muted);">${escapeHtml(a.cliente_nombre || 'Sin nombre')} — ${escapeHtml(a.cliente_telefono)}</div>
+          <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+            <a class="add" style="padding:6px 12px; font-size:12px; text-decoration:none; display:inline-block;" href="https://wa.me/${encodeURIComponent(telLimpio)}?text=${encodeURIComponent(mensaje)}" target="_blank" rel="noopener">💬 Notificar por WhatsApp</a>
+            <button style="padding:6px 12px; font-size:12px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line); cursor:pointer;" onclick="marcarAvisoNotificado('${a.id}')">Marcar notificado</button>
+          </div>
+        </div>`;
+    }
+
+    const conStock = data.filter(a => (stockPorProducto[a.producto_id] ?? 0) > 0);
+    const sinStock = data.filter(a => !((stockPorProducto[a.producto_id] ?? 0) > 0));
+
+    cont.innerHTML =
+      (conStock.length > 0 ? `<div style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; margin-bottom:8px;">Listos para notificar</div>` + conStock.map(filaAvisoHtml).join('') : '') +
+      (sinStock.length > 0 ? `<div style="font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.03em; margin:${conStock.length > 0 ? '18px' : '0'} 0 8px;">Esperando stock</div>` + sinStock.map(filaAvisoHtml).join('') : '');
+  }
+
+  window.marcarAvisoNotificado = async function(id) {
+    await supabase.from('avisos_restock').update({ notificado: true, notificado_en: new Date().toISOString() }).eq('id', id);
+    await cargarAvisosRestock();
   };
 
   window.switchView = function(view, btn) {
@@ -4156,6 +4236,7 @@ RESULTADOS DEL CÁLCULO DE PRECIO
     await cargarTasas();
     await cargarProveedores();
     await cargarLeadsCatalogo();
+    await cargarAvisosRestock();
     await cargarMargenesCategoria();
     await cargarConfiguracionVentas();
     aplicarPredeterminadosVenta(); // el formulario arranca en modo "producto nuevo"
