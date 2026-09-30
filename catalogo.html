@@ -106,6 +106,13 @@
   .tp-stock.agotado { color: var(--rust); border-color: var(--rust); }
   .tp-aviso-hint { font-size: 10.5px; color: var(--muted); margin-top: 4px; }
 
+  .tp-bajo-precio {
+    display: inline-flex; align-items: center; gap: 6px; width: fit-content;
+    background: var(--gold); color: var(--ink); font-size: 11px; font-weight: 700;
+    padding: 3px 9px; margin-bottom: 6px;
+  }
+  .tp-bajo-precio .tp-precio-antes { font-weight: 400; opacity: .75; text-decoration: line-through; }
+
   .bloque-aviso-restock { margin-top: 14px; padding-top: 14px; border-top: 1px dashed var(--line); }
   .aviso-restock-titulo { font-size: 12.5px; color: var(--paper); font-weight: 600; margin-bottom: 8px; }
   .form-aviso-restock { display: flex; gap: 6px; }
@@ -655,6 +662,7 @@
           ${p.categoria ? `<div class="tp-categoria">${escapeHtml(p.categoria)}</div>` : ''}
           <div class="tp-nombre">${escapeHtml(nombre)}</div>
           ${p.sku ? `<div class="tp-sku">${escapeHtml(p.sku)}</div>` : ''}
+          ${p.bajo_de_precio ? `<div class="tp-bajo-precio">🔥 Bajó de precio <span class="tp-precio-antes">${fmtUsd(p.precio_anterior_usd)}</span></div>` : ''}
           <div class="tp-precios">
             <div class="tp-precio-usd">${fmtUsd(p.precio_efectivo_usd)} <span style="font-size:10px; color:var(--muted); font-weight:400;">efectivo</span></div>
             <div class="tp-precio-bs">${fmtBs(p.precio_bs)} pagando en bolívares</div>
@@ -693,6 +701,7 @@
     document.getElementById('md-nombre').textContent = nombre;
     document.getElementById('md-sku').textContent = p.sku || '';
     document.getElementById('md-precios').innerHTML = `
+      ${p.bajo_de_precio ? `<div class="tp-bajo-precio">🔥 Bajó de precio <span class="tp-precio-antes">${fmtUsd(p.precio_anterior_usd)}</span></div>` : ''}
       <div class="tp-precio-usd">${fmtUsd(p.precio_efectivo_usd)} <span style="font-size:10px; color:var(--muted); font-weight:400;">efectivo</span></div>
       <div class="tp-precio-bs">${fmtBs(p.precio_bs)} pagando en bolívares</div>
       ${p.stock != null ? `<div class="tp-stock ${agotado ? 'agotado' : 'disponible'}" style="margin-top:8px;">${agotado ? 'Agotado' : 'Disponible'}</div>` : ''}
