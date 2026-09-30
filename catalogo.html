@@ -49,6 +49,17 @@
   h1 { font-family: 'Fraunces', serif; font-weight: 400; font-size: 26px; margin: 0 0 6px 0; }
   .sub { color: var(--muted); font-size: 14px; margin: 0 0 24px 0; line-height: 1.6; }
 
+  .tira-testimonios { margin-bottom: 24px; }
+  .tira-testimonios-titulo { font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: .03em; margin-bottom: 10px; }
+  .tira-testimonios-lista { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 4px; }
+  .testimonio-card {
+    flex: 0 0 auto; width: 260px; background: var(--surface); border: 1px solid var(--line);
+    padding: 14px 16px; font-size: 13px; line-height: 1.55;
+  }
+  .testimonio-card .texto { font-style: italic; }
+  .testimonio-card .autor { margin-top: 8px; font-size: 11.5px; color: var(--muted); font-style: normal; }
+  .testimonio-card .producto { color: var(--teal); }
+
   .barra-filtros {
     display: flex; gap: 12px; flex-wrap: wrap; align-items: flex-end;
     background: var(--surface); border: 1px solid var(--line); padding: 16px 18px; margin-bottom: 22px;
@@ -270,6 +281,11 @@
   <h1>Nuestros productos</h1>
   <p class="sub">Precios en efectivo ($) o pagando en bolívares. El precio en Bs se actualiza con la tasa del día.</p>
 
+  <div class="tira-testimonios" id="tira-testimonios" style="display:none;">
+    <div class="tira-testimonios-titulo">Lo que dicen nuestros clientes</div>
+    <div class="tira-testimonios-lista" id="tira-testimonios-lista"></div>
+  </div>
+
   <div class="barra-filtros">
     <div class="campo">
       <label for="buscador">Buscar</label>
@@ -415,6 +431,25 @@
 
   const fmtBs = (n) => 'Bs ' + Number(n || 0).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const fmtUsd = (n) => '$' + Number(n || 0).toFixed(2);
+
+  // Testimonios reales cargados a mano desde el Dashboard (ver vista_catalogo_testimonios) — solo
+  // los que el negocio dejó marcados como "Visible" llegan hasta acá. Si no hay ninguno todavía,
+  // la tira se queda oculta en vez de mostrar un espacio vacío.
+  async function cargarTestimonios() {
+    try {
+      const { data } = await supabase.from('vista_catalogo_testimonios').select('*').eq('tenant_slug', TENANT_SLUG).limit(20);
+      const tira = document.getElementById('tira-testimonios');
+      if (!data || data.length === 0) { tira.style.display = 'none'; return; }
+      document.getElementById('tira-testimonios-lista').innerHTML = data.map(tm => `
+        <div class="testimonio-card">
+          <div class="texto">"${escapeHtml(tm.texto)}"</div>
+          <div class="autor">— ${escapeHtml(tm.nombre_cliente || 'Cliente')}${tm.producto_nombre ? ` · <span class="producto">${escapeHtml(tm.producto_nombre)}</span>` : ''}</div>
+        </div>`).join('');
+      tira.style.display = 'block';
+    } catch (e) {
+      console.error('No se pudieron cargar los testimonios', e);
+    }
+  }
 
   const iconoCaja = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--muted);">
     <path d="M21 8l-9-5-9 5 9 5 9-5z"></path>
@@ -1054,6 +1089,7 @@
   cargarCategorias();
   cargarConfigCatalogo().then(() => aplicarFiltros());
   abrirProductoDesdeLink();
+  cargarTestimonios();
 </script>
 
 <div class="btns-scroll">

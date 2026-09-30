@@ -293,6 +293,7 @@
     <button class="tab" id="tab-productos" onclick="switchView('productos', this)">Productos</button>
     <button class="tab" id="tab-leads" onclick="switchView('leads', this)">Leads del catálogo<span class="badge-num" id="badge-leads-pendientes" style="display:none;"></span></button>
     <button class="tab" id="tab-avisos-restock" onclick="switchView('avisos-restock', this)">Avisos de restock<span class="badge-num" id="badge-avisos-pendientes" style="display:none;"></span></button>
+    <button class="tab" id="tab-testimonios" onclick="switchView('testimonios', this)">Testimonios</button>
   </div>
 
   <!-- PROVEEDORES -->
@@ -790,6 +791,37 @@
       <div class="empty" id="empty-avisos-restock" style="display:none;">Todavía no hay solicitudes de "avísame cuando llegue" pendientes.</div>
     </div>
   </section>
+
+  <!-- TESTIMONIOS -->
+  <section class="view" id="view-testimonios">
+    <div class="panel">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+        <h2 style="margin:0;">Testimonios</h2>
+      </div>
+      <div class="hint" style="margin-top:0; margin-bottom:16px;">Reseñas reales de clientes para mostrar en tu Catálogo público — ayudan a generar confianza con quien todavía no te conoce. Cargalas a mano acá (de un WhatsApp, una nota de voz transcrita, lo que tengas); solo se muestran en el catálogo las que dejes marcadas como "Visible".</div>
+
+      <div style="background:var(--surface); border:1px solid var(--line); padding:16px 18px; margin-bottom:20px; max-width:560px;">
+        <label for="input-testimonio-texto">Testimonio</label>
+        <textarea id="input-testimonio-texto" rows="3" placeholder="Ej: Excelente atención, me llegó rapidísimo y tal como lo pedí."></textarea>
+        <div style="display:flex; gap:10px; margin-top:10px; flex-wrap:wrap;">
+          <div style="flex:1; min-width:160px;">
+            <label for="input-testimonio-nombre">Nombre del cliente (opcional)</label>
+            <input type="text" id="input-testimonio-nombre" placeholder="Ej: María G.">
+          </div>
+          <div style="flex:1; min-width:160px;">
+            <label for="input-testimonio-producto">Producto asociado (opcional)</label>
+            <input type="text" id="input-testimonio-producto" list="lista-testimonio-productos" placeholder="Buscar producto...">
+            <datalist id="lista-testimonio-productos"></datalist>
+          </div>
+        </div>
+        <button class="add" style="margin-top:12px;" onclick="agregarTestimonio()">Agregar testimonio</button>
+        <div id="msg-testimonio" style="font-size:12.5px; margin-top:8px; min-height:14px;"></div>
+      </div>
+
+      <div id="lista-testimonios"></div>
+      <div class="empty" id="empty-testimonios" style="display:none;">Todavía no cargaste ningún testimonio.</div>
+    </div>
+  </section>
 </main>
 
 <div id="modal-desglose" style="display:none; position:fixed; inset:0; background:rgba(15,27,23,0.85); z-index:50; align-items:center; justify-content:center; padding:24px;">
@@ -1008,6 +1040,114 @@
   window.marcarAvisoNotificado = async function(id) {
     await supabase.from('avisos_restock').update({ notificado: true, notificado_en: new Date().toISOString() }).eq('id', id);
     await cargarAvisosRestock();
+  };
+
+  // Testimonios — reseñas de clientes que se cargan a mano acá y se muestran en el Catálogo
+  // público (vista_catalogo_testimonios) mientras estén marcadas como "Visible". El buscador de
+  // producto asociado es un <input list=datalist> simple (alcance aproximado del roadmap: nada de
+  // un widget de búsqueda nuevo) que se resuelve contra productosCache, ya cargado por
+  // cargarProductos() — si lo escrito no coincide exactamente con ningún producto, el testimonio
+  // igual se guarda, solo que sin asociar (el campo es opcional).
+  function poblarDatalistTestimonioProductos() {
+    const dl = document.getElementById('lista-testimonio-productos');
+    if (!dl) return;
+    dl.innerHTML = Object.values(productosCache)
+      .map(p => `<option value="${escapeHtml(p.nombre || '')}"></option>`)
+      .join('');
+  }
+
+  function idProductoPorNombreExacto(nombre) {
+    const buscado = String(nombre || '').trim().toLowerCase();
+    if (!buscado) return null;
+    const encontrado = Object.values(productosCache).find(p => String(p.nombre || '').trim().toLowerCase() === buscado);
+    return encontrado ? encontrado.id : null;
+  }
+
+  async function cargarTestimonios() {
+    const { data } = await supabase.from('testimonios').select('*').order('created_at', { ascending: false }).limit(300);
+
+    const cont = document.getElementById('lista-testimonios');
+    const empty = document.getElementById('empty-testimonios');
+
+    if (!data || data.length === 0) {
+      cont.innerHTML = '';
+      empty.style.display = 'block';
+      return;
+    }
+    empty.style.display = 'none';
+
+    cont.innerHTML = data.map(tm => {
+      const fecha = new Date(tm.created_at).toLocaleString('es-VE', { dateStyle: 'medium', timeStyle: 'short' });
+      const producto = tm.producto_id ? productosCache[tm.producto_id] : null;
+      return `
+        <div style="padding:14px 16px; margin-bottom:12px; background:var(--surface-2); border:1px solid ${tm.visible ? 'var(--line)' : 'var(--rust)'};">
+          <div style="display:flex; justify-content:space-between; align-items:start; gap:10px; flex-wrap:wrap;">
+            <div style="font-size:12px; color:var(--muted);">${fecha}</div>
+            <div style="font-size:12px; font-weight:600; ${tm.visible ? 'color:var(--teal);' : 'color:var(--rust);'}">${tm.visible ? '✓ Visible en el catálogo' : 'Oculto'}</div>
+          </div>
+          <div style="margin-top:8px; font-size:13.5px; line-height:1.6; font-style:italic;">"${escapeHtml(tm.texto)}"</div>
+          <div style="margin-top:6px; font-size:12.5px; color:var(--muted);">
+            — ${escapeHtml(tm.nombre_cliente || 'Cliente anónimo')}${producto ? ` · sobre ${escapeHtml(producto.nombre)}` : ''}
+          </div>
+          <div style="margin-top:10px; display:flex; gap:8px; flex-wrap:wrap;">
+            <button style="padding:6px 12px; font-size:12px; background:var(--surface-2); color:var(--paper); border:1px solid var(--line); cursor:pointer;" onclick="toggleTestimonioVisible('${tm.id}', ${tm.visible})">${tm.visible ? 'Ocultar' : 'Mostrar'}</button>
+            <button style="padding:6px 12px; font-size:12px; background:var(--surface-2); color:var(--rust); border:1px solid var(--rust); cursor:pointer;" onclick="borrarTestimonio('${tm.id}')">Borrar</button>
+          </div>
+        </div>`;
+    }).join('');
+  }
+
+  window.agregarTestimonio = async function() {
+    const inputTexto = document.getElementById('input-testimonio-texto');
+    const inputNombre = document.getElementById('input-testimonio-nombre');
+    const inputProducto = document.getElementById('input-testimonio-producto');
+    const msg = document.getElementById('msg-testimonio');
+
+    const texto = inputTexto.value.trim();
+    if (!texto) {
+      msg.textContent = 'Escribe el texto del testimonio.';
+      msg.style.color = 'var(--rust)';
+      return;
+    }
+
+    const producto_id = idProductoPorNombreExacto(inputProducto.value);
+    if (inputProducto.value.trim() && !producto_id) {
+      msg.textContent = 'No encontré ese producto en la lista — se guarda igual, solo que sin asociar. Elegilo del desplegable para asociarlo.';
+      msg.style.color = 'var(--gold)';
+    } else {
+      msg.textContent = 'Guardando...';
+      msg.style.color = 'var(--muted)';
+    }
+
+    const { error } = await supabase.from('testimonios').insert({
+      texto,
+      nombre_cliente: inputNombre.value.trim() || null,
+      producto_id,
+      visible: true,
+    });
+
+    if (error) {
+      msg.textContent = 'No se pudo guardar: ' + error.message;
+      msg.style.color = 'var(--rust)';
+      return;
+    }
+
+    inputTexto.value = '';
+    inputNombre.value = '';
+    inputProducto.value = '';
+    if (!msg.textContent.startsWith('No encontré')) { msg.textContent = '✓ Testimonio guardado.'; msg.style.color = 'var(--teal)'; }
+    await cargarTestimonios();
+  };
+
+  window.toggleTestimonioVisible = async function(id, actual) {
+    await supabase.from('testimonios').update({ visible: !actual }).eq('id', id);
+    await cargarTestimonios();
+  };
+
+  window.borrarTestimonio = async function(id) {
+    if (!confirm('¿Borrar este testimonio? No se puede deshacer.')) return;
+    await supabase.from('testimonios').delete().eq('id', id);
+    await cargarTestimonios();
   };
 
   window.switchView = function(view, btn) {
@@ -4268,6 +4408,10 @@ RESULTADOS DEL CÁLCULO DE PRECIO
     } catch (e) {}
 
     await cargarProductos();
+    poblarDatalistTestimonioProductos();
+    // Se carga después de productos (no junto a leads/avisos-restock) para que, al mostrar la
+    // lista, ya pueda resolver el nombre del producto asociado a cada testimonio desde productosCache.
+    await cargarTestimonios();
 
     // La categoría se aplica después de cargar productos, porque las opciones del filtro
     // se generan a partir del catálogo real (no existen todavía cuando se restauran los demás filtros).
