@@ -421,6 +421,16 @@
       <button class="primary" onclick="generarPlantillaPreparar()">Generar y descargar</button>
       <div class="hint" id="msg-generar-preparar"></div>
 
+      <div id="chequeo-salud-preparar" style="display:none; margin-top:16px; background:var(--surface-2); border:1px solid var(--rust); padding:16px 18px;">
+        <div style="font-weight:600; color:var(--rust); margin-bottom:4px;">⚠️ Antes de descargar, revisa esto</div>
+        <div class="hint" style="margin-top:0; margin-bottom:10px;">No es un error técnico — la planilla se puede generar igual — pero Mercado Libre suele rechazar o dejar en revisión una ficha con estos faltantes. Mejor corregirlos ahora que ir y volver después.</div>
+        <div id="chequeo-salud-lista" style="font-size:13px; line-height:1.7;"></div>
+        <div style="margin-top:12px; display:flex; gap:10px; flex-wrap:wrap;">
+          <button class="secondary" style="margin-top:0;" onclick="document.getElementById('chequeo-salud-preparar').style.display='none';">Volver a revisar los productos</button>
+          <button class="primary" style="margin-top:0;" onclick="generarPlantillaPreparar({ignorarChequeoSalud:true})">Generar de todas formas</button>
+        </div>
+      </div>
+
       <div class="resultado-generado" id="resultado-generado">
         <div class="rg-titulo">✅ Tu planilla está lista</div>
         <span class="rg-archivo" id="rg-nombre-archivo"></span>
@@ -1468,6 +1478,16 @@
     tokenizarCeldas(interior).forEach(c => { mapaExistentes[c.col] = c.xml; });
     valores.forEach(({ col, valor, tipo }) => {
       if (col === undefined || col === -1 || valor === undefined || valor === '') return;
+      // BUG ENCONTRADO 2026-09-29: si la celda que ya trae Mercado Libre en esa columna tiene una
+      // fórmula propia (ej. "Cantidad de caracteres" = LEN(Título), "Cargo por venta" = IF(...)),
+      // nunca hay que pisarla. capturarColumnasFaltantesDesdeDefecto() copia esas columnas desde
+      // una fila de referencia vacía porque a esa altura ya perdieron la fórmula (leerMatrizYEncabezadosActual
+      // solo trae el valor cacheado, 0 y "-" respectivamente) — escribir ese valor acá lo deja fijo
+      // y desactualizado (ej. "0 caracteres" con un título real de 53 caracteres ya cargado), algo
+      // que el validador de Mercado Libre podía estar leyendo como el título vacío. Al no tocar la
+      // celda, la fórmula original queda intacta y Mercado Libre la recalcula como a cualquier fila
+      // normal de la planilla.
+      if (mapaExistentes[col] && /<f[ >]/.test(mapaExistentes[col])) return;
       const ref = columnaALetra(col) + numFila;
       const estilo = extraerEstiloCelda(mapaExistentes[col]) ?? estilosColumnas[col];
       interior = fijarCeldaEnFila(interior, col, tipo === 'numero' ? celdaNumero(ref, estilo, valor) : celdaTexto(ref, estilo, valor, tablaStrings));
@@ -2912,9 +2932,68 @@
     });
   }
 
-  window.generarPlantillaPreparar = async function() {
+  // Chequeo antes de publicar ("listing health check"): revisa, sobre los mismos valores que se
+  // van a escribir en la planilla, si a algún producto le falta algo que Mercado Libre suele
+  // exigir — una columna que la propia plantilla marca "Obligatorio" (fila 4) y que quedó sin
+  // ningún valor (ni del producto ni de los valores por defecto de la fila de referencia), una
+  // descripción demasiado corta, o un título que tuvo que acortarse porque el original pasaba el
+  // límite de 60 caracteres de Mercado Libre. A diferencia del chequeo de fotos (que si falta
+  // GARANTIZA que Mercado Libre rechaza el archivo entero como "vacío"), esto NO bloquea la
+  // descarga — son señales de calidad, no un error técnico — solo avisa antes de que el usuario
+  // se lleve el archivo, para poder corregir en el Dashboard o completar a mano en Mercado Libre.
+  const UMBRAL_DESCRIPCION_CORTA = 40;
+  function evaluarSaludPublicaciones(productos, valoresPorProducto, filaObligatorio, enc) {
+    const columnasObligatorias = [];
+    filaObligatorio.forEach((valor, c) => { if (normalizarEncabezado(valor) === 'obligatorio') columnasObligatorias.push(c); });
+
+    return productos.map(p => {
+      const valores = valoresPorProducto[p.id] || [];
+      const porColumna = {};
+      valores.forEach(v => { porColumna[v.col] = v.valor; });
+      const problemas = [];
+
+      columnasObligatorias.forEach(c => {
+        const valor = porColumna[c];
+        const vacio = valor === undefined || valor === null || String(valor).trim() === '';
+        if (vacio) {
+          const nombreColumna = (enc.filaOriginal[c] || '').toString().trim() || `columna ${columnaALetra(c)}`;
+          problemas.push(`Falta "${nombreColumna}" — Mercado Libre la marca como obligatoria y no hay ningún valor (ni tuyo ni por defecto) para completarla.`);
+        }
+      });
+
+      const descripcion = String(porColumna[enc.col.descripcion] || '').trim();
+      if (descripcion.length > 0 && descripcion.length < UMBRAL_DESCRIPCION_CORTA) {
+        problemas.push(`La descripción es muy corta (${descripcion.length} caracteres) — conviene ampliarla antes de publicar.`);
+      }
+
+      if (String(p.nombre || '').replace(/\[[^\]]*\]\s*/, '').trim().length > 60) {
+        problemas.push(`El título se acortó porque el original supera los 60 caracteres de Mercado Libre — quedó: "${truncarTitulo(p.nombre)}".`);
+      }
+
+      return { producto: p, problemas };
+    }).filter(r => r.problemas.length > 0);
+  }
+
+  function renderizarChequeoSaludPreparar(reportes) {
+    const cont = document.getElementById('chequeo-salud-preparar');
+    const lista = document.getElementById('chequeo-salud-lista');
+    lista.innerHTML = reportes.map(r => `
+      <div style="margin-bottom:10px;">
+        <b style="color:var(--paper);">${escapeHtml(r.producto.nombre)}</b>
+        <ul style="margin:4px 0 0 18px; padding:0;">
+          ${r.problemas.map(p => `<li>${escapeHtml(p)}</li>`).join('')}
+        </ul>
+      </div>
+    `).join('');
+    cont.style.display = 'block';
+    cont.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  }
+
+  window.generarPlantillaPreparar = async function(opts) {
+    const ignorarChequeoSalud = !!(opts && opts.ignorarChequeoSalud);
     const msg = document.getElementById('msg-generar-preparar');
     document.getElementById('resultado-generado').style.display = 'none';
+    document.getElementById('chequeo-salud-preparar').style.display = 'none';
 
     msg.style.color = 'var(--muted)';
     msg.textContent = 'Confirmando precio, stock, fotos y descripción de cada producto...';
@@ -2972,33 +3051,9 @@
     while (matriz[filaDefectosIdx] && matriz[filaDefectosIdx][enc.col.titulo]) filaDefectosIdx++;
     const filaDefectos = matriz[filaDefectosIdx] || [];
 
-    msg.textContent = 'Escribiendo los productos en tu planilla...';
-
-    // A partir de aquí se edita el archivo tal cual lo subiste, celda por celda, en vez de
-    // reconstruirlo con la librería xlsx — así se conservan intactos los colores, los bordes y
-    // el formato de número que ya trae Mercado Libre (ver los comentarios junto a
-    // "Edición quirúrgica del Excel original" más arriba).
-    const zip = await JSZip.loadAsync(bufferPreparar);
-    const rutaHoja = await resolverRutaHoja(zip, nombreHoja);
-    if (!rutaHoja || !zip.file(rutaHoja)) {
-      msg.style.color = 'var(--rust)';
-      msg.textContent = 'No se pudo preparar el archivo internamente. Prueba subiendo de nuevo la planilla en el paso 2.';
-      return;
-    }
-    let xmlHoja = await zip.file(rutaHoja).async('string');
-    const estilosColumnas = extraerEstilosColumnas(xmlHoja);
-
-    // Mercado Libre escribe todo su contenido de texto como "shared strings" (t="s", con un
-    // índice hacia xl/sharedStrings.xml) — jamás como texto suelto en la celda (t="inlineStr").
-    // Las 993 filas que ya trae la plantilla usan ese formato, y todo indica que el validador
-    // de Mercado Libre solo reconoce celdas de texto en ese formato — de ahí que la planilla
-    // pasara todas las verificaciones de openpyxl/LibreOffice pero Mercado Libre la siguiera
-    // rechazando como "vacía". Por eso acá se carga la tabla de shared strings existente y cada
-    // celda de texto que se escribe más abajo pasa a usar el mismo formato que el resto del archivo.
-    const rutaSharedStrings = 'xl/sharedStrings.xml';
-    let xmlSharedStrings = zip.file(rutaSharedStrings) ? await zip.file(rutaSharedStrings).async('string') : null;
-    const tablaStrings = crearTablaSharedStrings(xmlSharedStrings);
-
+    // ---- Arma los valores de cada producto primero, sin tocar todavía el Excel — así el chequeo
+    // de salud de abajo revisa exactamente lo mismo que después se va a escribir en la planilla. ----
+    const valoresPorProducto = {};
     seleccionadosPreparar.forEach(p => {
       const pub = pubPorProducto[p.id];
       const esp = especificacionesPorProducto[p.id] || {};
@@ -3073,6 +3128,49 @@
         columnasVisibles.add(col);
       });
 
+      valoresPorProducto[p.id] = valores;
+    });
+
+    // ---- Chequeo antes de publicar: si hay algo para avisar y el usuario todavía no dijo
+    // "Generar de todas formas", se corta acá — antes de tocar el Excel — y se muestra el aviso. ----
+    if (!ignorarChequeoSalud) {
+      const reportes = evaluarSaludPublicaciones(seleccionadosPreparar, valoresPorProducto, filaObligatorio, enc);
+      if (reportes.length > 0) {
+        msg.textContent = '';
+        renderizarChequeoSaludPreparar(reportes);
+        return;
+      }
+    }
+
+    msg.textContent = 'Escribiendo los productos en tu planilla...';
+
+    // A partir de aquí se edita el archivo tal cual lo subiste, celda por celda, en vez de
+    // reconstruirlo con la librería xlsx — así se conservan intactos los colores, los bordes y
+    // el formato de número que ya trae Mercado Libre (ver los comentarios junto a
+    // "Edición quirúrgica del Excel original" más arriba).
+    const zip = await JSZip.loadAsync(bufferPreparar);
+    const rutaHoja = await resolverRutaHoja(zip, nombreHoja);
+    if (!rutaHoja || !zip.file(rutaHoja)) {
+      msg.style.color = 'var(--rust)';
+      msg.textContent = 'No se pudo preparar el archivo internamente. Prueba subiendo de nuevo la planilla en el paso 2.';
+      return;
+    }
+    let xmlHoja = await zip.file(rutaHoja).async('string');
+    const estilosColumnas = extraerEstilosColumnas(xmlHoja);
+
+    // Mercado Libre escribe todo su contenido de texto como "shared strings" (t="s", con un
+    // índice hacia xl/sharedStrings.xml) — jamás como texto suelto en la celda (t="inlineStr").
+    // Las 993 filas que ya trae la plantilla usan ese formato, y todo indica que el validador
+    // de Mercado Libre solo reconoce celdas de texto en ese formato — de ahí que la planilla
+    // pasara todas las verificaciones de openpyxl/LibreOffice pero Mercado Libre la siguiera
+    // rechazando como "vacía". Por eso acá se carga la tabla de shared strings existente y cada
+    // celda de texto que se escribe más abajo pasa a usar el mismo formato que el resto del archivo.
+    const rutaSharedStrings = 'xl/sharedStrings.xml';
+    let xmlSharedStrings = zip.file(rutaSharedStrings) ? await zip.file(rutaSharedStrings).async('string') : null;
+    const tablaStrings = crearTablaSharedStrings(xmlSharedStrings);
+
+    seleccionadosPreparar.forEach(p => {
+      const valores = valoresPorProducto[p.id];
       xmlHoja = quitarFusionEnFila(xmlHoja, filaDestino + 1); // separa celdas combinadas que puedan tapar columnas de esta fila
       xmlHoja = escribirFilaProducto(xmlHoja, filaDestino + 1, valores, estilosColumnas, tablaStrings); // +1: la fila en el XML es 1-indexada
       filaDestino++;
