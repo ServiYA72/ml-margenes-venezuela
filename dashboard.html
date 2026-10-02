@@ -1180,6 +1180,7 @@
 <script type="module">
   import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
+ <script>
   // Protección contra clonación
   (function comprobarDominioAutorizado() {
     const host = location.hostname;
@@ -1200,31 +1201,66 @@
 
   const SUPABASE_URL = 'https://tkhzuopapvclmcgxyood.supabase.co';
   const SUPABASE_KEY = 'sb_publishable_KQB6B6uLIPr-xKdNDc8iEw_7tcWM5gS';
-  const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+  const supabase = window.supabase ? window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY) : null;
 
-  // Verificación de suscripción activa
+  // Verificación de suscripción activa con timeout defensivo
   async function verificarSuscripcionActiva(tenantId) {
-    if (!tenantId) return true;
-    const { data: tenant, error } = await supabase.from('tenants').select('nombre, activo, suscripcion_vence_el').eq('id', tenantId).single();
-    if (error || !tenant) return true;
+    if (!tenantId || !supabase) return true;
 
-    const hoy = new Date().toISOString().split('T')[0];
-    const estaActivo = tenant.activo !== false;
-    const noVencido = !tenant.suscripcion_vence_el || tenant.suscripcion_vence_el >= hoy;
+    try {
+      // Control de tiempo máximo de 4 segundos para evitar congelar la app
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Timeout Supabase')), 4000)
+      );
 
-    if (!estaActivo || !noVencido) {
-      document.body.innerHTML = `
-        <div style="min-height:100vh; display:flex; align-items:center; justify-content:center; background:#0F1B17; color:#EDE8DE; font-family:'IBM Plex Sans',Arial,sans-serif; text-align:center; padding:40px; box-sizing:border-box;">
-          <div style="max-width:460px; background:#16241F; border:1px solid #2C3F37; padding:32px; border-radius:4px;">
-            <div style="font-family:'Fraunces',serif; font-size:22px; color:#C1553B; margin-bottom:12px;">Suscripción suspendida o vencida</div>
-            <div style="color:#8FA69B; line-height:1.6;">La cuenta de <strong>${tenant.nombre || 'tu negocio'}</strong> se encuentra inactiva o su período de suscripción ha finalizado.</div>
-            <div style="color:#8FA69B; line-height:1.6; margin-top:14px;">Por favor, contacta al soporte técnico de Nicom System para renovar tu acceso al sistema.</div>
-          </div>
-        </div>`;
-      return false;
+      const fetchPromise = supabase
+        .from('tenants')
+        .select('nombre, activo, suscripcion_vence_el')
+        .eq('id', tenantId)
+        .single();
+
+      const res = await Promise.race([fetchPromise, timeoutPromise]);
+      const tenant = res.data;
+
+      if (res.error || !tenant) return true;
+
+      const hoy = new Date().toISOString().split('T')[0];
+      const estaActivo = tenant.activo !== false;
+      const noVencido = !tenant.suscripcion_vence_el || tenant.suscripcion_vence_el >= hoy;
+
+      if (!estaActivo || !noVencido) {
+        document.body.innerHTML = `
+          <div style="min-height:100vh; display:flex; align-items:center; justify-content:center; background:#0F1B17; color:#EDE8DE; font-family:'IBM Plex Sans',Arial,sans-serif; text-align:center; padding:40px; box-sizing:border-box;">
+            <div style="max-width:460px; background:#16241F; border:1px solid #2C3F37; padding:32px; border-radius:4px;">
+              <div style="font-family:'Fraunces',serif; font-size:22px; color:#C1553B; margin-bottom:12px;">Suscripción suspendida o vencida</div>
+              <div style="color:#8FA69B; line-height:1.6;">La cuenta de <strong>${tenant.nombre || 'tu negocio'}</strong> se encuentra inactiva o su período de suscripción ha finalizado.</div>
+              <div style="color:#8FA69B; line-height:1.6; margin-top:14px;">Por favor, contacta al soporte técnico de Nicom System para renovar tu acceso al sistema.</div>
+            </div>
+          </div>`;
+        return false;
+      }
+      return true;
+    } catch (err) {
+      console.warn('Verificación de suscripción no pudo completarse a tiempo:', err);
+      return true; // Ante cualquier error de red o timeout, no bloqueamos al usuario
     }
-    return true;
   }
+
+  // Flujo principal de carga sin bloqueos
+  async function iniciarSesionYTasas() {
+    // 1. Ocultar o quitar el indicador de "Cargando sesión..." sin importar si falla Supabase
+    try {
+      if (typeof tenantId !== 'undefined') {
+        await verificarSuscripcionActiva(tenantId);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      // Forzamos el fin del estado de carga visual
+      const indicadorCarga = document.querySelector('.cargando-sesion, #cargando-sesion');
+      if (indicadorCarga) indicadorCarga.style.display = 'none';
+    }
+  }
+
+  window.addEventListener('DOMContentLoaded', iniciarSesionYTasas);
 </script>
-</body>
-</html>
