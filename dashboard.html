@@ -606,7 +606,14 @@
           <input type="text" id="cat-nombre" placeholder="Ej: Almacenamiento">
         </div>
         <div>
-          <label for="cat-pct">Ganancia deseada (% sobre el precio directo)</label>
+          <label for="cat-tipo">Tipo de ganancia</label>
+          <select id="cat-tipo">
+            <option value="neta">Neta (después de comisión)</option>
+            <option value="fijo">Bruta (antes de comisión)</option>
+          </select>
+        </div>
+        <div>
+          <label for="cat-pct">Porcentaje (%)</label>
           <input type="number" step="0.5" id="cat-pct" placeholder="25">
         </div>
         <button class="add" onclick="guardarMargenCategoria()">Guardar</button>
@@ -714,28 +721,32 @@
           <input type="number" step="0.01" id="prod-costo" placeholder="157.00" oninput="sincronizarGanancia('prod','usd')">
         </div>
         <div>
-          <label for="prod-valor-ganancia">Ganancia deseada en $</label>
+          <label for="prod-modo-ganancia">Tipo de ganancia</label>
+          <select id="prod-modo-ganancia" onchange="sincronizarGanancia('prod','tipo')">
+            <option value="fijo">Bruta (antes de comisión)</option>
+            <option value="neta">Neta (después de comisión)</option>
+          </select>
+        </div>
+        <div>
+          <label for="prod-valor-ganancia">Ganancia en $</label>
           <input type="number" step="0.01" id="prod-valor-ganancia" value="30" oninput="sincronizarGanancia('prod','usd')">
         </div>
         <div>
-          <label for="prod-valor-ganancia-pct">Ganancia deseada en %</label>
+          <label for="prod-valor-ganancia-pct">Ganancia en %</label>
           <input type="number" step="0.01" id="prod-valor-ganancia-pct" oninput="sincronizarGanancia('prod','pct')">
         </div>
         <div>
-          <label for="prod-tipo-publicacion">Tipo de publicación (Mercado Libre)</label>
+          <label for="prod-tipo-publicacion">Tipo de publicación</label>
           <select id="prod-tipo-publicacion" onchange="aplicarTipoPublicacion('prod')">
-            <option value="11">Clásica (~11%)</option>
-            <option value="13">Premium (~13%)</option>
+            <option value="11">Clásica (11%)</option>
+            <option value="15">Premium (15%)</option>
             <option value="custom">Personalizada</option>
           </select>
         </div>
         <div>
           <label for="prod-comision">Comisión ML (%)</label>
-          <input type="number" step="0.5" id="prod-comision" value="11" oninput="actualizarComparacionComisiones('prod')">
+          <input type="number" step="0.5" id="prod-comision" value="11" oninput="sincronizarGanancia('prod','tipo')">
         </div>
-      </div>
-      <div style="font-size:11.5px; color:var(--muted); margin-top:-4px;">
-        Con esa ganancia se calculan y guardan SIEMPRE los dos precios: el directo (efectivo/Zelle/Binance, sin comisión) y el de Mercado Libre (con la comisión ya cubierta, para que te quede la misma ganancia neta en ambos canales).
       </div>
       <div id="comparacion-comisiones" class="solo-dueno" style="display:none; margin-top:14px; padding:12px 14px; background:var(--surface-2); border:1px solid var(--line);"></div>
 
@@ -973,7 +984,6 @@
             <th class="num" style="color:var(--teal)">Precio final al cliente ($ Ref. BCV)</th>
             <th class="num">Precio Bs (BCV)</th>
             <th class="num">Precio efectivo (cash)</th>
-            <th class="num">Precio Mercado Libre</th>
             <th class="num">Ganancia deseada</th>
             <th class="num">Comisión ML $</th>
             <th class="num">Ganancia neta $</th>
@@ -1902,7 +1912,7 @@
       pill.className = 'pill';
       pill.style.cursor = 'pointer';
       pill.title = 'Clic para eliminar';
-      pill.textContent = `${c.categoria}: ${c.margen_pct}%`;
+      pill.textContent = `${c.categoria}: ${c.margen_pct}% (${c.tipo_ganancia === 'neta' ? 'neta' : 'bruta'})`;
       pill.onclick = () => eliminarMargenCategoria(c.id);
       lista.appendChild(pill);
     });
@@ -1915,17 +1925,14 @@
   window.guardarMargenCategoria = async function() {
     const msg = document.getElementById('msg-categoria');
     const categoria = document.getElementById('cat-nombre').value.trim();
+    const tipo = document.getElementById('cat-tipo').value;
     const pct = parseFloat(document.getElementById('cat-pct').value);
 
     if (!categoria || isNaN(pct)) { msg.textContent = 'Escribe la categoría y el porcentaje.'; return; }
 
     const { data: { session } } = await supabase.auth.getSession();
-    // tipo_ganancia queda en la tabla por compatibilidad (NOT NULL), pero ya no se usa para nada:
-    // el % que se guarda acá siempre se interpreta como ganancia deseada sobre el precio DIRECTO —
-    // el precio de Mercado Libre (con comisión) se calcula aparte, automáticamente, a partir de esa
-    // misma ganancia, igual que en el formulario de producto.
     const { error } = await supabase.from('categorias_margen')
-      .upsert({ categoria, tipo_ganancia: 'fijo', margen_pct: pct, creado_por: session?.user?.id }, { onConflict: 'categoria' });
+      .upsert({ categoria, tipo_ganancia: tipo, margen_pct: pct, creado_por: session?.user?.id }, { onConflict: 'categoria' });
 
     if (error) { msg.style.color = 'var(--rust)'; msg.textContent = 'Error: ' + error.message; return; }
     msg.style.color = 'var(--teal)';
@@ -1946,6 +1953,7 @@
     const match = margenesCategoriaCache[normalizarCategoria(categoria)];
     if (!match) return;
 
+    document.getElementById(prefix + '-modo-ganancia').value = match.tipo_ganancia;
     document.getElementById(prefix + '-valor-ganancia-pct').value = match.margen_pct;
     sincronizarGanancia(prefix, 'pct');
   };
@@ -1956,7 +1964,7 @@
   // costo_usd y ganancia/margen ya no viven en productos/publicaciones: se movieron a productos_costos y
   // publicaciones_margenes (tablas protegidas por RLS, solo visibles para rol='dueño'). Se piden embebidas
   // aquí y normalizarCostosProducto() las vuelve a aplanar al shape de antes para el resto del código.
-  const COLUMNAS_PRODUCTO = 'id, nombre, categoria, sku, especificaciones, vigilar_competencia, productos_costos(costo_usd), proveedores(id, nombre), publicaciones(id, precio_efectivo_usd, precio_bcv_usd_equiv, precio_bcv_bs, precio_ml_usd, precio_ml_bcv_usd_equiv, precio_ml_bcv_bs, modo_ganancia, comision_ml_pct, descripcion, condicion, stock, forma_envio, condiciones_pago, horario_atencion, imagenes, estado, fotos_ml, publicaciones_margenes(margen_objetivo_pct, ganancia_real_usd, comision_ml_usd, ganancia_neta_usd))';
+  const COLUMNAS_PRODUCTO = 'id, nombre, categoria, sku, especificaciones, vigilar_competencia, productos_costos(costo_usd), proveedores(id, nombre), publicaciones(id, precio_efectivo_usd, precio_bcv_usd_equiv, precio_bcv_bs, modo_ganancia, comision_ml_pct, descripcion, condicion, stock, forma_envio, condiciones_pago, horario_atencion, imagenes, estado, fotos_ml, publicaciones_margenes(margen_objetivo_pct, ganancia_real_usd, comision_ml_usd, ganancia_neta_usd))';
 
   // Aplana productos_costos/publicaciones_margenes sobre el producto, para que el resto del código pueda
   // seguir leyendo p.costo_usd y pub.ganancia_real_usd como antes. Para rol "vendedor" estos campos quedan
@@ -1974,45 +1982,6 @@
     });
     return p;
   }
-  function actualizarComparacionComisiones(prefix) {
-  const inputCosto = document.getElementById(prefix + '-costo');
-  const inputGanUSD = document.getElementById(prefix + '-valor-ganancia');
-  const inputComision = document.getElementById(prefix + '-comision');
-
-  if (!inputCosto || !inputGanUSD || !inputComision) return;
-
-  const costo = parseFloat(inputCosto.value.replace(',', '.')) || 0;
-  const ganUSD = parseFloat(inputGanUSD.value.replace(',', '.')) || 0;
-  const comisionPct = (parseFloat(inputComision.value.replace(',', '.')) || 0) / 100;
-  const tasaBCV = window.tasaBCV || 1;
-
-  // 1. Precio Directo (Efectivo / Zelle / Binance)
-  const precioDirecto = costo + ganUSD;
-  const precioDirectoBs = precioDirecto * tasaBCV;
-
-  // 2. Precio Mercado Libre (Cubre la comisión del % exacto sobre el precio final)
-  const precioML = comisionPct < 1 ? (precioDirecto / (1 - comisionPct)) : precioDirecto;
-  const comisionMLUSD = precioML * comisionPct;
-  const precioMLBs = precioML * tasaBCV;
-  const comisionMLBs = comisionMLUSD * tasaBCV;
-
-  // Actualización de elementos en el DOM
-  const elDirecto = document.getElementById(prefix + '-precio-directo');
-  const elML = document.getElementById(prefix + '-precio-ml');
-  const elComision = document.getElementById(prefix + '-monto-comision');
-
-  if (elDirecto) {
-    elDirecto.innerText = `$${precioDirecto.toFixed(2)} (Bs ${precioDirectoBs.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`;
-  }
-  
-  if (elML) {
-    elML.innerText = `$${precioML.toFixed(2)} (Bs ${precioMLBs.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`;
-  }
-
-  if (elComision) {
-    elComision.innerText = `$${comisionMLUSD.toFixed(2)} (Bs ${comisionMLBs.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`;
-  }
-}
 
   // Escribe/actualiza el costo de un producto en la tabla protegida (solo lo puede hacer un dueño —
   // para un vendedor, RLS rechaza este upsert). onConflict por producto_id porque es 1:1.
@@ -2038,14 +2007,14 @@
   }
 
   async function cargarProductos() {
-    const TAMANO_BLOQUE = 250;
+    const TAMANO_BLOQUE = 1000;
 
-    // Se piden bloques de 250 uno tras otro HASTA que un bloque vuelva con menos de 250 filas
+    // Se piden bloques de 1000 uno tras otro HASTA que un bloque vuelva con menos de 1000 filas
     // (esa es la señal de que ya no queda nada más). Antes esto se decidía comparando contra el
     // total que devuelve count:'exact' — pero si esa cuenta llega en null (puede pasar por un
     // proxy o extensión del navegador que recorte el header Content-Range de la respuesta), el
-    // total caía de vuelta a "cuántas filas llegaron en el primer bloque" — exactamente 250 — y
-    // el bucle de páginas siguientes nunca se disparaba, dejando el catálogo cortado en  sin
+    // total caía de vuelta a "cuántas filas llegaron en el primer bloque" — exactamente 1000 — y
+    // el bucle de páginas siguientes nunca se disparaba, dejando el catálogo cortado en 1000 sin
     // avisar. Contar cuántas filas llegó CADA bloque, en vez de confiar en un total aparte, no
     // tiene ese punto ciego.
     let todosLosDatos = [];
@@ -2400,7 +2369,6 @@
         <td class="num" style="color:var(--teal); font-weight:700; font-size:14px;">${pub.precio_bcv_usd_equiv ? '$' + parseFloat(pub.precio_bcv_usd_equiv).toFixed(2) : '—'}</td>
         <td class="num teal-text">${pub.precio_bcv_bs ? 'Bs ' + parseFloat(pub.precio_bcv_bs).toLocaleString('es-VE', {maximumFractionDigits: 2}) : '—'}</td>
         <td class="num gold-text">${pub.precio_efectivo_usd ? '$' + parseFloat(pub.precio_efectivo_usd).toFixed(2) : '—'}</td>
-        <td class="num" style="color:var(--rust)">${pub.precio_ml_usd ? '$' + parseFloat(pub.precio_ml_usd).toFixed(2) : '—'}</td>
         <td class="num">${fmtConfidencial(pub.ganancia_real_usd)}</td>
         <td class="num" style="color:var(--rust)">${fmtConfidencial(pub.comision_ml_usd)}</td>
         <td class="num" style="color:var(--teal); font-weight:600;">${fmtConfidencial(pub.ganancia_neta_usd)}</td>
@@ -2646,16 +2614,14 @@
     document.getElementById('prod-nombre').value = p.nombre || '';
     document.getElementById('prod-categoria').value = p.categoria || '';
     document.getElementById('prod-costo').value = p.costo_usd || '';
+    document.getElementById('prod-modo-ganancia').value = (pub.modo_ganancia === 'porcentaje' ? 'fijo' : pub.modo_ganancia) || 'fijo';
     // ?? en vez de || — una ganancia real de $0 es un valor válido y no debe pisarse con el
-    // default de 30 (con || eso pasaba, porque 0 es "falsy" en JS). ganancia_real_usd es la
-    // ganancia deseada objetivo, igual para el precio directo y el de Mercado Libre — ya no
-    // depende de un "modo" elegido (ver roadmap-diferenciadores / cambio del 2026-10-01: ahora
-    // los dos precios se calculan y guardan siempre juntos a partir de este mismo valor).
+    // default de 30 (con || eso pasaba, porque 0 es "falsy" en JS).
     document.getElementById('prod-valor-ganancia').value = pub.ganancia_real_usd ?? 30;
 
     const comisionGuardada = (pub.comision_ml_pct !== null && pub.comision_ml_pct !== undefined) ? parseFloat(pub.comision_ml_pct) : 11;
     const tipoPubSelect = document.getElementById('prod-tipo-publicacion');
-    if (comisionGuardada === 11 || comisionGuardada === 13) {
+    if (comisionGuardada === 11 || comisionGuardada === 15) {
       tipoPubSelect.value = String(comisionGuardada);
     } else {
       tipoPubSelect.value = 'custom';
@@ -2668,11 +2634,12 @@
     // función necesita el snapshot listo desde ese primer cálculo para poder mostrar el precio
     // TAL COMO quedó guardado, en vez de uno recién calculado con la tasa BCV/Binance de HOY (ver
     // el comentario junto a "sinCambiosDesdeApertura" en actualizarComparacionComisiones). Ninguna
-    // de las dos funciones modifica costo/gananciaValor/comisión más allá de lo ya cargado
+    // de las dos funciones modifica costo/modo/gananciaValor/comisión más allá de lo ya cargado
     // arriba (solo ajustan el campo de % y el estilo del input de comisión), así que tomar el
     // snapshot acá en vez de después es equivalente y evita ese primer cálculo mal comparado.
     valoresPrecioAlAbrirEdicion = {
       costo: parseFloat(document.getElementById('prod-costo').value),
+      modo: document.getElementById('prod-modo-ganancia').value,
       valorGanancia: parseFloat(document.getElementById('prod-valor-ganancia').value),
       comision: comisionGuardada
     };
@@ -3482,31 +3449,24 @@
     const p = productosCache[id];
     if (!p || !p.pub || !p.pub.id) { alert('Este producto todavía no tiene un cálculo guardado.'); return; }
     if (!tasaBCV || !tasaBinance) { alert('No hay tasas de cambio cargadas.'); return; }
-    if (p.pub.precio_efectivo_usd == null || p.pub.precio_ml_usd == null) {
-      alert('Este producto todavía no tiene los dos precios (directo y Mercado Libre) calculados — vuelve a guardarlo en el formulario de producto para generarlos.');
-      return;
-    }
 
     const costo = parseFloat(p.costo_usd);
-    const ganancia = parseFloat(p.pub.ganancia_real_usd ?? 0);
-    const comisionPct = parseFloat(p.pub.comision_ml_pct || 11);
+    const margen = parseFloat(p.pub.ganancia_neta_usd ?? p.pub.ganancia_real_usd ?? 0);
+    const comisionPct = parseFloat(p.pub.comision_ml_pct || 11) / 100;
 
-    // Cambio del 2026-10-01: este desglose antes recalculaba el precio de Mercado Libre A MANO con
-    // su propia copia de la fórmula (duplicando lo que ya hace calcular_precios) — eso es
-    // justo lo que el resto del sistema evita a propósito ("nunca se reinventa la fórmula acá",
-    // ver publicaciones-ml.html). Ahora lee TAL CUAL los dos precios ya guardados — directo
-    // (precio_efectivo_usd) y Mercado Libre (precio_ml_usd) — así este desglose coincide siempre,
-    // por construcción, con lo que ve el cliente en el catálogo y con lo que hay que publicar en
-    // Mercado Libre.
-    const precioDirectoUsd = parseFloat(p.pub.precio_efectivo_usd);
-    const precioDirectoBs = parseFloat(p.pub.precio_bcv_bs);
-    const precioMlUsd = parseFloat(p.pub.precio_ml_usd);
-    const precioMlBs = parseFloat(p.pub.precio_ml_bcv_bs);
-    const precioMlUsdBcv = parseFloat(p.pub.precio_ml_bcv_usd_equiv);
-    const comisionMlUsd = parseFloat(p.pub.comision_ml_usd ?? (precioMlUsd * comisionPct / 100));
-    const comisionMlBsBinance = comisionMlUsd * tasaBinance;
-    const comisionMlBsBcv = comisionMlUsd * tasaBCV;
-    const gananciaNetaUsd = parseFloat(p.pub.ganancia_neta_usd ?? ganancia);
+    // Paso 1: Meta neta en USDT
+    const metaUsdt = costo + margen;
+    // Paso 2: requerimiento en bolívares (compensación de brecha)
+    const baseVes = metaUsdt * tasaBinance;
+    const metaUsdBcv = baseVes / tasaBCV;
+    // Paso 3: absorber la comisión de Mercado Libre
+    const precioPublicarVes = baseVes / (1 - comisionPct);
+    const precioPublicarUsdBcv = precioPublicarVes / tasaBCV;
+    // Paso 4: verificación de desglose
+    const comisionMlVes = precioPublicarVes * comisionPct;
+    const comisionMlUsdBcv = comisionMlVes / tasaBCV;
+    const netoRecibidoVes = precioPublicarVes - comisionMlVes;
+    const usdtFinales = netoRecibidoVes / tasaBinance;
 
     const fmtVes = (n) => n.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const fmtUsd = (n) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -3532,30 +3492,26 @@ DETALLES DEL PRODUCTO
 • Horario de atención: ${p.pub.horario_atencion || '—'}
 
 --------------------------------------------------
-COSTO Y GANANCIA DESEADA
+RESULTADOS DEL CÁLCULO DE PRECIO
 --------------------------------------------------
+📌 PRECIO A PUBLICAR EN MERCADOLIBRE:
+• Precio Final en Bolívares: ${fmtVes(precioPublicarVes)} VES
+• Precio Ref. en Dólares (BCV): $${fmtUsd(precioPublicarUsdBcv)} USD
+
+💰 GANANCIA (precio obtenido − costo del producto):
 • Costo del producto: $${fmtUsd(costo)} USD (${fmtVes(costo * tasaBCV)} VES a tasa BCV)
-• Ganancia deseada: $${fmtUsd(ganancia)} USD — la misma para los dos canales de venta de abajo.
+• Ganancia neta real: $${fmtUsd(usdtFinales - costo)} USD (${fmtVes((usdtFinales - costo) * tasaBCV)} VES a tasa BCV)
 
---------------------------------------------------
-💵 VENTA DIRECTA (efectivo / Zelle / Binance) — lo que ve el cliente en el catálogo:
---------------------------------------------------
-• Precio: $${fmtUsd(precioDirectoUsd)} USD (${fmtVes(precioDirectoBs)} VES)
-• Sin comisión de Mercado Libre — la ganancia queda completa: $${fmtUsd(ganancia)} USD
+📊 DESGLOSE OPERATIVO:
+• Meta Neta Requerida: $${fmtUsd(metaUsdt)} USDT (${fmtVes(baseVes)} VES)
+• Comisión MercadoLibre (${(comisionPct*100).toFixed(0)}%): ${fmtVes(comisionMlVes)} VES ($${fmtUsd(comisionMlUsdBcv)} USD BCV)
+• Brecha Cambiaria Aplicada: Binance ${fmtVes(tasaBinance)} VES vs BCV ${fmtVes(tasaBCV)} VES
 
---------------------------------------------------
-📌 VENTA POR MERCADOLIBRE (comisión ${comisionPct.toFixed(0)}%):
---------------------------------------------------
-• Precio a publicar: ${fmtVes(precioMlBs)} VES ($${fmtUsd(precioMlUsd)} USD / $${fmtUsd(precioMlUsdBcv)} USD Ref. BCV)
-• Comisión que descuenta Mercado Libre: $${fmtUsd(comisionMlUsd)} USD
-   → ${fmtVes(comisionMlBsBinance)} VES (a tasa Binance, lo que ML retiene de la venta)
-   → ${fmtVes(comisionMlBsBcv)} VES (a tasa BCV, para cancelarle a ML si lo llevas a oficial)
-• Brecha cambiaria aplicada: Binance ${fmtVes(tasaBinance)} VES/USD vs BCV ${fmtVes(tasaBCV)} VES/USD
-
-✅ VERIFICACIÓN DE RETORNO (Mercado Libre):
-• Cobras en Mercado Libre: ${fmtVes(precioMlBs)} VES
-• Mercado Libre descuenta su comisión: -${fmtVes(comisionMlBsBinance)} VES
-• Te queda de ganancia neta: $${fmtUsd(gananciaNetaUsd)} USD — igual a la ganancia deseada de arriba.
+✅ VERIFICACIÓN DE RETORNO:
+• Cobras en MercadoLibre: ${fmtVes(precioPublicarVes)} VES
+• MercadoLibre descuenta su comisión: -${fmtVes(comisionMlVes)} VES
+• Te transfieren a tu cuenta: ${fmtVes(netoRecibidoVes)} VES
+• Al comprar USDT en Binance a ${fmtVes(tasaBinance)}: Obtienes exactamente $${fmtUsd(usdtFinales)} USDT
 --------------------------------------------------`;
 
     document.getElementById('modal-desglose').style.display = 'flex';
@@ -4242,9 +4198,6 @@ COSTO Y GANANCIA DESEADA
         precio_efectivo_usd: pub.precio_efectivo_usd ?? null,
         precio_bcv_usd_equiv: pub.precio_bcv_usd_equiv ?? null,
         precio_bcv_bs: pub.precio_bcv_bs ?? null,
-        precio_ml_usd: pub.precio_ml_usd ?? null,
-        precio_ml_bcv_usd_equiv: pub.precio_ml_bcv_usd_equiv ?? null,
-        precio_ml_bcv_bs: pub.precio_ml_bcv_bs ?? null,
         ganancia_real_usd: pub.ganancia_real_usd ?? null,
         comision_ml_usd: pub.comision_ml_usd ?? null,
         ganancia_neta_usd: pub.ganancia_neta_usd ?? null
@@ -4274,45 +4227,27 @@ COSTO Y GANANCIA DESEADA
         if (pct === null) { omitidosSinTramo++; return; }
 
         const comision = p.pub?.comision_ml_pct || 11;
-        // Igual que en el formulario de producto: primero el precio DIRECTO (% sobre el precio
-        // directo, sin comisión), y con la ganancia_deseada_usd que esa llamada confirma, el
-        // precio de MERCADO LIBRE (modo 'neta', con la comisión de ESTE producto) — los dos se
-        // guardan siempre juntos. Nunca se reinventa la fórmula acá.
-        const { data: calculoDir, error: errDir } = await supabase.rpc('calcular_precios', {
+        const { data: calculo, error: errCalc } = await supabase.rpc('calcular_precios', {
           p_costo_usd: parseFloat(p.costo_usd),
           p_modo: 'porcentaje',
           p_valor: pct,
-          p_comision_ml_pct: 0,
-          p_tasa_bcv: tasaBCV,
-          p_tasa_binance: tasaBinance
-        });
-        if (errDir || !calculoDir) return;
-        const dir = calculoDir[0];
-        const { data: calculoMl, error: errMl } = await supabase.rpc('calcular_precios', {
-          p_costo_usd: parseFloat(p.costo_usd),
-          p_modo: 'neta',
-          p_valor: dir.ganancia_deseada_usd,
           p_comision_ml_pct: comision,
           p_tasa_bcv: tasaBCV,
           p_tasa_binance: tasaBinance
         });
-        if (!errMl && calculoMl) {
-          const ml = calculoMl[0];
+        if (!errCalc && calculo) {
+          const c = calculo[0];
           await supabase.from('publicaciones').update({
             modo_ganancia: 'porcentaje',
-            precio_efectivo_usd: dir.precio_efectivo_usd,
-            precio_bcv_usd_equiv: dir.precio_bcv_usd_equiv,
-            precio_bcv_bs: dir.precio_bcv_bs,
-            precio_ml_usd: ml.precio_efectivo_usd,
-            precio_ml_bcv_usd_equiv: ml.precio_bcv_usd_equiv,
-            precio_ml_bcv_bs: ml.precio_bcv_bs
+            precio_efectivo_usd: c.precio_efectivo_usd,
+            precio_bcv_usd_equiv: c.precio_bcv_usd_equiv,
+            precio_bcv_bs: c.precio_bcv_bs
           }).eq('producto_id', p.id);
           if (p.pub?.id) {
             await guardarMargenPublicacion(p.pub.id, {
-              margen_objetivo_pct: pct,
-              ganancia_real_usd: dir.ganancia_deseada_usd,
-              comision_ml_usd: ml.comision_ml_usd,
-              ganancia_neta_usd: ml.ganancia_neta_usd
+              ganancia_real_usd: c.ganancia_deseada_usd,
+              comision_ml_usd: c.comision_ml_usd,
+              ganancia_neta_usd: c.ganancia_neta_usd
             });
           }
           hechos++;
@@ -4675,17 +4610,10 @@ COSTO Y GANANCIA DESEADA
 
   let secuenciaComparacion = 0;
 
-  // Muestra el desglose completo de la operación de LOS DOS precios que se van a guardar siempre
-  // juntos, a partir del mismo $ de ganancia deseada: el precio DIRECTO (efectivo/Zelle/Binance,
-  // sin comisión de ML — no depende del nivel de comisión) y el precio de MERCADO LIBRE (con la
-  // comisión ya cubierta, para que la ganancia neta real sea exactamente la ganancia deseada), uno
-  // por cada tipo de publicación/comisión (Clásica/Premium/Personalizada). Cambio del 2026-10-01:
-  // antes este cuadro comparaba "bruta vs neta" como dos alternativas de las que solo UNA se
-  // guardaba (según un selector "Tipo de ganancia"); ahora ya no existe esa elección — las dos se
-  // calculan y se guardan siempre, así que este cuadro es directamente el desglose final.
   window.actualizarComparacionComisiones = async function(prefix) {
     const cont = document.getElementById('comparacion-comisiones');
     if (!cont) return;
+    const modo = document.getElementById(prefix + '-modo-ganancia').value;
     const costo = parseFloat(document.getElementById(prefix + '-costo').value);
     const valor = parseFloat(document.getElementById(prefix + '-valor-ganancia').value);
 
@@ -4698,112 +4626,75 @@ COSTO Y GANANCIA DESEADA
     const comisionActual = parseFloat(document.getElementById(prefix + '-comision').value);
     const tipoPub = document.getElementById(prefix + '-tipo-publicacion')?.value;
 
-    // Si estamos editando un producto que YA tiene un precio guardado, y ninguno de los 3 valores
-    // que determinan el precio (costo, ganancia, comisión) se tocó desde que se abrió la edición,
-    // los recuadros que coinciden con lo guardado deben mostrar el precio TAL COMO quedó guardado
-    // — no uno recién calculado con la tasa BCV/Binance de HOY. La tasa cambia seguido, así que
-    // recalcular siempre acá hacía parecer que "el precio cambió solo" al simplemente abrir un
-    // producto para editarlo, aunque nada se hubiera tocado. Apenas el usuario cambie de verdad
-    // algo, esto deja de aplicar y todo vuelve a calcularse en vivo con la tasa actual.
+    // Si estamos editando un producto que YA tiene un precio guardado, y ninguno de los 4 valores
+    // que determinan el precio (costo, modo, ganancia, comisión) se tocó desde que se abrió la
+    // edición, el recuadro de la comisión que coincide con la ya guardada debe mostrar el precio
+    // TAL COMO quedó guardado — no uno recién calculado con la tasa BCV/Binance de HOY. La tasa
+    // cambia seguido, así que recalcular siempre acá hacía parecer que "el precio cambió solo" al
+    // simplemente abrir un producto para editarlo, aunque nada se hubiera tocado ni guardado.
+    // Apenas el usuario cambie de verdad algo, esto deja de aplicar y todo vuelve a calcularse en
+    // vivo con la tasa actual (para previsualizar cuál sería el precio nuevo).
     const publicacionPrevia = (prefix === 'prod' && editandoProductoId) ? productosCache[editandoProductoId]?.pub : null;
     const sinCambiosDesdeApertura = !!(publicacionPrevia && publicacionPrevia.precio_efectivo_usd != null && valoresPrecioAlAbrirEdicion &&
       costo === valoresPrecioAlAbrirEdicion.costo &&
+      modo === valoresPrecioAlAbrirEdicion.modo &&
       valor === valoresPrecioAlAbrirEdicion.valorGanancia &&
       comisionActual === valoresPrecioAlAbrirEdicion.comision);
-    const dirGuardado = sinCambiosDesdeApertura ? {
+    const dGuardado = sinCambiosDesdeApertura ? {
       precio_efectivo_usd: publicacionPrevia.precio_efectivo_usd,
       precio_bcv_bs: publicacionPrevia.precio_bcv_bs,
-      precio_bcv_usd_equiv: publicacionPrevia.precio_bcv_usd_equiv
-    } : null;
-    const mlGuardado = sinCambiosDesdeApertura ? {
-      precio_efectivo_usd: publicacionPrevia.precio_ml_usd,
-      precio_bcv_bs: publicacionPrevia.precio_ml_bcv_bs,
-      precio_bcv_usd_equiv: publicacionPrevia.precio_ml_bcv_usd_equiv,
+      precio_bcv_usd_equiv: publicacionPrevia.precio_bcv_usd_equiv,
       comision_ml_usd: publicacionPrevia.comision_ml_usd,
       ganancia_neta_usd: publicacionPrevia.ganancia_neta_usd
     } : null;
 
-    // Niveles de comisión a comparar: Clásica y Premium (valores aproximados publicados por
-    // Mercado Libre Venezuela — el % real exacto depende de la categoría del producto y Mercado
-    // Libre no lo publica de forma pública por rubro; por eso "Personalizada" para poner el %
-    // exacto si lo conoces para tu categoría) + la comisión personalizada si es distinta.
-    const nivelesComision = [{ pct: 11, nombre: 'Clásica' }, { pct: 13, nombre: 'Premium' }];
-    if (!isNaN(comisionActual) && comisionActual !== 11 && comisionActual !== 13) {
-      nivelesComision.push({ pct: comisionActual, nombre: 'Personalizada' });
+    const { data: clasica } = await supabase.rpc('calcular_precios', { p_costo_usd: costo, p_modo: modo, p_valor: valor, p_comision_ml_pct: 11, p_tasa_bcv: tasaBCV, p_tasa_binance: tasaBinance });
+    const { data: premium } = await supabase.rpc('calcular_precios', { p_costo_usd: costo, p_modo: modo, p_valor: valor, p_comision_ml_pct: 15, p_tasa_bcv: tasaBCV, p_tasa_binance: tasaBinance });
+    let personalizada = null;
+    if (!isNaN(comisionActual) && comisionActual !== 11 && comisionActual !== 15) {
+      const { data } = await supabase.rpc('calcular_precios', { p_costo_usd: costo, p_modo: modo, p_valor: valor, p_comision_ml_pct: comisionActual, p_tasa_bcv: tasaBCV, p_tasa_binance: tasaBinance });
+      personalizada = data;
     }
-
-    // El precio DIRECTO no depende de la comisión ML (una sola llamada). El precio de MERCADO
-    // LIBRE sí depende de cada nivel de comisión (hasta 3 llamadas) — todo en paralelo.
-    const [dirResp, ...mlResps] = await Promise.all([
-      supabase.rpc('calcular_precios', { p_costo_usd: costo, p_modo: 'fijo', p_valor: valor, p_comision_ml_pct: 0, p_tasa_bcv: tasaBCV, p_tasa_binance: tasaBinance }),
-      ...nivelesComision.map(niv =>
-        supabase.rpc('calcular_precios', { p_costo_usd: costo, p_modo: 'neta', p_valor: valor, p_comision_ml_pct: niv.pct, p_tasa_bcv: tasaBCV, p_tasa_binance: tasaBinance })
-          .then(({ data }) => ({ pct: niv.pct, data: data ? data[0] : null }))
-      )
-    ]);
 
     // Si mientras esperábamos la respuesta el usuario siguió escribiendo,
     // ya hay una petición más nueva en camino: descartamos esta respuesta vieja.
     if (miSecuencia !== secuenciaComparacion) return;
 
-    const dDirecto = dirResp.data ? dirResp.data[0] : null;
-    const buscarMl = (pct) => mlResps.find(r => r.pct === pct)?.data || null;
-    if (!dDirecto || nivelesComision.some(niv => !buscarMl(niv.pct))) {
-      cont.style.display = 'none';
-      return;
-    }
+    if (!clasica || !premium) { cont.style.display = 'none'; return; }
+    // El recuadro cuya comisión coincide con la ya guardada usa dGuardado (el precio real,
+    // publicado) en vez del resultado recién calculado — ver sinCambiosDesdeApertura arriba.
+    const c = (dGuardado && comisionActual === 11) ? dGuardado : clasica[0];
+    const p = (dGuardado && comisionActual === 15) ? dGuardado : premium[0];
+    const datosPersonalizada = personalizada
+      ? ((dGuardado && comisionActual !== 11 && comisionActual !== 15) ? dGuardado : personalizada[0])
+      : null;
+    const etiquetaGanancia = modo === 'neta' ? `quedarte con $${valor.toFixed(2)} netos` : `ganar $${valor.toFixed(2)} brutos`;
 
-    const filaDirecta = (d, esGuardado) => `
-      <div style="border:1px solid var(--gold); padding:10px 12px;">
-        <div style="font-weight:600; margin-bottom:6px; font-size:12.5px;">Precio directo (efectivo / Zelle / Binance)${esGuardado ? ' ✓ (guardado)' : ' ✓'}</div>
-        <div style="font-size:12.5px; line-height:1.85;">
+    const fila = (nombre, d, comisionPct, activa) => `
+      <div style="flex:1; min-width:260px; border:1px solid ${activa ? 'var(--gold)' : 'var(--line)'}; padding:12px 14px;">
+        <div style="font-weight:600; margin-bottom:8px;">${nombre}${activa ? (sinCambiosDesdeApertura ? ' ✓ (guardado)' : ' ✓') : ''}</div>
+        <div style="font-size:13px; line-height:1.9;">
           <div>Precio en efectivo (cash): <b style="color:var(--gold)">$${parseFloat(d.precio_efectivo_usd).toFixed(2)}</b></div>
-          <div>En bolívares: <b style="color:var(--teal)">Bs ${parseFloat(d.precio_bcv_bs).toLocaleString('es-VE',{maximumFractionDigits:2})}</b></div>
+          <div>Precio a publicar en Bs (BCV): <b style="color:var(--teal)">Bs ${parseFloat(d.precio_bcv_bs).toLocaleString('es-VE',{maximumFractionDigits:2})}</b></div>
           <div>Ref. en $ a tasa BCV: <b style="color:var(--teal)">$${parseFloat(d.precio_bcv_usd_equiv).toFixed(2)}</b></div>
-          <div style="color:var(--muted); margin-top:4px; padding-top:4px; border-top:1px solid var(--line);">Sin comisión de Mercado Libre — esto es lo que paga un cliente directo.</div>
+          <div style="color:var(--muted); margin-top:6px; padding-top:6px; border-top:1px solid var(--line);">Comisión ML (${comisionPct}%, a tasa BCV): <b style="color:var(--rust)">$${parseFloat(d.comision_ml_usd).toFixed(2)}</b></div>
+          <div>Ganancia neta real: <b>$${parseFloat(d.ganancia_neta_usd).toFixed(2)}</b></div>
         </div>
       </div>`;
-
-    const filaMl = (nombre, d, comisionPct, esElegido, esGuardado) => `
-      <div style="border:1px solid ${esElegido ? 'var(--gold)' : 'var(--line)'}; padding:10px 12px;">
-        <div style="font-weight:600; margin-bottom:6px; font-size:12.5px;">${nombre}${esElegido ? (esGuardado ? ' ✓ (guardado)' : ' ✓') : ''}</div>
-        <div style="font-size:12.5px; line-height:1.85;">
-          <div>Precio a publicar en ML: <b style="color:var(--gold)">$${parseFloat(d.precio_efectivo_usd).toFixed(2)}</b></div>
-          <div>En bolívares: <b style="color:var(--teal)">Bs ${parseFloat(d.precio_bcv_bs).toLocaleString('es-VE',{maximumFractionDigits:2})}</b></div>
-          <div>Ref. en $ a tasa BCV: <b style="color:var(--teal)">$${parseFloat(d.precio_bcv_usd_equiv).toFixed(2)}</b></div>
-          <div style="color:var(--muted); margin-top:4px; padding-top:4px; border-top:1px solid var(--line);">Comisión ML (${comisionPct}%): <b style="color:var(--rust)">$${parseFloat(d.comision_ml_usd).toFixed(2)}</b> <span style="color:var(--muted);">(Bs ${(parseFloat(d.comision_ml_usd) * tasaBCV).toLocaleString('es-VE',{maximumFractionDigits:2})} a tasa BCV, para cancelarle a ML)</span></div>
-          <div>Ganancia neta garantizada: <b>$${parseFloat(d.ganancia_neta_usd).toFixed(2)}</b></div>
-        </div>
-      </div>`;
-
-    const cajasMl = nivelesComision.map(niv => {
-      let d = buscarMl(niv.pct);
-      const esElegido = (niv.nombre === 'Personalizada') ? (tipoPub === 'custom') : (tipoPub === String(niv.pct));
-      const esGuardado = !!(mlGuardado && esElegido && comisionActual === niv.pct);
-      if (esGuardado) d = mlGuardado;
-      return filaMl(`${niv.nombre} (${niv.pct}%)`, d, niv.pct, esElegido, esGuardado);
-    }).join('');
 
     cont.style.display = 'block';
     cont.innerHTML = `
-      <div style="font-size:12px; color:var(--muted); margin-bottom:14px;">
-        Con $${valor.toFixed(2)} de ganancia deseada, así quedan los dos precios que se guardan siempre juntos — el directo (uno solo) y el de Mercado Libre (según el tipo de publicación/comisión):
-      </div>
-      <div style="display:flex; gap:24px; flex-wrap:wrap;">
-        <div style="flex:1; min-width:290px;">
-          <div style="font-weight:600; font-size:13px; margin-bottom:10px; color:var(--gold);">Venta directa</div>
-          <div style="display:flex; flex-direction:column; gap:10px;">${filaDirecta(dirGuardado || dDirecto, !!dirGuardado)}</div>
-        </div>
-        <div style="flex:1; min-width:290px;">
-          <div style="font-weight:600; font-size:13px; margin-bottom:10px; color:var(--paper);">Venta por Mercado Libre</div>
-          <div style="display:flex; flex-direction:column; gap:10px;">${cajasMl}</div>
-        </div>
+      <div style="font-size:12px; color:var(--muted); margin-bottom:12px;">Para ${etiquetaGanancia}, según el tipo de publicación:</div>
+      <div style="display:flex; gap:16px; flex-wrap:wrap;">
+        ${fila('Clásica (11%)', c, 11, tipoPub === '11')}
+        ${fila('Premium (15%)', p, 15, tipoPub === '15')}
+        ${datosPersonalizada ? fila(`Personalizada (${comisionActual}%)`, datosPersonalizada, comisionActual, tipoPub === 'custom') : ''}
       </div>
     `;
   };
 
-  // El tipo de publicación solo decide la comisión ML (que afecta el precio de Mercado Libre) —
-  // ya no toca la conversión $↔% de la ganancia deseada, así que solo refresca el desglose.
+  // Mantiene sincronizados los campos de ganancia en $ y en %, en ambas direcciones,
+  // según el tipo elegido (bruta = antes de comisión, neta = después de comisión).
   window.aplicarTipoPublicacion = function(prefix) {
     const tipo = document.getElementById(prefix + '-tipo-publicacion').value;
     const comisionInput = document.getElementById(prefix + '-comision');
@@ -4815,16 +4706,17 @@ COSTO Y GANANCIA DESEADA
       comisionInput.readOnly = false;
       comisionInput.style.opacity = '1';
     }
-    actualizarComparacionComisiones(prefix);
+    sincronizarGanancia(prefix, 'tipo');
   };
 
-  // Mantiene sincronizados los campos de ganancia deseada en $ y en %, en ambas direcciones. El %
-  // siempre es sobre el precio DIRECTO (costo + ganancia, sin comisión ML) — ya no depende de un
-  // "tipo de ganancia" bruta/neta ni de la comisión: el precio de Mercado Libre (con comisión) se
-  // deriva aparte, automáticamente, a partir de este mismo $ de ganancia (ver
-  // actualizarComparacionComisiones y crearProducto).
   window.sincronizarGanancia = function(prefix, origen) {
+    const tipo = document.getElementById(prefix + '-modo-ganancia').value; // 'fijo' | 'neta'
     const costo = parseFloat(document.getElementById(prefix + '-costo').value);
+    const comision = parseFloat(document.getElementById(prefix + '-comision').value) / 100;
+    // CORREGIDO: la comisión de ML se cobra como % del precio efectivo (en USD "reales"),
+    // sin ningún ajuste por la brecha tasaBinance/tasaBCV (esa brecha solo convierte el
+    // precio efectivo a Bs / a USD-equivalente-BCV, no afecta el % de comisión en sí).
+    const k = comision;
     const campoUsd = document.getElementById(prefix + '-valor-ganancia');
     const campoPct = document.getElementById(prefix + '-valor-ganancia-pct');
 
@@ -4833,13 +4725,25 @@ COSTO Y GANANCIA DESEADA
     if (origen === 'pct') {
       const pct = parseFloat(campoPct.value);
       if (isNaN(pct)) return;
-      const precio = costo / (1 - pct / 100);
-      campoUsd.value = (precio - costo).toFixed(2);
+      let precio, monto;
+      if (tipo === 'fijo') {
+        precio = costo / (1 - pct / 100);
+        monto = precio - costo;
+      } else {
+        precio = costo / (1 - k - pct / 100);
+        monto = precio * (1 - k) - costo;
+      }
+      campoUsd.value = monto.toFixed(2);
     } else {
-      // origen === 'usd' o cambió el costo: recalcular % a partir del $
+      // origen === 'usd' o cambió el tipo/costo/comisión: recalcular % a partir del $
       const monto = parseFloat(campoUsd.value);
       if (isNaN(monto)) return;
-      const precio = costo + monto;
+      let precio;
+      if (tipo === 'fijo') {
+        precio = costo + monto;
+      } else {
+        precio = (costo + monto) / (1 - k);
+      }
       const pct = precio > 0 ? (monto / precio) * 100 : 0;
       campoPct.value = pct.toFixed(2);
     }
@@ -4851,6 +4755,7 @@ COSTO Y GANANCIA DESEADA
     const nombre = document.getElementById('prod-nombre').value.trim();
     const categoria = document.getElementById('prod-categoria').value.trim();
     const costo_usd = parseFloat(document.getElementById('prod-costo').value);
+    const modo = document.getElementById('prod-modo-ganancia').value;
     const valorGanancia = parseFloat(document.getElementById('prod-valor-ganancia').value);
     const comision = parseFloat(document.getElementById('prod-comision').value);
     const msg = document.getElementById('msg-producto');
@@ -4902,13 +4807,15 @@ COSTO Y GANANCIA DESEADA
     const hayPrecioPrevio = !!(publicacionPrevia && publicacionPrevia.precio_efectivo_usd != null);
 
     // Preservar el precio: si se está editando un producto que YA tenía precio calculado, solo
-    // se vuelve a pasar por calcular_precios cuando el usuario realmente tocó costo, ganancia o
-    // comisión respecto de lo que estaba cargado al abrir la edición. Antes esto se recalculaba
-    // SIEMPRE al guardar, así que cambiar solo el nombre o la descripción de un producto ya podía
-    // terminar moviéndole el precio (por redondeos del RPC). Ver valoresPrecioAlAbrirEdicion más
-    // arriba.
+    // se vuelve a pasar por calcular_precios cuando el usuario realmente tocó costo, tipo de
+    // ganancia, ganancia o comisión respecto de lo que estaba cargado al abrir la edición. Antes
+    // esto se recalculaba SIEMPRE al guardar, así que cambiar solo el nombre o la descripción de
+    // un producto ya podía terminar moviéndole el precio (por redondeos del RPC, o por defaults
+    // como "modo_ganancia: porcentaje" que el formulario no sabe representar). Ver
+    // valoresPrecioAlAbrirEdicion más arriba.
     const cambioAfectaPrecio = !hayPrecioPrevio || !valoresPrecioAlAbrirEdicion ||
       costo_usd !== valoresPrecioAlAbrirEdicion.costo ||
+      modo !== valoresPrecioAlAbrirEdicion.modo ||
       valorGanancia !== valoresPrecioAlAbrirEdicion.valorGanancia ||
       comision !== valoresPrecioAlAbrirEdicion.comision;
 
@@ -4937,50 +4844,29 @@ COSTO Y GANANCIA DESEADA
     let errCalc = null;
 
     if (cambioAfectaPrecio) {
-      // Dos llamadas a la misma función de cálculo ya guardada en la base de datos — nunca se
-      // reinventa la fórmula acá. Primero el precio DIRECTO (modo 'fijo': costo + ganancia
-      // deseada, sin comisión), y con la ganancia_deseada_usd que esa llamada confirma, el precio
-      // de MERCADO LIBRE (modo 'neta': ya incluye lo necesario para que, después de que ML
-      // descuente su comisión, la ganancia neta real sea exactamente la misma ganancia deseada).
-      // Los dos se guardan siempre juntos — ver actualizarComparacionComisiones más arriba.
-      const { data: calculoDir, error: errDir } = await supabase.rpc('calcular_precios', {
+      // Llamar la función de cálculo de márgenes ya guardada en la base de datos
+      const { data: calculo, error } = await supabase.rpc('calcular_precios', {
         p_costo_usd: costo_usd,
-        p_modo: 'fijo',
+        p_modo: modo,
         p_valor: valorGanancia,
-        p_comision_ml_pct: 0,
+        p_comision_ml_pct: comision,
         p_tasa_bcv: tasaBCV,
         p_tasa_binance: tasaBinance
       });
-      errCalc = errDir;
+      errCalc = error;
       if (!errCalc) {
-        const dir = calculoDir[0];
-        const { data: calculoMl, error: errMl } = await supabase.rpc('calcular_precios', {
-          p_costo_usd: costo_usd,
-          p_modo: 'neta',
-          p_valor: dir.ganancia_deseada_usd,
-          p_comision_ml_pct: comision,
-          p_tasa_bcv: tasaBCV,
-          p_tasa_binance: tasaBinance
-        });
-        errCalc = errMl;
-        if (!errCalc) {
-          const ml = calculoMl[0];
-          const pctActual = parseFloat(document.getElementById('prod-valor-ganancia-pct').value);
-          margenPublicacion = {
-            margen_objetivo_pct: isNaN(pctActual) ? null : pctActual,
-            ganancia_real_usd: dir.ganancia_deseada_usd,
-            comision_ml_usd: ml.comision_ml_usd,
-            ganancia_neta_usd: ml.ganancia_neta_usd
-          };
-          datosPublicacion.modo_ganancia = 'fijo';
-          datosPublicacion.comision_ml_pct = comision;
-          datosPublicacion.precio_efectivo_usd = dir.precio_efectivo_usd;
-          datosPublicacion.precio_bcv_usd_equiv = dir.precio_bcv_usd_equiv;
-          datosPublicacion.precio_bcv_bs = dir.precio_bcv_bs;
-          datosPublicacion.precio_ml_usd = ml.precio_efectivo_usd;
-          datosPublicacion.precio_ml_bcv_usd_equiv = ml.precio_bcv_usd_equiv;
-          datosPublicacion.precio_ml_bcv_bs = ml.precio_bcv_bs;
-        }
+        const c = calculo[0];
+        margenPublicacion = {
+          margen_objetivo_pct: modo === 'porcentaje' ? valorGanancia : null,
+          ganancia_real_usd: c.ganancia_deseada_usd,
+          comision_ml_usd: c.comision_ml_usd,
+          ganancia_neta_usd: c.ganancia_neta_usd
+        };
+        datosPublicacion.modo_ganancia = modo;
+        datosPublicacion.comision_ml_pct = comision;
+        datosPublicacion.precio_efectivo_usd = c.precio_efectivo_usd;
+        datosPublicacion.precio_bcv_usd_equiv = c.precio_bcv_usd_equiv;
+        datosPublicacion.precio_bcv_bs = c.precio_bcv_bs;
       }
     }
 
