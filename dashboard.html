@@ -1974,6 +1974,45 @@
     });
     return p;
   }
+  function actualizarComparacionComisiones(prefix) {
+  const inputCosto = document.getElementById(prefix + '-costo');
+  const inputGanUSD = document.getElementById(prefix + '-valor-ganancia');
+  const inputComision = document.getElementById(prefix + '-comision');
+
+  if (!inputCosto || !inputGanUSD || !inputComision) return;
+
+  const costo = parseFloat(inputCosto.value.replace(',', '.')) || 0;
+  const ganUSD = parseFloat(inputGanUSD.value.replace(',', '.')) || 0;
+  const comisionPct = (parseFloat(inputComision.value.replace(',', '.')) || 0) / 100;
+  const tasaBCV = window.tasaBCV || 1;
+
+  // 1. Precio Directo (Efectivo / Zelle / Binance)
+  const precioDirecto = costo + ganUSD;
+  const precioDirectoBs = precioDirecto * tasaBCV;
+
+  // 2. Precio Mercado Libre (Cubre la comisión del % exacto sobre el precio final)
+  const precioML = comisionPct < 1 ? (precioDirecto / (1 - comisionPct)) : precioDirecto;
+  const comisionMLUSD = precioML * comisionPct;
+  const precioMLBs = precioML * tasaBCV;
+  const comisionMLBs = comisionMLUSD * tasaBCV;
+
+  // Actualización de elementos en el DOM
+  const elDirecto = document.getElementById(prefix + '-precio-directo');
+  const elML = document.getElementById(prefix + '-precio-ml');
+  const elComision = document.getElementById(prefix + '-monto-comision');
+
+  if (elDirecto) {
+    elDirecto.innerText = `$${precioDirecto.toFixed(2)} (Bs ${precioDirectoBs.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`;
+  }
+  
+  if (elML) {
+    elML.innerText = `$${precioML.toFixed(2)} (Bs ${precioMLBs.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`;
+  }
+
+  if (elComision) {
+    elComision.innerText = `$${comisionMLUSD.toFixed(2)} (Bs ${comisionMLBs.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`;
+  }
+}
 
   // Escribe/actualiza el costo de un producto en la tabla protegida (solo lo puede hacer un dueño —
   // para un vendedor, RLS rechaza este upsert). onConflict por producto_id porque es 1:1.
@@ -1999,14 +2038,14 @@
   }
 
   async function cargarProductos() {
-    const TAMANO_BLOQUE = 1000;
+    const TAMANO_BLOQUE = 250;
 
-    // Se piden bloques de 1000 uno tras otro HASTA que un bloque vuelva con menos de 1000 filas
+    // Se piden bloques de 250 uno tras otro HASTA que un bloque vuelva con menos de 250 filas
     // (esa es la señal de que ya no queda nada más). Antes esto se decidía comparando contra el
     // total que devuelve count:'exact' — pero si esa cuenta llega en null (puede pasar por un
     // proxy o extensión del navegador que recorte el header Content-Range de la respuesta), el
-    // total caía de vuelta a "cuántas filas llegaron en el primer bloque" — exactamente 1000 — y
-    // el bucle de páginas siguientes nunca se disparaba, dejando el catálogo cortado en 1000 sin
+    // total caía de vuelta a "cuántas filas llegaron en el primer bloque" — exactamente 250 — y
+    // el bucle de páginas siguientes nunca se disparaba, dejando el catálogo cortado en  sin
     // avisar. Contar cuántas filas llegó CADA bloque, en vez de confiar en un total aparte, no
     // tiene ese punto ciego.
     let todosLosDatos = [];
