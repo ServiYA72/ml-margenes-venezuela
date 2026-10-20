@@ -11,13 +11,18 @@ button.peligro:disabled{opacity:.5;cursor:default}
 .volver{color:var(--muted);font-size:13px;text-decoration:none}.volver:hover{color:var(--paper)}
 #msg-form{font-size:13px;margin-top:12px;min-height:18px}
 .aviso{border:1px solid var(--gold);color:var(--gold);padding:14px 16px;font-size:14px;line-height:1.5}
-</style></head>
+.tabeq{background:0 0;border:0;border-bottom:2px solid transparent;color:var(--muted);padding:10px 16px;font-size:14.5px;cursor:pointer;font-family:inherit}.tabeq.activa{color:var(--paper);border-bottom-color:var(--gold);font-weight:600}.chipp{background:var(--surface-2);border:1px solid var(--line);color:var(--paper);padding:7px 14px;font-size:13px;cursor:pointer;font-family:inherit}.chipp.activo{border-color:var(--gold);color:var(--gold)}.det td{background:var(--surface-2);font-size:13px}.num{font-variant-numeric:tabular-nums;white-space:nowrap}.mut{color:var(--muted)}</style></head>
 <body><header><div class="brand-mark"><img src="logo-nicom.png" alt="Nicom" class="brand-logo"> <span class="brand-titulo">Mi equipo</span></div><div class="who"><a class="volver" href="dashboard.html">← Volver al sistema</a></div></header>
 <main>
 <h1>Mi equipo</h1>
 <div class="subtitulo">Tus empleados entran con su propio usuario. Tú decides qué hace cada uno: el <b>vendedor</b> atiende clientes (cotiza, aparta, vende) y no ve tus costos ni cambia precios; el <b>publicador</b> carga listas, edita productos y publica en Mercado Libre.</div>
 <div id="bloque-aviso" style="display:none" class="panel"><div class="aviso" id="texto-aviso"></div></div>
 <div id="bloque-equipo" style="display:none">
+  <div style="display:flex;gap:6px;border-bottom:1px solid var(--line);margin-bottom:20px">
+    <button class="tabeq activa" id="tb-personas" onclick="cambiarTab('personas')">Personas</button>
+    <button class="tabeq" id="tb-actividad" onclick="cambiarTab('actividad')">Actividad</button>
+  </div>
+<div id="tab-personas">
   <div class="panel">
     <b>Agregar a tu equipo</b>
     <div class="form-grid">
@@ -35,6 +40,23 @@ button.peligro:disabled{opacity:.5;cursor:default}
     <div style="overflow-x:auto;margin-top:12px"><table><thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Desde</th><th></th></tr></thead><tbody id="tbody-equipo"></tbody></table></div>
     <div class="empty" id="vacio" style="display:none;color:var(--muted);padding:14px 4px">Todavía no tienes personas en tu equipo.</div>
   </div>
+</div>
+<div id="tab-actividad" style="display:none">
+  <div class="panel">
+    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+      <button class="chipp activo" data-r="hoy" onclick="elegirRango('hoy')">Hoy</button>
+      <button class="chipp" data-r="semana" onclick="elegirRango('semana')">Esta semana</button>
+      <button class="chipp" data-r="mes" onclick="elegirRango('mes')">Este mes</button>
+      <button class="chipp" data-r="mespasado" onclick="elegirRango('mespasado')">Mes pasado</button>
+      <span style="color:var(--muted);font-size:13px;margin-left:8px">Desde</span><input type="date" id="a-desde" onchange="elegirRango('custom')">
+      <span style="color:var(--muted);font-size:13px">hasta</span><input type="date" id="a-hasta" onchange="elegirRango('custom')">
+    </div>
+    <div id="a-resumen" class="resumen" style="margin:18px 0 6px"></div>
+    <div style="overflow-x:auto"><table><thead><tr><th>Persona</th><th>Último acceso</th><th>Ventas</th><th>Cotizaciones</th><th>Apartados</th><th>Productos cargados</th><th>Eliminó</th><th>Última actividad</th><th></th></tr></thead><tbody id="a-tbody"></tbody></table></div>
+    <div id="a-msg" style="color:var(--muted);padding:14px 4px;font-size:14px"></div>
+    <div class="nota">Cada movimiento queda firmado por quien lo hizo y no se puede cambiar. Las cotizaciones suman solo las hechas en dólares. “Eliminó” cuenta proveedores borrados con todos sus productos. Las personas retiradas del equipo conservan su historial.</div>
+  </div>
+</div>
 </div>
 </main>
 <script type="module">import{createClient}from"https://esm.sh/@supabase/supabase-js@2";!function(){const e=location.hostname,t="nicomsystem.com";if(!(["localhost","127.0.0.1","serviya72.github.io"].includes(e)||e===t||e.endsWith("."+t)))throw document.body.innerHTML='\n      <div style="min-height:100vh; display:flex; align-items:center; justify-content:center; background:#0F1B17; color:#EDE8DE; font-family:\'IBM Plex Sans\',Arial,sans-serif; text-align:center; padding:40px; box-sizing:border-box;">\n        <div style="max-width:440px;">\n          <div style="font-family:\'Fraunces\',serif; font-size:22px; margin-bottom:12px;">Nicom System</div>\n          <div style="color:#8FA69B; line-height:1.6;">Este sistema es una licencia exclusiva de Nicom System y no está autorizado para funcionar en este dominio.</div>\n        </div>\n      </div>',new Error("Dominio no autorizado")}();const SUPABASE_URL="https://tkhzuopapvclmcgxyood.supabase.co",SUPABASE_KEY="sb_publishable_KQB6B6uLIPr-xKdNDc8iEw_7tcWM5gS",supabase=createClient(SUPABASE_URL,SUPABASE_KEY);
@@ -62,6 +84,49 @@ window.crearVendedor=async function(){
   if(!r.ok){m.style.color="var(--rust)";m.textContent=r.error;return}
   m.style.color="var(--teal)";m.textContent="✓ Listo. "+r.vendedor.nombre+" ya puede entrar con "+r.vendedor.email+" y la contraseña que escribiste.";
   mostrarAcceso(r.vendedor.nombre,r.vendedor.email,c.value);n.value="";e.value="";c.value="";await cargar()
+};
+const $=i=>document.getElementById(i);
+function ymd(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
+window.cambiarTab=function(x){["personas","actividad"].forEach(k=>{$("tab-"+k).style.display=k===x?"block":"none";$("tb-"+k).classList.toggle("activa",k===x)});if(x==="actividad"&&!window._actInit){window._actInit=1;elegirRango("hoy")}};
+window.elegirRango=function(r){
+  const h=new Date(),d0=new Date(h.getFullYear(),h.getMonth(),h.getDate());let a,b;
+  if(r==="hoy"){a=b=d0}
+  else if(r==="semana"){const dia=(d0.getDay()+6)%7;a=new Date(d0);a.setDate(d0.getDate()-dia);b=d0}
+  else if(r==="mes"){a=new Date(h.getFullYear(),h.getMonth(),1);b=d0}
+  else if(r==="mespasado"){a=new Date(h.getFullYear(),h.getMonth()-1,1);b=new Date(h.getFullYear(),h.getMonth(),0)}
+  document.querySelectorAll(".chipp").forEach(c=>c.classList.toggle("activo",c.dataset.r===r));
+  if(r!=="custom"){$("a-desde").value=ymd(a);$("a-hasta").value=ymd(b)}
+  if($("a-desde").value&&$("a-hasta").value)cargarActividad()
+};
+const usd=n=>"$"+Number(n||0).toLocaleString("es-VE",{minimumFractionDigits:2,maximumFractionDigits:2});
+const fh=s=>s?new Date(s).toLocaleString("es-VE",{day:"2-digit",month:"short",hour:"2-digit",minute:"2-digit"}):"—";
+const rolTxt={dueño:"Dueño",vendedor:"Vendedor",publicador:"Publicador",retirado:"Retirado"};
+async function cargarActividad(){
+  const d=$("a-desde").value,h=$("a-hasta").value,m=$("a-msg"),tb=$("a-tbody");
+  if(d>h){m.textContent="La fecha “desde” no puede ser después de “hasta”.";return}
+  m.textContent="Cargando…";tb.innerHTML="";
+  const{data,error}=await supabase.rpc("actividad_equipo",{p_desde:d,p_hasta:h});
+  if(error){m.textContent="No se pudo cargar la actividad: "+error.message;return}
+  m.textContent="";
+  const f=data||[];
+  const tot=f.reduce((s,x)=>({v:s.v+x.ventas_n,vu:s.vu+Number(x.ventas_usd),c:s.c+x.cotizaciones_n,p:s.p+x.productos_n}),{v:0,vu:0,c:0,p:0});
+  $("a-resumen").innerHTML='<span><b>'+tot.v+'</b><br>ventas</span><span><b>'+usd(tot.vu)+'</b><br>vendido</span><span><b>'+tot.c+'</b><br>cotizaciones</span><span><b>'+tot.p+'</b><br>productos cargados</span>';
+  tb.innerHTML=f.map(x=>{
+    const sin=!x.ventas_n&&!x.cotizaciones_n&&!x.apartados_n&&!x.productos_n&&!x.eliminaciones_n;
+    const c=(n,s)=>n?'<b>'+n+'</b>'+(s?' <span class="mut">· '+usd(s)+'</span>':""):'<span class="mut">0</span>';
+    return '<tr'+(x.rol==="retirado"?' class="mut"':"")+'><td><b>'+esc(x.nombre)+'</b><br><span class="mut" style="font-size:12px">'+esc(rolTxt[x.rol]||x.rol)+(x.email?" · "+esc(x.email):"")+'</span></td><td class="num">'+fh(x.ultimo_acceso)+'</td><td class="num">'+c(x.ventas_n,x.ventas_usd)+'</td><td class="num">'+c(x.cotizaciones_n,x.cotizado_usd)+'</td><td class="num">'+c(x.apartados_n)+'</td><td class="num">'+c(x.productos_n)+'</td><td class="num">'+(x.eliminaciones_n?'<b style="color:var(--rust)">'+x.eliminaciones_n+'</b>':'<span class="mut">0</span>')+'</td><td class="num">'+(sin?'<span class="mut">Sin actividad</span>':fh(x.ultima_actividad))+'</td><td>'+(sin?"":'<button class="chipp" onclick="verDetalle(\''+x.user_id+'\',this)">Ver movimientos</button>')+'</td></tr>'
+  }).join("");
+  if(!f.length)m.textContent="No hay personas ni actividad en este periodo."
+}
+window.verDetalle=async function(id,btn){
+  const tr=btn.closest("tr"),sig=tr.nextElementSibling;
+  if(sig&&sig.classList.contains("det")){sig.remove();btn.textContent="Ver movimientos";return}
+  btn.disabled=!0;
+  const{data,error}=await supabase.rpc("actividad_detalle",{p_user:id,p_desde:$("a-desde").value,p_hasta:$("a-hasta").value});
+  btn.disabled=!1;
+  const r=document.createElement("tr");r.className="det";
+  r.innerHTML='<td colspan="9">'+(error?"No se pudo cargar: "+esc(error.message):(data||[]).length?'<table style="margin:0">'+data.map(x=>'<tr><td class="num mut" style="width:130px">'+fh(x.fecha)+'</td><td style="width:140px"><b>'+esc(x.tipo)+'</b></td><td>'+esc(x.detalle)+'</td><td class="num" style="text-align:right">'+(Number(x.monto_usd)?usd(x.monto_usd):"")+'</td></tr>').join("")+'</table>'+((data.length>=60)?'<div class="mut" style="padding:6px 12px;font-size:12px">Se muestran los 60 movimientos más recientes del periodo.</div>':""):"Sin movimientos en este periodo.")+'</td>';
+  tr.after(r);btn.textContent="Ocultar"
 };
 window.mostrarAcceso=function(nombre,email,clave){
   const txt="Hola "+nombre+", ya tienes acceso a Nicom.\n\nEnlace: "+location.origin+"/login.html\nCorreo: "+email+"\nContraseña: "+clave+"\n\nAl entrar, cambia tu contraseña en \"Mi clave\" (menú lateral). Si la olvidas, usa \"¿Olvidaste tu contraseña?\" en la pantalla de entrada.";
