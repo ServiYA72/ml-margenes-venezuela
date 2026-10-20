@@ -37,7 +37,7 @@ button.peligro:disabled{opacity:.5;cursor:default}
   </div>
   <div class="panel">
     <b>Tu equipo</b>
-    <div style="overflow-x:auto;margin-top:12px"><table><thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Desde</th><th></th></tr></thead><tbody id="tbody-equipo"></tbody></table></div>
+    <div style="overflow-x:auto;margin-top:12px"><table><thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Puede ver</th><th>Desde</th><th></th></tr></thead><tbody id="tbody-equipo"></tbody></table></div>
     <div class="empty" id="vacio" style="display:none;color:var(--muted);padding:14px 4px">Todavía no tienes personas en tu equipo.</div>
   </div>
 </div>
@@ -68,13 +68,48 @@ async function llamar(cuerpo){
   if(error)return{ok:!1,error:"No se pudo conectar. Intenta de nuevo."};
   return data||{ok:!1,error:"Respuesta vacía."}
 }
+let ASIG={},PROVS=null,CATS=null;
+async function cargarAsig(){
+  ASIG={};
+  const{data}=await supabase.from("asignaciones_equipo").select("user_id,tipo,valor");
+  (data||[]).forEach(a=>{(ASIG[a.user_id]=ASIG[a.user_id]||[]).push(a)})
+}
+function resumenAcceso(id){
+  const a=ASIG[id]||[];if(!a.length)return'<span style="color:var(--teal)">Todo</span>';
+  const p=a.filter(x=>x.tipo==="proveedor").length,c=a.filter(x=>x.tipo==="categoria").length,s=[];
+  if(p)s.push(p+(p===1?" proveedor":" proveedores"));if(c)s.push(c+(c===1?" categoría":" categorías"));
+  return'<span style="color:var(--gold)">'+s.join(" · ")+"</span>"
+}
+window.abrirAsignar=async function(id,btn){
+  const tr=btn.closest("tr"),sig=tr.nextElementSibling;
+  if(sig&&sig.classList.contains("det")){sig.remove();return}
+  btn.disabled=!0;
+  if(!PROVS){const{data}=await supabase.from("proveedores").select("id,nombre").order("nombre");PROVS=data||[]}
+  if(!CATS){const{data}=await supabase.rpc("categorias_del_negocio");CATS=data||[]}
+  btn.disabled=!1;
+  const mias=ASIG[id]||[],tiene=(t,v)=>mias.some(x=>x.tipo===t&&x.valor===String(v));
+  const caja=(t,v,l)=>'<label style="display:flex;gap:8px;align-items:center;padding:4px 0;font-size:13.5px;cursor:pointer"><input type="checkbox" data-t="'+t+'" data-v="'+esc(v)+'"'+(tiene(t,v)?" checked":"")+' style="width:auto"> '+l+"</label>";
+  const r=document.createElement("tr");r.className="det";
+  r.innerHTML='<td colspan="6"><div style="padding:6px 4px"><div style="font-size:13px;color:var(--muted);margin-bottom:10px">Marca lo que esta persona puede ver. <b style="color:var(--paper)">Sin nada marcado ve todo.</b> Si marcas algo, solo verá los productos de esos proveedores o categorías.</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px"><div><b style="font-size:13px">Listas / proveedores</b><div style="max-height:220px;overflow:auto;margin-top:6px">'+(PROVS.map(p=>caja("proveedor",p.id,esc(p.nombre))).join("")||'<span class="mut">No hay proveedores.</span>')+'</div></div><div><b style="font-size:13px">Categorías</b><div style="max-height:220px;overflow:auto;margin-top:6px">'+(CATS.map(c=>caja("categoria",c.categoria,esc(c.categoria)+' <span class="mut">('+c.productos+")</span>")).join("")||'<span class="mut">No hay categorías.</span>')+'</div></div></div><div style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="primario" onclick="guardarAsig(\''+id+'\',this)">Guardar acceso</button><button class="chipp" onclick="this.closest(\'tr\').remove()">Cancelar</button><span class="mut" style="font-size:13px"></span></div></div></td>';
+  tr.after(r)
+};
+window.guardarAsig=async function(id,btn){
+  const fila=btn.closest("tr"),msg=btn.parentElement.querySelector("span");
+  const filas=[...fila.querySelectorAll("input[type=checkbox]:checked")].map(i=>({user_id:id,tipo:i.dataset.t,valor:i.dataset.v}));
+  btn.disabled=!0;msg.textContent="Guardando…";
+  const d=await supabase.from("asignaciones_equipo").delete().eq("user_id",id);
+  if(d.error){btn.disabled=!1;msg.style.color="var(--rust)";msg.textContent="No se pudo guardar: "+d.error.message;return}
+  if(filas.length){const i=await supabase.from("asignaciones_equipo").insert(filas);if(i.error){btn.disabled=!1;msg.style.color="var(--rust)";msg.textContent="No se pudo guardar: "+i.error.message;return}}
+  await cargar()
+};
 async function cargar(){
   const r=await llamar({accion:"listar"});
   if(!r.ok){pantalla(r.error);return}
   document.getElementById("max-vend").textContent=r.maximo;
   const lista=r.vendedores||[],tb=document.getElementById("tbody-equipo");
   document.getElementById("vacio").style.display=lista.length?"none":"block";
-  tb.innerHTML=lista.map(v=>`<tr><td><b>${esc(v.nombre)}</b></td><td>${esc(v.email)}</td><td>${v.rol==="publicador"?"Publicador":"Vendedor"}</td><td>${fmt(v.created_at)}</td><td style="text-align:right"><button class="peligro" onclick="quitarVendedor('${v.id}','${esc(v.nombre).replace(/'/g,"")}',this)">Quitar</button></td></tr>`).join("")
+  await cargarAsig();
+  tb.innerHTML=lista.map(v=>`<tr><td><b>${esc(v.nombre)}</b></td><td>${esc(v.email)}</td><td>${v.rol==="publicador"?"Publicador":"Vendedor"}</td><td>${resumenAcceso(v.id)}<br><button class="chipp" style="margin-top:4px;padding:4px 10px;font-size:12px" onclick="abrirAsignar('${v.id}',this)">Asignar</button></td><td>${fmt(v.created_at)}</td><td style="text-align:right"><button class="peligro" onclick="quitarVendedor('${v.id}','${esc(v.nombre).replace(/'/g,"")}',this)">Quitar</button></td></tr>`).join("")
 }
 window.crearVendedor=async function(){
   const n=document.getElementById("f-nombre"),e=document.getElementById("f-email"),c=document.getElementById("f-clave"),b=document.getElementById("btn-crear"),m=document.getElementById("msg-form");
@@ -129,7 +164,7 @@ window.verDetalle=async function(id,btn){
   tr.after(r);btn.textContent="Ocultar"
 };
 window.mostrarAcceso=function(nombre,email,clave){
-  const txt="Hola "+nombre+", ya tienes acceso a Nicom.\n\nEnlace: "+location.origin+"/login.html\nCorreo: "+email+"\nContraseña: "+clave+"\n\nAl entrar, cambia tu contraseña en \"Mi clave\" (menú lateral). Si la olvidas, usa \"¿Olvidaste tu contraseña?\" en la pantalla de entrada.";
+  const txt="Hola "+nombre+", ya tienes acceso a Nicom.\n\nEnlace: "+location.origin+"/login.html\nCorreo: "+email+"\nContraseña: "+clave+"\n\nAl entrar, cambia tu contraseña en \"Mi clave\" (menú lateral). Si la olvidas, escríbeme y te genero una nueva.";
   window._txtAcceso=txt;
   const box=document.getElementById("tarjeta-acceso");
   box.innerHTML='<div style="font-size:13px;color:var(--muted);margin-bottom:8px">Mensaje listo para enviar. La contraseña solo se muestra ahora; cópiala o envíala antes de salir de esta pantalla.</div><pre style="white-space:pre-wrap;margin:0 0 12px;font-family:inherit;font-size:14px;user-select:all"></pre><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="primario" onclick="copiarAcceso(this)">Copiar</button><button class="primario" style="background:#25D366" onclick="window.open(\'https://wa.me/?text=\'+encodeURIComponent(window._txtAcceso),\'_blank\')">Enviar por WhatsApp</button><button class="primario" style="background:var(--surface);color:var(--paper);border:1px solid var(--line)" onclick="location.href=\'mailto:'+encodeURIComponent(email)+'?subject=\'+encodeURIComponent(\'Tu acceso a Nicom\')+\'&body=\'+encodeURIComponent(window._txtAcceso)">Enviar por correo</button></div>';
