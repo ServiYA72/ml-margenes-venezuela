@@ -1,0 +1,139 @@
+<!doctype html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Nicom — Guía de uso</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#0F1B17;--surface:#16241F;--surface-2:#1D2E27;--line:#2C3F37;--paper:#EDE8DE;--muted:#8FA69B;--gold:#C9A227;--teal:#3FA796;--rust:#C1553B}
+*{box-sizing:border-box}html{scroll-behavior:smooth}body{margin:0;background:var(--ink);color:var(--paper);font-family:'IBM Plex Sans',sans-serif;line-height:1.65}
+header{border-bottom:1px solid var(--line);padding:14px 20px;display:flex;align-items:center;justify-content:space-between;gap:12px;position:sticky;top:0;background:var(--ink);z-index:10}
+.marca{display:flex;align-items:center;gap:10px;font-family:Fraunces,serif;font-size:18px}.marca img{height:38px;width:auto}
+header a.volver{color:var(--gold);text-decoration:none;font-size:14px}
+.wrap{max-width:860px;margin:0 auto;padding:28px 20px 80px}
+h1{font-family:Fraunces,serif;font-weight:400;font-size:30px;margin:0 0 6px}
+h2{font-family:Fraunces,serif;font-weight:400;font-size:23px;margin:0 0 6px;scroll-margin-top:80px}
+.sub{color:var(--muted);margin:0 0 22px}
+nav.indice{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 30px}
+nav.indice a{border:1px solid var(--line);color:var(--paper);text-decoration:none;padding:6px 12px;font-size:13px;background:var(--surface)}
+nav.indice a:hover{border-color:var(--gold);color:var(--gold)}
+section{background:var(--surface);border:1px solid var(--line);padding:22px;margin-bottom:18px}
+.etq{display:inline-block;font-size:11.5px;font-weight:600;padding:2px 10px;border:1px solid;margin-bottom:10px}
+.e-todos{color:var(--teal);border-color:var(--teal)}.e-neg{color:var(--gold);border-color:var(--gold)}.e-dist{color:#d9a0ff;border-color:#d9a0ff}
+ol,ul{padding-left:22px;margin:10px 0}li{margin:5px 0}
+.aviso{border-left:3px solid var(--gold);background:var(--surface-2);padding:10px 14px;margin:14px 0;font-size:14px}
+.aviso.mal{border-color:var(--rust)}
+b{font-weight:600}table{width:100%;border-collapse:collapse;font-size:14px;margin:10px 0}th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--muted);font-weight:500;font-size:12.5px}
+.wa{display:inline-block;background:var(--gold);color:var(--ink);padding:10px 18px;font-weight:600;text-decoration:none;margin-top:8px}
+code{background:var(--surface-2);padding:1px 6px;font-size:13px}
+@media(max-width:600px){h1{font-size:25px}section{padding:16px}}
+</style></head><body>
+<header><div class="marca"><img src="logo-nicom.png" alt="Nicom"> Guía de uso</div><a class="volver" href="dashboard.html">← Volver al sistema</a></header>
+<div class="wrap">
+<h1>Guía de uso de Nicom</h1>
+<p class="sub">Paso a paso y sin vueltas. Cada módulo dice en qué plan está incluido.</p>
+<nav class="indice">
+<a href="#empezar">Empezar en 6 pasos</a><a href="#tasas">Tasas del día</a><a href="#importar">Importar tu lista</a><a href="#productos">Productos y ganancia</a><a href="#planilla">Planilla de Mercado Libre</a><a href="#catalogo">Catálogo web</a><a href="#ventas">Ventas</a><a href="#cotizaciones">Cotizaciones</a><a href="#apartados">Apartados</a><a href="#equipo">Equipo</a><a href="#distribuidor">Instalación</a><a href="#ayuda">Ayuda</a>
+</nav>
+
+<section id="empezar"><span class="etq e-todos">Todos los planes</span>
+<h2>Empezar en 6 pasos</h2>
+<ol>
+<li><b>Crea tu cuenta</b> en la página de registro y confirma tu correo. Tienes 14 días de prueba gratis, sin tarjeta.</li>
+<li><b>Revisa tus datos</b> en el Dashboard, panel “Datos de mi negocio”: nombre, WhatsApp, RIF, dirección y logo. Salen en tu catálogo y en tus PDF.</li>
+<li><b>Registra a tu proveedor</b> (Dashboard → Proveedores).</li>
+<li><b>Importa tu lista de precios</b> (módulo Importar precios).</li>
+<li><b>Define tu ganancia</b> (“Aplicar % de ganancia”). Hasta que lo hagas, los productos quedan en borrador, sin precio.</li>
+<li><b>Comparte tu catálogo</b> o arma tu planilla de Mercado Libre.</li></ol>
+<div class="aviso">Si ya tienes tus productos en un Excel, puedes empezar por el paso 4. En 15 minutos tienes precios calculados.</div></section>
+
+<section id="tasas"><span class="etq e-todos">Todos los planes</span>
+<h2>Tasas del día</h2>
+<p>Arriba de cada pantalla ves el <b>dólar BCV</b>, el <b>dólar Binance</b> y la <b>diferencia</b> entre ambos. Se actualizan solas. Los precios en bolívares se recalculan con la tasa del día, así que no tienes que rehacer tu lista cuando se mueve el dólar.</p>
+<div class="aviso">Tus precios guardados son en dólares. Lo que cambia con la tasa es el monto en Bs.</div></section>
+
+<section id="importar"><span class="etq e-todos">Todos los planes</span>
+<h2>Importar tu lista de precios</h2>
+<p>Menú: <b>Importar precios</b>. Sirve para la lista de tu proveedor o para tu propia lista.</p>
+<ol>
+<li>Elige el proveedor.</li>
+<li>Sube el archivo: Excel (.xlsx), CSV o PDF. El PDF debe tener texto que se pueda seleccionar; los escaneados como foto no funcionan.</li>
+<li>Confirma qué columna es cuál: <b>nombre del producto</b> y <b>costo en USD</b> son obligatorias. Código, marca, categoría, descripción y stock son opcionales.</li>
+<li>Importa. Los productos nuevos se cargan con su costo.</li></ol>
+<div class="aviso">Si una fila dice “no disponible” o no trae precio, no se importa.</div>
+<div class="aviso mal">Después de importar, revisa en el Dashboard el aviso “importes por revisar”. Si un costo viene mal escrito en el archivo (por ejemplo, una coma de más), aquí lo detectas antes de publicar.</div></section>
+
+<section id="productos"><span class="etq e-todos">Todos los planes · hasta 150 productos en Arranque</span>
+<h2>Productos y ganancia</h2>
+<p>Menú: <b>Productos</b> (Dashboard).</p>
+<ul>
+<li><b>Aplicar % de ganancia:</b> pon un solo porcentaje a todos, o uno por tramos según el costo (por ejemplo, 40 % a lo barato y 25 % a lo caro). Puedes aplicarlo a los seleccionados, a un proveedor o a todo el inventario. Si te equivocas, usa <b>Revertir cambios</b>.</li>
+<li>Cada producto muestra: precio <b>directo</b> (sin comisión), precio para <b>Mercado Libre</b> (con la comisión incluida, para que ganes lo mismo) y tu <b>ganancia neta</b>.</li>
+<li><b>Filtros:</b> sin precio, sin fotos, por proveedor, categoría, stock y estado (borrador, listo para publicar, ya publicado).</li>
+<li><b>Producto compuesto:</b> arma un kit con varios productos; al vender el kit se descuentan los componentes.</li>
+<li>Los precios se redondean a ,00 o ,99.</li></ul>
+<div class="aviso">Los costos solo los ven el dueño y el publicador. El vendedor ve precios de venta, nunca tu costo.</div></section>
+
+<section id="planilla"><span class="etq e-todos">Todos los planes</span>
+<h2>Planilla de Mercado Libre</h2>
+<p>Menú: <b>Publicado en ML</b> → pestaña “Publicar algo nuevo”.</p>
+<ol>
+<li>En Mercado Libre: <b>Publicar → Masivamente → tu categoría → Descargar planilla</b>. Es un Excel vacío.</li>
+<li>Aquí eliges los productos de esta tanda. Si falta una foto, súbela en el mismo lugar (puedes pegar una captura con Ctrl+V y quitarle el fondo).</li>
+<li>Sube la planilla vacía. El sistema la llena con título, precio y fotos.</li>
+<li>Descarga el Excel ya completo y súbelo a Mercado Libre.</li></ol>
+<p>La pestaña <b>Seguimiento</b> sirve para controlar lo que ya publicaste.</p>
+<div class="aviso">Cada categoría de Mercado Libre usa su propia planilla. Si publicas en varias categorías, repite el proceso con cada una.</div></section>
+
+<section id="catalogo"><span class="etq e-todos">Todos los planes</span>
+<h2>Catálogo web con pedidos por WhatsApp</h2>
+<p>Menú: <b>Ver catálogo</b>. Es una página pública con tus productos, fotos y precios en dólares y bolívares. Tus clientes arman un carrito y te lo mandan por WhatsApp.</p>
+<ul>
+<li>Solo aparecen los productos que ya tienen precio.</li>
+<li>Comparte el enlace en tu estado, Instagram o grupos.</li>
+<li>En el Dashboard ves los <b>leads</b> (quién pidió qué) y los <b>avisos de restock</b> (clientes que quieren que les avises cuando vuelva algo).</li></ul></section>
+
+<section id="ventas"><span class="etq e-todos">Todos los planes</span>
+<h2>Ventas</h2>
+<p>Menú: <b>Ventas</b>. Registra cada venta con el método de pago real: efectivo en dólares, Zelle, Pago Móvil, transferencia, Binance o el que uses. Eliges producto, cantidad, moneda y monto cobrado. El <b>stock se descuenta solo</b>.</p>
+<p>Los datos del cliente son opcionales; con el nombre basta.</p></section>
+
+<section id="cotizaciones"><span class="etq e-neg">Plan Negocio y Distribuidor</span>
+<h2>Cotizaciones en PDF</h2>
+<p>Menú: <b>Cotizaciones</b>.</p>
+<ol>
+<li>Elige o escribe el cliente.</li>
+<li>Agrega productos del catálogo. Puedes cotizar en dólares efectivo o a tasa BCV.</li>
+<li>Si hace falta, agrega ítems libres (lo que no está en tu catálogo) o mano de obra.</li>
+<li>Genera el PDF con tu logo y compártelo por correo o WhatsApp.</li></ol>
+<div class="aviso">Si el stock de un producto figura en 1, puede ser un valor por defecto de la lista. Confirma la existencia real antes de prometer entrega.</div></section>
+
+<section id="apartados"><span class="etq e-neg">Plan Negocio y Distribuidor</span>
+<h2>Apartados con abono</h2>
+<p>Menú: <b>Ventas</b>, sección “Apartados”. Reserva un producto para un cliente con un abono parcial. El saldo pendiente queda visible hasta que complete el pago.</p>
+<div class="aviso mal">Importante: el apartado <b>todavía no descuenta el stock</b>. Evita ofrecer la última unidad de algo apartado a otro cliente.</div></section>
+
+<section id="equipo"><span class="etq e-neg">Plan Negocio y Distribuidor</span>
+<h2>Equipo: vendedores y publicadores</h2>
+<p>Menú: <b>Equipo</b> (solo el dueño lo ve). Agrega personas con su propio correo y contraseña. Máximo 10.</p>
+<table><tr><th>Rol</th><th>Puede</th><th>No puede</th></tr>
+<tr><td><b>Vendedor</b></td><td>Ver productos con precio de venta, cotizar, registrar ventas y apartados.</td><td>Ver tus costos, cambiar precios o importar listas.</td></tr>
+<tr><td><b>Publicador</b></td><td>Importar listas, editar productos y armar la planilla de Mercado Libre. Ve costos.</td><td>Administrar el equipo, cambiar los datos del negocio.</td></tr>
+<tr><td><b>Dueño</b></td><td>Todo.</td><td>—</td></tr></table>
+<p><b>Si alguien olvida su clave:</b> escríbenos por WhatsApp y te generamos una clave temporal. <b>Para quitar a alguien:</b> botón “Quitar” en la misma pantalla; pierde el acceso al instante y su historial se conserva.</p></section>
+
+<section id="distribuidor"><span class="etq e-dist">Plan Distribuidor</span>
+<h2>Instalación hecha por nosotros</h2>
+<ul>
+<li>Cargamos tu lista de precios inicial y dejamos tu negocio configurado (datos, logo, catálogo).</li>
+<li>Hasta <b>4 actualizaciones de lista al mes</b> hechas por nuestro operador. Tú nos envías el archivo del proveedor y nosotros lo cargamos.</li>
+<li>Soporte prioritario por WhatsApp: respuesta el mismo día hábil.</li></ul>
+<p>Lo que pase de ese alcance se cobra aparte, o lo haces tú con esta guía.</p></section>
+
+<section id="ayuda"><span class="etq e-todos">Todos los planes</span>
+<h2>Ayuda</h2>
+<table><tr><th>Problema</th><th>Qué hacer</th></tr>
+<tr><td>Un producto no sale en el catálogo</td><td>Revisa que tenga precio. Los borradores no se publican.</td></tr>
+<tr><td>Un precio se ve raro o enorme</td><td>Mira “importes por revisar” en el Dashboard; casi siempre es un error de formato en el archivo del proveedor.</td></tr>
+<tr><td>Olvidé mi contraseña</td><td>Escríbenos por WhatsApp y te damos una temporal.</td></tr>
+<tr><td>Dice que mi suscripción no está activa</td><td>Tu prueba o tu mes venció. Escríbenos con tu comprobante de pago y lo activamos.</td></tr>
+<tr><td>Llegué al límite de 150 productos</td><td>Es el tope del plan Arranque. Pasa al plan Negocio para no tener límite.</td></tr></table>
+<p>Soporte: Arranque y Negocio por formulario o correo (respuesta en 48 horas hábiles). Distribuidor por WhatsApp el mismo día hábil.</p>
+<a class="wa" href="https://wa.me/584242342204?text=Hola%2C%20necesito%20ayuda%20con%20Nicom." target="_blank" rel="noopener">Escribir por WhatsApp</a>
+</div></body></html>
