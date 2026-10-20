@@ -64,7 +64,7 @@ window.crearVendedor=async function(){
   mostrarAcceso(r.vendedor.nombre,r.vendedor.email,c.value);n.value="";e.value="";c.value="";await cargar()
 };
 window.mostrarAcceso=function(nombre,email,clave){
-  const txt="Hola "+nombre+", ya tienes acceso a Nicom.\n\nEnlace: https://nicomsystem.com/login.html\nCorreo: "+email+"\nContraseña: "+clave+"\n\nAl entrar, cambia tu contraseña en \"Mi clave\" (menú lateral). Si la olvidas, usa \"¿Olvidaste tu contraseña?\" en la pantalla de entrada.";
+  const txt="Hola "+nombre+", ya tienes acceso a Nicom.\n\nEnlace: "+location.origin+"/login.html\nCorreo: "+email+"\nContraseña: "+clave+"\n\nAl entrar, cambia tu contraseña en \"Mi clave\" (menú lateral). Si la olvidas, usa \"¿Olvidaste tu contraseña?\" en la pantalla de entrada.";
   window._txtAcceso=txt;
   const box=document.getElementById("tarjeta-acceso");
   box.innerHTML='<div style="font-size:13px;color:var(--muted);margin-bottom:8px">Mensaje listo para enviar. La contraseña solo se muestra ahora; cópiala o envíala antes de salir de esta pantalla.</div><pre style="white-space:pre-wrap;margin:0 0 12px;font-family:inherit;font-size:14px;user-select:all"></pre><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="primario" onclick="copiarAcceso(this)">Copiar</button><button class="primario" style="background:#25D366" onclick="window.open(\'https://wa.me/?text=\'+encodeURIComponent(window._txtAcceso),\'_blank\')">Enviar por WhatsApp</button><button class="primario" style="background:var(--surface);color:var(--paper);border:1px solid var(--line)" onclick="location.href=\'mailto:'+encodeURIComponent(email)+'?subject=\'+encodeURIComponent(\'Tu acceso a Nicom\')+\'&body=\'+encodeURIComponent(window._txtAcceso)">Enviar por correo</button></div>';
