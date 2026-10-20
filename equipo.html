@@ -27,7 +27,7 @@ button.peligro:disabled{opacity:.5;cursor:default}
       <div><label for="f-clave">Contraseña (mínimo 8 caracteres)</label><input id="f-clave" type="text" maxlength="72" placeholder="Se la das tú al vendedor" autocomplete="off"></div>
       <div><button class="primario" id="btn-crear" onclick="crearVendedor()">Agregar al equipo</button></div>
     </div>
-    <div id="msg-form"></div>
+    <div id="msg-form"></div><div id="tarjeta-acceso" style="display:none;margin-top:14px;padding:14px 16px;background:var(--surface-2);border:1px solid var(--teal)"></div>
     <div class="nota">Entrégale al vendedor su correo y su contraseña. Entra en nicomsystem.com con esos datos. Puedes agregar hasta <span id="max-vend">10</span> personas.</div>
   </div>
   <div class="panel">
@@ -61,8 +61,16 @@ window.crearVendedor=async function(){
   b.disabled=!1;
   if(!r.ok){m.style.color="var(--rust)";m.textContent=r.error;return}
   m.style.color="var(--teal)";m.textContent="✓ Listo. "+r.vendedor.nombre+" ya puede entrar con "+r.vendedor.email+" y la contraseña que escribiste.";
-  n.value="";e.value="";c.value="";await cargar()
+  mostrarAcceso(r.vendedor.nombre,r.vendedor.email,c.value);n.value="";e.value="";c.value="";await cargar()
 };
+window.mostrarAcceso=function(nombre,email,clave){
+  const txt="Hola "+nombre+", ya tienes acceso a Nicom.\n\nEnlace: https://nicomsystem.com/login.html\nCorreo: "+email+"\nContraseña: "+clave+"\n\nAl entrar, cambia tu contraseña en \"Mi clave\" (menú lateral). Si la olvidas, usa \"¿Olvidaste tu contraseña?\" en la pantalla de entrada.";
+  window._txtAcceso=txt;
+  const box=document.getElementById("tarjeta-acceso");
+  box.innerHTML='<div style="font-size:13px;color:var(--muted);margin-bottom:8px">Mensaje listo para enviar. La contraseña solo se muestra ahora; cópiala o envíala antes de salir de esta pantalla.</div><pre style="white-space:pre-wrap;margin:0 0 12px;font-family:inherit;font-size:14px;user-select:all"></pre><div style="display:flex;gap:8px;flex-wrap:wrap"><button class="primario" onclick="copiarAcceso(this)">Copiar</button><button class="primario" style="background:#25D366" onclick="window.open(\'https://wa.me/?text=\'+encodeURIComponent(window._txtAcceso),\'_blank\')">Enviar por WhatsApp</button><button class="primario" style="background:var(--surface);color:var(--paper);border:1px solid var(--line)" onclick="location.href=\'mailto:'+encodeURIComponent(email)+'?subject=\'+encodeURIComponent(\'Tu acceso a Nicom\')+\'&body=\'+encodeURIComponent(window._txtAcceso)">Enviar por correo</button></div>';
+  box.querySelector("pre").textContent=txt;box.style.display="block"
+};
+window.copiarAcceso=async function(btn){try{await navigator.clipboard.writeText(window._txtAcceso);btn.textContent="✓ Copiado"}catch(e){btn.textContent="Selecciona el texto y copia"}setTimeout(()=>btn.textContent="Copiar",2500)};
 window.quitarVendedor=async function(id,nombre,btn){
   if(!confirm("¿Quitar a "+nombre+"? Ya no podrá entrar al sistema. Lo que hizo antes se conserva."))return;
   btn.disabled=!0;
