@@ -18,10 +18,13 @@ var st=document.createElement("style");st.textContent=
 '.cn-seg{display:grid;grid-template-columns:1fr 1fr;margin:10px 0;border:1px solid var(--line,#2C3F37)}'+
 '.cn-seg button{padding:8px;background:none;border:0;color:var(--muted,#8FA69B);font:500 13px "IBM Plex Sans",system-ui,sans-serif;cursor:pointer}'+
 '.cn-seg button.on{background:var(--paper,#EDE8DE);color:#0F1B17;font-weight:600}'+
-'.cn-o{padding:10px 0;border-top:1px dashed var(--line,#2C3F37);font-size:12.5px;color:var(--muted,#8FA69B);line-height:1.5}'+
-'.cn-o h4{margin:0 0 2px;font-size:12.5px;color:var(--paper,#EDE8DE)}'+
-'.cn-m{font:600 26px "IBM Plex Sans",system-ui,sans-serif;color:var(--teal,#3FA796)}'+
-'.cn-g{color:var(--teal,#3FA796);font-weight:600}.cn-r{color:var(--rust,#C1553B);font-weight:600}'+
+'.cn-o{margin-top:10px;padding:10px 12px;font-size:12.5px;color:var(--muted,#8FA69B);line-height:1.6;border-left:4px solid}'+
+'.cn-o h4{margin:0 0 2px;font-size:12px;letter-spacing:.04em;text-transform:uppercase}'+
+'.cn-dir{border-color:#3FA796;background:rgba(63,167,150,.10)}.cn-dir h4,.cn-dir .cn-m{color:#4FE0C4}'+
+'.cn-mlb{border-color:#E8B923;background:rgba(232,185,35,.10)}.cn-mlb h4,.cn-mlb .cn-m{color:#FFD24A}'+
+'.cn-m{font:700 30px "IBM Plex Sans",system-ui,sans-serif;line-height:1.15}'+
+'.cn-o b{color:var(--paper,#EDE8DE)}'+
+'.cn-g{color:#5DF08A;font-weight:700;font-size:14px}.cn-r{color:#FF6B57;font-weight:700}'+
 '#cn-pie{font-size:11.5px;color:var(--muted,#8FA69B);margin-top:6px}';
 document.head.appendChild(st);
 var btn=document.createElement("button");btn.id="cn-btn";btn.type="button";btn.setAttribute("aria-label","Abrir calculadora de precios");
@@ -30,8 +33,8 @@ var w=document.createElement("div");w.id="cn-win";w.setAttribute("role","dialog"
 w.innerHTML='<div id="cn-h"><b>Calculadora de precios</b><span id="cn-t"></span><button type="button" id="cn-min" aria-label="Minimizar">–</button><button type="button" id="cn-x" aria-label="Cerrar">✕</button></div>'+
 '<div id="cn-b"><div class="cn-f"><div><label for="cn-c">Te costó ($)</label><input id="cn-c" type="number" inputmode="decimal" min="0" step="0.01" value="100"></div><div><label for="cn-p">Quieres ganar (%)</label><input id="cn-p" type="number" inputmode="decimal" min="0" step="0.5" value="30"></div></div>'+
 '<div class="cn-seg"><button type="button" data-c="10" class="on">Clásica 10%</button><button type="button" data-c="12">Premium 12%</button></div>'+
-'<div class="cn-o"><h4>Vendes directo</h4><div class="cn-m" id="cn-d">—</div><div id="cn-dbs">&nbsp;</div><div>Te quedan <span class="cn-g" id="cn-dg">—</span></div></div>'+
-'<div class="cn-o"><h4>Publicas en Mercado Libre</h4><div class="cn-m" id="cn-ml">—</div><div>Cobras <b id="cn-mbs">—</b> (<b id="cn-mbi">—</b> a Binance)</div><div>Comisión de ML: <span class="cn-r" id="cn-mc">—</span></div><div>Te quedan <span class="cn-g" id="cn-mg">—</span></div></div>'+
+'<div class="cn-o cn-dir"><h4>Vendes directo</h4><div class="cn-m" id="cn-d">—</div><div id="cn-dbs">&nbsp;</div><div>Ganas <span class="cn-g" id="cn-dg">—</span></div></div>'+
+'<div class="cn-o cn-mlb"><h4>Publicas en Mercado Libre</h4><div class="cn-m" id="cn-ml">—</div><div>Cobras <b id="cn-mbs">—</b> (<b id="cn-mbi">—</b> a Binance)</div><div>Comisión de ML: <span class="cn-r" id="cn-mc">—</span></div><div>Ganas <span class="cn-g" id="cn-mg">—</span></div></div>'+
 '<div id="cn-pie">Si el precio da ,00 se deja así; si da otros centavos, sube a ,99.</div></div>';
 document.body.appendChild(btn);document.body.appendChild(w);
 function $(i){return document.getElementById(i)}
