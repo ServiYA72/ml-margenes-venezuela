@@ -11,7 +11,7 @@ button.peligro:disabled{opacity:.5;cursor:default}
 .volver{color:var(--muted);font-size:13px;text-decoration:none}.volver:hover{color:var(--paper)}
 #msg-form{font-size:13px;margin-top:12px;min-height:18px}
 .aviso{border:1px solid var(--gold);color:var(--gold);padding:14px 16px;font-size:14px;line-height:1.5}
-.tabeq{background:0 0;border:0;border-bottom:2px solid transparent;color:var(--muted);padding:10px 16px;font-size:14.5px;cursor:pointer;font-family:inherit}.tabeq.activa{color:var(--paper);border-bottom-color:var(--gold);font-weight:600}.chipp{background:var(--surface-2);border:1px solid var(--line);color:var(--paper);padding:7px 14px;font-size:13px;cursor:pointer;font-family:inherit}.chipp.activo{border-color:var(--gold);color:var(--gold)}.det td{background:var(--surface-2);font-size:13px}.num{font-variant-numeric:tabular-nums;white-space:nowrap}.mut{color:var(--muted)}</style></head>
+.tabeq{background:0 0;border:0;border-bottom:2px solid transparent;color:var(--muted);padding:10px 16px;font-size:14.5px;cursor:pointer;font-family:inherit}.tabeq.activa{color:var(--paper);border-bottom-color:var(--gold);font-weight:600}.chipp{background:var(--surface-2);border:1px solid var(--line);color:var(--paper);padding:7px 14px;font-size:13px;cursor:pointer;font-family:inherit}.chipp.activo{border-color:var(--gold);color:var(--gold)}.det td{background:var(--surface-2);font-size:13px}.num{font-variant-numeric:tabular-nums;white-space:nowrap}.mut{color:var(--muted)}</style><script src="tema.js"></script></head>
 <body><header><div class="brand-mark"><img src="logo-nicom.png" alt="Nicom" class="brand-logo"> <span class="brand-titulo">Mi equipo</span></div><div class="who"><a class="volver" href="dashboard.html">← Volver al sistema</a></div></header>
 <main>
 <h1>Mi equipo</h1>
@@ -21,6 +21,7 @@ button.peligro:disabled{opacity:.5;cursor:default}
   <div style="display:flex;gap:6px;border-bottom:1px solid var(--line);margin-bottom:20px">
     <button class="tabeq activa" id="tb-personas" onclick="cambiarTab('personas')">Personas</button>
     <button class="tabeq" id="tb-actividad" onclick="cambiarTab('actividad')">Actividad</button>
+    <button class="tabeq" id="tb-comisiones" onclick="cambiarTab('comisiones')">Comisiones</button>
   </div>
 <div id="tab-personas">
   <div class="panel">
@@ -40,6 +41,27 @@ button.peligro:disabled{opacity:.5;cursor:default}
     <b>Tu equipo</b>
     <div style="overflow-x:auto;margin-top:12px"><table><thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Puede ver</th><th>WhatsApp y enlace</th><th>Desde</th><th></th></tr></thead><tbody id="tbody-equipo"></tbody></table></div>
     <div class="empty" id="vacio" style="display:none;color:var(--muted);padding:14px 4px">Todavía no tienes personas en tu equipo.</div>
+  </div>
+</div>
+<div id="tab-comisiones" style="display:none">
+  <div class="panel">
+    <h3 style="margin:0 0 6px;font-size:16px">Reglas de comisión</h3>
+    <p class="mut" style="margin:0 0 12px;font-size:13px">Se paga un porcentaje de la <b>utilidad</b> (precio de venta menos costo), no del monto vendido. Si la persona llega a su meta de ventas del mes, el porcentaje sube para todo el mes.</p>
+    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px">
+      <div><label>% normal</label><input id="cc-pb" type="number" min="0" max="100" step="0.5"></div>
+      <div><label>% si cumple la meta</label><input id="cc-pm" type="number" min="0" max="100" step="0.5"></div>
+      <div><label>Margen mínimo %</label><input id="cc-mm" type="number" min="0" max="100" step="0.5"></div>
+      <div><label>Meta de ventas al mes ($)</label><input id="cc-meta" type="number" min="0" step="50"></div>
+      <div><label>Base fija al mes ($)</label><input id="cc-base" type="number" min="0" step="5"></div>
+    </div>
+    <label style="display:flex;gap:8px;align-items:center;margin-top:10px"><input id="cc-act" type="checkbox" style="width:auto"> Comisiones activas</label>
+    <div style="margin-top:10px"><button class="primario" id="cc-g">Guardar reglas</button> <span id="cc-m" class="mut" style="font-size:13px"></span></div>
+    <div id="cc-proy" style="margin-top:12px;font-size:13px;line-height:1.6"></div>
+  </div>
+  <div class="panel" style="margin-top:14px">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:10px"><h3 style="margin:0;font-size:16px">Mes:</h3><input id="cm-mes" type="month" style="width:auto"><span id="cm-m" class="mut" style="font-size:13px"></span></div>
+    <div style="overflow-x:auto"><table><thead><tr><th>Persona</th><th>Ventas</th><th>Utilidad</th><th>Avance de meta</th><th>% / Comisión</th><th>Total</th><th>Pagado</th><th>Pendiente</th><th></th></tr></thead><tbody id="cm-body"></tbody></table></div>
+    <p class="mut" style="font-size:12.5px;margin:10px 0 0">Una venta sin costo registrado o con margen bajo el mínimo no comisiona. La comisión se calcula con el costo del producto al momento de la venta.</p>
   </div>
 </div>
 <div id="tab-actividad" style="display:none">
@@ -149,7 +171,49 @@ window.crearVendedor=async function(){
 };
 const $=i=>document.getElementById(i);
 function ymd(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}
-window.cambiarTab=function(x){["personas","actividad"].forEach(k=>{$("tab-"+k).style.display=k===x?"block":"none";$("tb-"+k).classList.toggle("activa",k===x)});if(x==="actividad"&&!window._actInit){window._actInit=1;elegirRango("hoy")}};
+
+let CC=null;
+function mesISO(){const d=new Date(new Date().toLocaleString("en-US",{timeZone:"America/Caracas"}));return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")}
+async function cargarComisiones(){
+  const{data:c}=await supabase.from("comision_config").select("*").maybeSingle();
+  CC=c||{pct_base:25,pct_meta:35,margen_minimo_pct:10,meta_ventas_usd:3000,base_fija_usd:0,activo:true};
+  $("cc-pb").value=CC.pct_base;$("cc-pm").value=CC.pct_meta;$("cc-mm").value=CC.margen_minimo_pct;$("cc-meta").value=CC.meta_ventas_usd;$("cc-base").value=CC.base_fija_usd;$("cc-act").checked=CC.activo;
+  proyeccion();
+  if(!$("cm-mes").value)$("cm-mes").value=mesISO();
+  await cargarCM();
+}
+function proyeccion(){
+  const pm=parseFloat($("cc-pm").value)||0,pb=parseFloat($("cc-pb").value)||0,meta=parseFloat($("cc-meta").value)||0,base=parseFloat($("cc-base").value)||0;
+  const f=(m)=>{const x=m/100*pm/100;return x>0?Math.max(0,Math.ceil((250-base)/x)):0};
+  $("cc-proy").innerHTML="<b>¿Alcanza para $250 al mes?</b> Con la meta de $"+meta.toLocaleString("es-VE")+" y margen de 25%, gana "+("$"+(meta*0.25*pm/100+base).toFixed(0))+". Para llegar a $250 necesita vender unos <b>$"+f(25).toLocaleString("es-VE")+"</b> (margen 25%) o <b>$"+f(20).toLocaleString("es-VE")+"</b> (margen 20%)."
+}
+["cc-pb","cc-pm","cc-meta","cc-base"].forEach(i=>$(i).addEventListener("input",()=>{if(CC)proyeccion()}));
+$("cc-g").onclick=async()=>{const m=$("cc-m");m.style.color="var(--muted)";m.textContent="Guardando…";
+  const{error}=await supabase.rpc("set_comision_config",{p_pct_base:+$("cc-pb").value,p_pct_meta:+$("cc-pm").value,p_margen_min:+$("cc-mm").value,p_meta:+$("cc-meta").value,p_base:+$("cc-base").value,p_activo:$("cc-act").checked});
+  if(error){m.style.color="var(--rust)";m.textContent=error.message;return}m.style.color="var(--teal)";m.textContent="✓ Guardado";await cargarComisiones()};
+$("cm-mes").onchange=()=>cargarCM();
+async function cargarCM(){
+  const m=$("cm-m"),b=$("cm-body");m.textContent="Cargando…";
+  const{data,error}=await supabase.rpc("comisiones_resumen",{p_periodo:$("cm-mes").value+"-01"});
+  if(error){m.style.color="var(--rust)";m.textContent=error.message;return}m.textContent="";
+  window._cm=data||[];
+  if(!data||!data.length){b.innerHTML='<tr><td colspan="9" class="mut">No hay vendedores todavía.</td></tr>';return}
+  const $$=n=>"$"+(+n).toFixed(2);
+  b.innerHTML=data.map(r=>{const av=r.meta_usd>0?Math.min(100,r.ventas_usd/r.meta_usd*100):0;
+    return"<tr><td>"+esc(r.nombre)+(r.sin_costo?'<br><span class="mut" style="font-size:12px;color:var(--rust)">'+r.sin_costo+" venta(s) sin costo</span>":"")+"</td><td>"+$$(r.ventas_usd)+'<br><span class="mut" style="font-size:12px">'+r.ventas_n+" ventas</span></td><td>"+(r.utilidad_usd==null?"—":$$(r.utilidad_usd))+'</td><td><div style="background:var(--line);height:8px;min-width:90px"><div style="background:var(--teal);height:8px;width:'+av.toFixed(0)+'%"></div></div><span class="mut" style="font-size:12px">'+av.toFixed(0)+"% de $"+(+r.meta_usd).toFixed(0)+"</span></td><td>"+r.pct_aplicado+"% → "+$$(r.comision_usd)+(r.base_usd>0?'<br><span class="mut" style="font-size:12px">+ base '+$$(r.base_usd)+"</span>":"")+"</td><td><b>"+$$(r.total_usd)+"</b></td><td>"+$$(r.pagado_usd)+"</td><td>"+$$(r.pendiente_usd)+'</td><td><button class="chipp" style="padding:4px 10px;font-size:12px" onclick="pagarCom(\''+r.user_id+'\')">Registrar pago</button> <button class="chipp" style="padding:4px 10px;font-size:12px" onclick="metaPersona(\''+r.user_id+'\')">Meta</button></td></tr>'}).join("")
+}
+window.pagarCom=async function(id){const r=(window._cm||[]).find(x=>x.user_id===id);if(!r)return;
+  const v=prompt("Monto pagado a "+r.nombre+" en USD (pendiente: $"+(+r.pendiente_usd).toFixed(2)+")",Math.max(0,r.pendiente_usd).toFixed(2));if(v===null)return;
+  const n=parseFloat(v);if(!n){alert("Monto inválido");return}
+  const nota=prompt("Nota (opcional, ej. Zelle, efectivo)")||null;
+  const{error}=await supabase.rpc("registrar_pago_comision",{p_user:id,p_periodo:$("cm-mes").value+"-01",p_monto:n,p_nota:nota});
+  if(error){alert(error.message);return}await cargarCM()};
+window.metaPersona=async function(id){const r=(window._cm||[]).find(x=>x.user_id===id);if(!r)return;
+  const m=prompt("Meta de ventas mensual en USD para "+r.nombre,r.meta_usd);if(m===null)return;
+  const b=prompt("Base fija mensual en USD (0 si no tiene)",r.base_usd);if(b===null)return;
+  const{error}=await supabase.rpc("set_comision_persona",{p_user:id,p_meta:parseFloat(m)||0,p_base:parseFloat(b)||0});
+  if(error){alert(error.message);return}await cargarCM()};
+window.cambiarTab=function(x){["personas","actividad","comisiones"].forEach(k=>{$("tab-"+k).style.display=k===x?"block":"none";$("tb-"+k).classList.toggle("activa",k===x)});if(x==="comisiones")cargarComisiones();if(x==="actividad"&&!window._actInit){window._actInit=1;elegirRango("hoy")}};
 window.elegirRango=function(r){
   const h=new Date(),d0=new Date(h.getFullYear(),h.getMonth(),h.getDate());let a,b;
   if(r==="hoy"){a=b=d0}

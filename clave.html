@@ -14,10 +14,11 @@ label{display:block;font-size:13px;color:var(--muted);margin:14px 0 5px}label:fi
 button{font-family:inherit;cursor:pointer}.ver{background:var(--surface-2);border:1px solid var(--line);color:var(--muted);padding:0 12px;font-size:13px}
 .guardar{margin-top:20px;width:100%;background:var(--gold);color:var(--ink);border:0;padding:12px;font-weight:600;font-size:15px}.guardar:disabled{background:var(--line);color:var(--muted)}
 #msg{margin-top:14px;font-size:14px;min-height:20px}
-</style></head><body>
+</style><script src="tema.js"></script></head><body>
 <header><div class="marca"><img src="logo-nicom.png" alt="Nicom"> Mi cuenta</div><a href="dashboard.html">← Volver al sistema</a></header>
 <main><h1>Mi cuenta</h1><p class="sub" id="quien">Cargando sesión…</p>
 <div class="panel" id="p-wa" style="display:none;margin-bottom:18px"><label for="wa">Mi WhatsApp (los clientes de tu enlace te escriben aquí)</label><div class="fila"><input id="wa" type="text" maxlength="20" placeholder="0412 1234567"><button type="button" class="ver" id="wag">Guardar</button></div><div id="wamsg" style="margin-top:8px;font-size:13px"></div><div id="walink" style="margin-top:10px;display:none"><label>Mi enlace personal del catálogo</label><div class="fila"><input id="wau" type="text" readonly><button type="button" class="ver" id="wac">Copiar</button></div></div></div>
+<div class="panel" id="p-com" style="display:none;margin-bottom:18px"><h2 style="font-size:18px;margin:0 0 10px">Mis comisiones del mes</h2><div id="com-det" style="font-size:14px;line-height:1.7"></div></div>
 <h2 style="font-size:18px;margin:0 0 10px">Cambiar mi contraseña</h2>
 <div class="panel"><form id="f" autocomplete="off">
 <label for="n1">Contraseña nueva (mínimo 8 caracteres)</label><div class="fila"><input id="n1" type="password" autocomplete="new-password"><button type="button" class="ver" id="ver">Ver</button></div>
@@ -37,6 +38,10 @@ if(p.codigo&&p.whatsapp){const{data:t}=await supabase.from("tenants").select("sl
 $("wag").onclick=async()=>{wamsg.style.color="var(--muted)";wamsg.textContent="Guardando…";const{error}=await supabase.rpc("set_mi_whatsapp",{p_whatsapp:$("wa").value});if(error){wamsg.style.color="var(--rust)";wamsg.textContent=error.message;return}wamsg.style.color="var(--teal)";wamsg.textContent="✓ Guardado";await cargarWA()};
 $("wac").onclick=async()=>{try{await navigator.clipboard.writeText($("wau").value);$("wac").textContent="✓"}catch(e){$("wau").select()}setTimeout(()=>$("wac").textContent="Copiar",2000)};
 await cargarWA()}
+{const{data:r}=await supabase.rpc("comisiones_resumen",{p_periodo:null});const x=(r||[]).find(z=>z.user_id===session.user.id);
+if(x){const av=x.meta_usd>0?Math.min(100,x.ventas_usd/x.meta_usd*100):0,f=n=>"$"+(+n).toFixed(2);
+$("p-com").style.display="block";
+$("com-det").innerHTML="Vendido: <b>"+f(x.ventas_usd)+"</b> de tu meta de "+f(x.meta_usd)+'<div style="background:var(--line);height:10px;margin:6px 0"><div style="background:var(--teal);height:10px;width:'+av.toFixed(0)+'%"></div></div>'+(x.ventas_usd<x.meta_usd?"Te faltan <b>"+f(x.meta_usd-x.ventas_usd)+"</b> para subir tu porcentaje a la tarifa de meta.":"¡Meta cumplida! Tu porcentaje subió.")+"<br>Comisión ganada: <b>"+f(x.comision_usd)+"</b>"+(x.base_usd>0?" + base "+f(x.base_usd):"")+" · Pagado: "+f(x.pagado_usd)+" · Por cobrar: <b>"+f(x.pendiente_usd)+"</b>"}}
 
 $("ver").onclick=()=>{const t=$("n1").type==="password"?"text":"password";$("n1").type=t;$("n2").type=t;$("ver").textContent=t==="text"?"Ocultar":"Ver"};
 $("f").onsubmit=async e=>{e.preventDefault();msg.style.color="var(--rust)";
