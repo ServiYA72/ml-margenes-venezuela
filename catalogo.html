@@ -684,7 +684,8 @@ function renderizarGaleria() {
   const img = document.getElementById("md-imagen");
   const miniaturas = document.getElementById("md-miniaturas");
   const total = galeriaActual.length;
-  if (total === 0) { img.innerHTML = iconoCaja; miniaturas.style.display = "none"; miniaturas.innerHTML = ""; return; }
+  if (total === 0) { img.style.display = "none"; img.innerHTML = ""; miniaturas.style.display = "none"; miniaturas.innerHTML = ""; return; }
+  img.style.display = "";
   if (galeriaIndice < 0) galeriaIndice = total - 1;
   if (galeriaIndice >= total) galeriaIndice = 0;
   const actual = galeriaActual[galeriaIndice];
@@ -714,7 +715,7 @@ function tarjetaHtml(p) {
   const agotado = p.stock != null && p.stock <= 0;
   return `
       <div class="tarjeta" onclick="abrirDetalle('${p.id}')">
-        <div class="tp-imagen">${p.imagen_url ? `<img src="${escapeHtml(p.imagen_url)}" alt="${escapeHtml(nombre)}" loading="lazy">` : iconoCaja}</div>
+        ${p.imagen_url ? `<div class="tp-imagen"><img src="${escapeHtml(p.imagen_url)}" alt="${escapeHtml(nombre)}" loading="lazy"></div>` : ""}
         <div class="tp-cuerpo">
           ${p.categoria ? `<div class="tp-categoria">${escapeHtml(p.categoria)}</div>` : ""}
           <div class="tp-nombre desc-clamp" title="${escapeHtml(nombre)}">${escapeHtml(nombre)}</div>
