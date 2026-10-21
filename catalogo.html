@@ -364,6 +364,8 @@ let totalResultados = 0;
 let cargando = false;
 
 const TENANT_SLUG = new URLSearchParams(window.location.search).get("t") || "nicom";
+const VENDEDOR_CODIGO = (new URLSearchParams(window.location.search).get("v") || "").trim().slice(0, 20) || null;
+let VENDEDOR_NOMBRE = "";
 const PRODUCTO_ID_INICIAL = new URLSearchParams(window.location.search).get("producto") || null;
 
 let WHATSAPP_NUMERO = "";
@@ -464,6 +466,23 @@ async function cargarConfigCatalogo() {
     if (data && data.whatsapp_numero) WHATSAPP_NUMERO = String(data.whatsapp_numero).trim();
     if (data && data.nombre_comercial) NOMBRE_COMERCIAL = String(data.nombre_comercial).trim();
     if (data && data.logo_url) LOGO_URL = String(data.logo_url).trim();
+    if (VENDEDOR_CODIGO && !(data && data.suscripcion_activa === false)) {
+      try {
+        const { data: vend } = await supabase.rpc("vendedor_publico", { p_slug: TENANT_SLUG, p_codigo: VENDEDOR_CODIGO });
+        const v = Array.isArray(vend) ? vend[0] : vend;
+        if (v && v.whatsapp) {
+          WHATSAPP_NUMERO = String(v.whatsapp).trim();
+          VENDEDOR_NOMBRE = String(v.nombre || "").trim();
+          const tira = document.createElement("div");
+          tira.className = "aviso-chip";
+          tira.style.cssText = "margin:0 0 14px;display:inline-block";
+          tira.innerHTML = "💬 Te atiende <b></b> por WhatsApp";
+          tira.querySelector("b").textContent = VENDEDOR_NOMBRE || "tu asesor";
+          const h1 = document.querySelector("main h1");
+          if (h1) h1.insertAdjacentElement("beforebegin", tira);
+        }
+      } catch (e) { console.error("No se pudo cargar el vendedor", e); }
+    }
     aplicarMarcaNegocio();
     if (data && data.suscripcion_activa === false) {
       document.body.innerHTML = `
@@ -629,6 +648,7 @@ window.registrarLeadCarrito = function () {
       items: items.map((it) => ({ producto_id: it.id, nombre: it.nombre, cantidad: it.cantidad, precio_efectivo_usd: it.precio_efectivo_usd })),
       total_usd: total,
       mensaje,
+      vendedor_codigo: VENDEDOR_CODIGO,
     },
   }).catch(() => {});
 };
@@ -961,7 +981,10 @@ window.onCambioFiltro = function () { clearTimeout(timerBusqueda); timerBusqueda
 
 window.compartirCatalogo = async function () {
   const base = window.location.href.split("?")[0];
-  const url = TENANT_SLUG !== "nicom" ? `${base}?t=${encodeURIComponent(TENANT_SLUG)}` : base;
+  const qs = new URLSearchParams();
+  if (TENANT_SLUG !== "nicom") qs.set("t", TENANT_SLUG);
+  if (VENDEDOR_CODIGO) qs.set("v", VENDEDOR_CODIGO);
+  const url = qs.toString() ? `${base}?${qs.toString()}` : base;
   if (navigator.share) { try { await navigator.share({ title: "Catálogo " + NOMBRE_COMERCIAL, url }); return; } catch (e) {} }
   try { await navigator.clipboard.writeText(url); alert("Link del catálogo copiado — ya lo puedes compartir con tu cliente."); }
   catch (e) { prompt("Copia el link del catálogo:", url); }
@@ -972,6 +995,7 @@ window.copiarLinkProducto = async function (id) {
   const base = window.location.href.split("?")[0];
   const params = new URLSearchParams();
   if (TENANT_SLUG !== "nicom") params.set("t", TENANT_SLUG);
+  if (VENDEDOR_CODIGO) params.set("v", VENDEDOR_CODIGO);
   params.set("producto", id);
   const url = `${base}?${params.toString()}`;
   const titulo = p ? `${(p.nombre || "").trim()} — Catálogo ${NOMBRE_COMERCIAL}` : `Catálogo ${NOMBRE_COMERCIAL}`;

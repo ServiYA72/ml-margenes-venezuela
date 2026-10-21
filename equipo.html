@@ -29,6 +29,7 @@ button.peligro:disabled{opacity:.5;cursor:default}
       <div><label for="f-nombre">Nombre</label><input id="f-nombre" type="text" maxlength="80" placeholder="Ej: María Pérez" autocomplete="off"></div>
       <div><label for="f-email">Correo</label><input id="f-email" type="email" maxlength="120" placeholder="maria@correo.com" autocomplete="off"></div>
       <div><label for="f-rol">Rol</label><select id="f-rol"><option value="vendedor">Vendedor — atiende clientes</option><option value="publicador">Publicador — carga y publica productos</option></select></div>
+      <div><label for="f-wa">WhatsApp (opcional)</label><input id="f-wa" type="text" maxlength="20" placeholder="0412 1234567" autocomplete="off"></div>
       <div><label for="f-clave">Contraseña (mínimo 8 caracteres)</label><input id="f-clave" type="text" maxlength="72" placeholder="Se la das tú al vendedor" autocomplete="off"></div>
       <div><button class="primario" id="btn-crear" onclick="crearVendedor()">Agregar al equipo</button></div>
     </div>
@@ -37,7 +38,7 @@ button.peligro:disabled{opacity:.5;cursor:default}
   </div>
   <div class="panel">
     <b>Tu equipo</b>
-    <div style="overflow-x:auto;margin-top:12px"><table><thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Puede ver</th><th>Desde</th><th></th></tr></thead><tbody id="tbody-equipo"></tbody></table></div>
+    <div style="overflow-x:auto;margin-top:12px"><table><thead><tr><th>Nombre</th><th>Correo</th><th>Rol</th><th>Puede ver</th><th>WhatsApp y enlace</th><th>Desde</th><th></th></tr></thead><tbody id="tbody-equipo"></tbody></table></div>
     <div class="empty" id="vacio" style="display:none;color:var(--muted);padding:14px 4px">Todavía no tienes personas en tu equipo.</div>
   </div>
 </div>
@@ -90,7 +91,7 @@ window.abrirAsignar=async function(id,btn){
   const mias=ASIG[id]||[],tiene=(t,v)=>mias.some(x=>x.tipo===t&&x.valor===String(v));
   const caja=(t,v,l)=>'<label style="display:flex;gap:8px;align-items:center;padding:4px 0;font-size:13.5px;cursor:pointer"><input type="checkbox" data-t="'+t+'" data-v="'+esc(v)+'"'+(tiene(t,v)?" checked":"")+' style="width:auto"> '+l+"</label>";
   const r=document.createElement("tr");r.className="det";
-  r.innerHTML='<td colspan="6"><div style="padding:6px 4px"><div style="font-size:13px;color:var(--muted);margin-bottom:10px">Marca lo que esta persona puede ver. <b style="color:var(--paper)">Sin nada marcado ve todo.</b> Si marcas algo, solo verá los productos de esos proveedores o categorías.</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px"><div><b style="font-size:13px">Listas / proveedores</b><div style="max-height:220px;overflow:auto;margin-top:6px">'+(PROVS.map(p=>caja("proveedor",p.id,esc(p.nombre))).join("")||'<span class="mut">No hay proveedores.</span>')+'</div></div><div><b style="font-size:13px">Categorías</b><div style="max-height:220px;overflow:auto;margin-top:6px">'+(CATS.map(c=>caja("categoria",c.categoria,esc(c.categoria)+' <span class="mut">('+c.productos+")</span>")).join("")||'<span class="mut">No hay categorías.</span>')+'</div></div></div><div style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="primario" onclick="guardarAsig(\''+id+'\',this)">Guardar acceso</button><button class="chipp" onclick="this.closest(\'tr\').remove()">Cancelar</button><span class="mut" style="font-size:13px"></span></div></div></td>';
+  r.innerHTML='<td colspan="7"><div style="padding:6px 4px"><div style="font-size:13px;color:var(--muted);margin-bottom:10px">Marca lo que esta persona puede ver. <b style="color:var(--paper)">Sin nada marcado ve todo.</b> Si marcas algo, solo verá los productos de esos proveedores o categorías.</div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:18px"><div><b style="font-size:13px">Listas / proveedores</b><div style="max-height:220px;overflow:auto;margin-top:6px">'+(PROVS.map(p=>caja("proveedor",p.id,esc(p.nombre))).join("")||'<span class="mut">No hay proveedores.</span>')+'</div></div><div><b style="font-size:13px">Categorías</b><div style="max-height:220px;overflow:auto;margin-top:6px">'+(CATS.map(c=>caja("categoria",c.categoria,esc(c.categoria)+' <span class="mut">('+c.productos+")</span>")).join("")||'<span class="mut">No hay categorías.</span>')+'</div></div></div><div style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="primario" onclick="guardarAsig(\''+id+'\',this)">Guardar acceso</button><button class="chipp" onclick="this.closest(\'tr\').remove()">Cancelar</button><span class="mut" style="font-size:13px"></span></div></div></td>';
   tr.after(r)
 };
 window.guardarAsig=async function(id,btn){
@@ -102,14 +103,37 @@ window.guardarAsig=async function(id,btn){
   if(filas.length){const i=await supabase.from("asignaciones_equipo").insert(filas);if(i.error){btn.disabled=!1;msg.style.color="var(--rust)";msg.textContent="No se pudo guardar: "+i.error.message;return}}
   await cargar()
 };
+let WA={},SLUG="";
+async function cargarWA(){
+  WA={};
+  const{data}=await supabase.from("profiles").select("id,whatsapp,codigo");(data||[]).forEach(p=>{WA[p.id]=p});
+  if(!SLUG){const{data:{session:s}}=await supabase.auth.getSession();const{data:pm}=await supabase.from("profiles").select("tenant_id").eq("id",s.user.id).maybeSingle();if(pm){const{data:tn}=await supabase.from("tenants").select("slug").eq("id",pm.tenant_id).maybeSingle();SLUG=tn?tn.slug:""}}
+}
+function enlaceCat(id){const p=WA[id];if(!p||!p.codigo||!SLUG)return"";return location.origin+"/catalogo.html?t="+encodeURIComponent(SLUG)+"&v="+encodeURIComponent(p.codigo)}
+function celdaWA(id){
+  const p=WA[id];
+  if(!p||!p.whatsapp)return'<span class="mut">Sin WhatsApp</span><br><button class="chipp" style="margin-top:4px;padding:4px 10px;font-size:12px" onclick="editarWA(\''+id+'\',this)">Agregar</button>';
+  return'<span class="num">+'+esc(p.whatsapp)+'</span><br><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px"><button class="chipp" style="padding:4px 10px;font-size:12px" onclick="copiarEnlace(\''+id+'\',this)">Copiar enlace</button><button class="chipp" style="padding:4px 10px;font-size:12px" onclick="enviarEnlaceWA(\''+id+'\')">Enviarle su enlace</button><button class="chipp" style="padding:4px 10px;font-size:12px" onclick="editarWA(\''+id+'\',this)">Cambiar</button></div>'
+}
+window.copiarEnlace=async function(id,b){const u=enlaceCat(id);try{await navigator.clipboard.writeText(u);b.textContent="✓ Copiado"}catch(e){prompt("Copia el enlace:",u)}setTimeout(()=>b.textContent="Copiar enlace",2200)};
+window.enviarEnlaceWA=function(id){const p=WA[id],u=enlaceCat(id);if(!p||!u)return;window.open("https://wa.me/"+p.whatsapp+"?text="+encodeURIComponent("Hola, este es tu enlace personal del catálogo. Compártelo con tus clientes y sus pedidos te llegarán a tu WhatsApp:\n"+u),"_blank")};
+window.editarWA=function(id,btn){
+  const tr=btn.closest("tr"),sig=tr.nextElementSibling;
+  if(sig&&sig.classList.contains("det")){sig.remove();return}
+  const p=WA[id]||{},r=document.createElement("tr");r.className="det";
+  r.innerHTML='<td colspan="7"><div style="padding:6px 4px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span style="font-size:13px;color:var(--muted)">WhatsApp de esta persona (con código de país, ej. 584121234567, o 0412 1234567):</span><input type="text" maxlength="20" value="'+esc(p.whatsapp||"")+'" style="width:190px"><button class="primario">Guardar</button><button class="chipp" onclick="this.closest(\'tr\').remove()">Cancelar</button><span class="mut" style="font-size:13px"></span></div></td>';
+  tr.after(r);
+  const inp=r.querySelector("input"),gb=r.querySelector(".primario"),m=r.querySelector("span.mut");
+  gb.onclick=async()=>{gb.disabled=!0;m.style.color="var(--muted)";m.textContent="Guardando…";const{error}=await supabase.rpc("set_whatsapp_equipo",{p_user:id,p_whatsapp:inp.value});gb.disabled=!1;if(error){m.style.color="var(--rust)";m.textContent=error.message;return}await cargar()}
+};
 async function cargar(){
   const r=await llamar({accion:"listar"});
   if(!r.ok){pantalla(r.error);return}
   document.getElementById("max-vend").textContent=r.maximo;
   const lista=r.vendedores||[],tb=document.getElementById("tbody-equipo");
   document.getElementById("vacio").style.display=lista.length?"none":"block";
-  await cargarAsig();
-  tb.innerHTML=lista.map(v=>`<tr><td><b>${esc(v.nombre)}</b></td><td>${esc(v.email)}</td><td>${v.rol==="publicador"?"Publicador":"Vendedor"}</td><td>${resumenAcceso(v.id)}<br><button class="chipp" style="margin-top:4px;padding:4px 10px;font-size:12px" onclick="abrirAsignar('${v.id}',this)">Asignar</button></td><td>${fmt(v.created_at)}</td><td style="text-align:right"><button class="peligro" onclick="quitarVendedor('${v.id}','${esc(v.nombre).replace(/'/g,"")}',this)">Quitar</button></td></tr>`).join("")
+  await cargarAsig();await cargarWA();
+  tb.innerHTML=lista.map(v=>`<tr><td><b>${esc(v.nombre)}</b></td><td>${esc(v.email)}</td><td>${v.rol==="publicador"?"Publicador":"Vendedor"}</td><td>${resumenAcceso(v.id)}<br><button class="chipp" style="margin-top:4px;padding:4px 10px;font-size:12px" onclick="abrirAsignar('${v.id}',this)">Asignar</button></td><td>${celdaWA(v.id)}</td><td>${fmt(v.created_at)}</td><td style="text-align:right"><button class="peligro" onclick="quitarVendedor('${v.id}','${esc(v.nombre).replace(/'/g,"")}',this)">Quitar</button></td></tr>`).join("")
 }
 window.crearVendedor=async function(){
   const n=document.getElementById("f-nombre"),e=document.getElementById("f-email"),c=document.getElementById("f-clave"),b=document.getElementById("btn-crear"),m=document.getElementById("msg-form");
@@ -118,7 +142,10 @@ window.crearVendedor=async function(){
   b.disabled=!1;
   if(!r.ok){m.style.color="var(--rust)";m.textContent=r.error;return}
   m.style.color="var(--teal)";m.textContent="✓ Listo. "+r.vendedor.nombre+" ya puede entrar con "+r.vendedor.email+" y la contraseña que escribiste.";
-  mostrarAcceso(r.vendedor.nombre,r.vendedor.email,c.value);n.value="";e.value="";c.value="";await cargar()
+  let nota="";const w=document.getElementById("f-wa").value.trim();
+  if(w){const{error:ew}=await supabase.rpc("set_whatsapp_equipo",{p_user:r.vendedor.id,p_whatsapp:w});if(ew)nota=" (El WhatsApp no se guardó: "+ew.message+")"}
+  if(nota)m.textContent+=nota;
+  mostrarAcceso(r.vendedor.nombre,r.vendedor.email,c.value);n.value="";e.value="";c.value="";document.getElementById("f-wa").value="";await cargar()
 };
 const $=i=>document.getElementById(i);
 function ymd(d){return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")}

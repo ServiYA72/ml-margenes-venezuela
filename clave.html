@@ -1,4 +1,4 @@
-<!doctype html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Nicom — Cambiar mi contraseña</title>
+<!doctype html><html lang="es"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Nicom — Mi cuenta</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root{--ink:#0F1B17;--surface:#16241F;--surface-2:#1D2E27;--line:#2C3F37;--paper:#EDE8DE;--muted:#8FA69B;--gold:#C9A227;--teal:#3FA796;--rust:#C1553B}
@@ -16,7 +16,9 @@ button{font-family:inherit;cursor:pointer}.ver{background:var(--surface-2);borde
 #msg{margin-top:14px;font-size:14px;min-height:20px}
 </style></head><body>
 <header><div class="marca"><img src="logo-nicom.png" alt="Nicom"> Mi cuenta</div><a href="dashboard.html">← Volver al sistema</a></header>
-<main><h1>Cambiar mi contraseña</h1><p class="sub" id="quien">Cargando sesión…</p>
+<main><h1>Mi cuenta</h1><p class="sub" id="quien">Cargando sesión…</p>
+<div class="panel" id="p-wa" style="display:none;margin-bottom:18px"><label for="wa">Mi WhatsApp (los clientes de tu enlace te escriben aquí)</label><div class="fila"><input id="wa" type="text" maxlength="20" placeholder="0412 1234567"><button type="button" class="ver" id="wag">Guardar</button></div><div id="wamsg" style="margin-top:8px;font-size:13px"></div><div id="walink" style="margin-top:10px;display:none"><label>Mi enlace personal del catálogo</label><div class="fila"><input id="wau" type="text" readonly><button type="button" class="ver" id="wac">Copiar</button></div></div></div>
+<h2 style="font-size:18px;margin:0 0 10px">Cambiar mi contraseña</h2>
 <div class="panel"><form id="f" autocomplete="off">
 <label for="n1">Contraseña nueva (mínimo 8 caracteres)</label><div class="fila"><input id="n1" type="password" autocomplete="new-password"><button type="button" class="ver" id="ver">Ver</button></div>
 <label for="n2">Repite la contraseña nueva</label><input id="n2" type="password" autocomplete="new-password">
@@ -28,6 +30,14 @@ const $=i=>document.getElementById(i),msg=$("msg");
 const{data:{session}}=await supabase.auth.getSession();
 if(!session){document.querySelector("main").innerHTML='<h1>Entra primero</h1><p class="sub">Necesitas iniciar sesión, o abrir el enlace que te llegó por correo, para cambiar tu contraseña.</p><a href="login.html" style="color:#C9A227">Ir a iniciar sesión →</a>'}
 else{$("quien").textContent="Cuenta: "+session.user.email;
+{const wamsg=$("wamsg");
+async function cargarWA(){const{data:p}=await supabase.from("profiles").select("rol,whatsapp,codigo,tenant_id").eq("id",session.user.id).maybeSingle();
+if(!p)return;$("p-wa").style.display="block";$("wa").value=p.whatsapp||"";
+if(p.codigo&&p.whatsapp){const{data:t}=await supabase.from("tenants").select("slug").eq("id",p.tenant_id).maybeSingle();if(t){$("wau").value=location.origin+"/catalogo.html?t="+encodeURIComponent(t.slug)+"&v="+encodeURIComponent(p.codigo);$("walink").style.display="block"}}}
+$("wag").onclick=async()=>{wamsg.style.color="var(--muted)";wamsg.textContent="Guardando…";const{error}=await supabase.rpc("set_mi_whatsapp",{p_whatsapp:$("wa").value});if(error){wamsg.style.color="var(--rust)";wamsg.textContent=error.message;return}wamsg.style.color="var(--teal)";wamsg.textContent="✓ Guardado";await cargarWA()};
+$("wac").onclick=async()=>{try{await navigator.clipboard.writeText($("wau").value);$("wac").textContent="✓"}catch(e){$("wau").select()}setTimeout(()=>$("wac").textContent="Copiar",2000)};
+await cargarWA()}
+
 $("ver").onclick=()=>{const t=$("n1").type==="password"?"text":"password";$("n1").type=t;$("n2").type=t;$("ver").textContent=t==="text"?"Ocultar":"Ver"};
 $("f").onsubmit=async e=>{e.preventDefault();msg.style.color="var(--rust)";
 const a=$("n1").value,b=$("n2").value;
