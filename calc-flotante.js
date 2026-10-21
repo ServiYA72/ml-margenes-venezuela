@@ -5,7 +5,7 @@ var URL_="https://tkhzuopapvclmcgxyood.supabase.co",KEY="sb_publishable_KQB6B6uL
 var bcv=null,bin=null,com=10,seq=0,tm=null;
 function ls(k,v){try{if(v===undefined)return localStorage.getItem(k);localStorage.setItem(k,v)}catch(e){return null}}
 var st=document.createElement("style");st.textContent=
-'#cn-btn{position:fixed;right:18px;bottom:18px;z-index:9998;display:flex;align-items:center;gap:8px;padding:11px 16px;background:var(--gold,#C9A227);color:#0F1B17;border:0;font:600 13.5px "IBM Plex Sans",system-ui,sans-serif;cursor:pointer;box-shadow:0 6px 22px rgba(0,0,0,.45);border-radius:999px}'+
+'#cn-btn{position:fixed;right:18px;bottom:78px;z-index:9998;display:flex;align-items:center;gap:8px;padding:11px 16px;background:var(--gold,#C9A227);color:#0F1B17;border:0;font:600 13.5px "IBM Plex Sans",system-ui,sans-serif;cursor:pointer;box-shadow:0 6px 22px rgba(0,0,0,.45);border-radius:999px}'+
 '#cn-win{position:fixed;z-index:9999;width:340px;max-width:calc(100vw - 16px);display:none;background:var(--surface,#16241F);color:var(--paper,#EDE8DE);border:1px solid var(--line,#2C3F37);box-shadow:0 14px 44px rgba(0,0,0,.6);font:14px "IBM Plex Sans",system-ui,sans-serif}'+
 '#cn-win *{box-sizing:border-box}'+
 '#cn-h{display:flex;align-items:center;gap:8px;padding:10px 12px;background:var(--surface-2,#1D2E27);border-bottom:1px solid var(--line,#2C3F37);cursor:move;touch-action:none;user-select:none}'+

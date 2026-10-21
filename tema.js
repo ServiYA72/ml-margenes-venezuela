@@ -16,7 +16,7 @@ var css=
 /* botón del tema */
 '#tema-btn{display:flex;align-items:center;gap:9px;padding:9px 10px;margin-top:10px;background:none;border:1px solid var(--line);color:var(--muted);font:500 13px "IBM Plex Sans",system-ui,sans-serif;cursor:pointer;width:100%;border-radius:2px}'+
 '#tema-btn:hover{color:var(--paper);background:var(--surface-2)}'+
-'#tema-btn.flota{position:fixed;top:12px;right:12px;z-index:9990;width:auto;background:var(--surface);box-shadow:0 4px 14px rgba(0,0,0,.25)}'+
+'#tema-btn.flota{position:fixed;bottom:14px;left:14px;z-index:9990;width:auto;background:var(--surface);box-shadow:0 4px 14px rgba(0,0,0,.25)}'+
 /* paleta clara */
 'html[data-tema="claro"]{--ink:#EEF2F7;--surface:#FFFFFF;--surface-2:#E6EDF5;--line:#BFCCDB;--paper:#0A1A33;--muted:#40536B;--gold:#004AAD;--teal:#007A55;--rust:#B3261E;color-scheme:light}'+
 'html[data-tema="claro"] body{background:var(--ink);color:var(--paper)}'+
@@ -27,6 +27,7 @@ var css=
 'html[data-tema="claro"] th{color:#0A1A33;font-weight:700}'+
 'html[data-tema="claro"] td,html[data-tema="claro"] .num{color:var(--paper)}'+
 'html[data-tema="claro"] input,html[data-tema="claro"] select,html[data-tema="claro"] textarea{background:#fff;color:var(--paper);border-color:#9FB1C6}'+
+'html[data-tema="claro"] .panel-brand{background:linear-gradient(180deg,#D6E3F4 0,#EAF1FA 100%)}'+
 /* calculadora flotante en claro */
 'html[data-tema="claro"] .cn-dir{background:rgba(0,122,85,.10)}html[data-tema="claro"] .cn-dir h4,html[data-tema="claro"] .cn-dir .cn-m{color:#00664A}'+
 'html[data-tema="claro"] .cn-mlb{background:rgba(0,74,173,.09);border-color:#004AAD}html[data-tema="claro"] .cn-mlb h4,html[data-tema="claro"] .cn-mlb .cn-m{color:#003A88}'+
