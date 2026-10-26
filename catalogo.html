@@ -75,14 +75,15 @@ input:focus, select:focus { outline: 0px; border-color: var(--gold); }
 .instructivo-col ol { margin: 0; padding-left: 18px; }
 .instructivo-col li { margin-bottom: 4px; }
 
-.barra-letras { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 22px; align-items: center; }
+.barra-letras { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 22px; align-items: center; }
 .barra-letras-etiqueta { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; margin-right: 6px; }
-.letra-btn { position: relative; background: var(--surface); border: 1px solid var(--line); color: var(--paper); width: 36px; height: 36px; font-family: "IBM Plex Mono", monospace; font-size: 13px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: border-color 0.15s, color 0.15s, background 0.15s; }
+.letra-btn { position: relative; background: var(--surface); border: 1px solid var(--line); color: var(--paper); min-width: 38px; height: 46px; padding: 0 5px; font-family: "IBM Plex Mono", monospace; font-size: 14px; font-weight: 600; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; line-height: 1; transition: border-color 0.15s, color 0.15s, background 0.15s; }
 .letra-btn:hover:not(:disabled) { border-color: var(--gold); color: var(--gold); }
 .letra-btn.activa { background: var(--gold); color: var(--ink); border-color: var(--gold); }
 .letra-btn:disabled { opacity: 0.3; cursor: not-allowed; }
-.letra-contador { position: absolute; top: -6px; right: -6px; background: var(--teal); color: var(--ink); font-size: 9px; font-weight: 700; min-width: 15px; height: 15px; border-radius: 8px; display: flex; align-items: center; justify-content: center; padding: 0px 3px; font-family: "IBM Plex Mono", monospace; }
-.letra-btn.activa .letra-contador { background: var(--ink); color: var(--gold); }
+.letra-contador { font-size: 9.5px; font-weight: 500; color: var(--muted); letter-spacing: 0; font-family: "IBM Plex Mono", monospace; }
+.letra-btn.activa .letra-contador { color: var(--ink); opacity: .75; }
+.letra-btn:disabled .letra-contador { display: none; }
 
 .grid-productos { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
 .tarjeta { background: var(--surface); border: 1px solid var(--line); cursor: pointer; display: flex; flex-direction: column; transition: border-color 0.15s; }
@@ -382,9 +383,7 @@ const NOTA_DELIVERY = "🚚 Delivery disponible — coordinamos la entrega por W
 
 const LETRAS_ALFABETO = ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z","#"];
 let letraAbierta = null;
-let idsPorLetra = {};
 let conteoPorLetra = {};
-let cargandoProductosLetra = false;
 
 function primeraLetraNombre(nombre) {
   const c = String(nombre || "").trim().normalize("NFD").replace(/[̀-ͯ]/g, "").charAt(0);
@@ -752,32 +751,39 @@ function bloqueAvisoRestockHtml() {
 
 /* ───────────────────────────── Barra alfabética (ahora es un acceso rápido opcional) ───────────────────────────── */
 function construirBarraLetras() {
-  document.getElementById("barra-letras").innerHTML = LETRAS_ALFABETO.map((letra) => {
+  document.getElementById("barra-letras").innerHTML = LETRAS_ALFABETO.filter((l) => l !== "#" || conteoPorLetra[l] > 0).map((letra) => {
     const n = conteoPorLetra[letra] || 0;
-    return `<button type="button" class="letra-btn ${letra === letraAbierta ? "activa" : ""}" ${n === 0 ? "disabled" : ""} onclick="toggleLetra('${letra}')" aria-label="Ir a los productos con la letra ${letra}">${letra}${n > 0 ? `<span class="letra-contador">${n > 99 ? "99+" : n}</span>` : ""}</button>`;
+    return `<button type="button" class="letra-btn ${letra === letraAbierta ? "activa" : ""}" ${n === 0 ? "disabled" : ""} onclick="toggleLetra('${letra}')" title="${n} producto${n === 1 ? "" : "s"}" aria-label="Ir a los productos con la letra ${letra} (${n})">${letra}${n > 0 ? `<span class="letra-contador">${n >= 1000 ? (n / 1000).toFixed(1).replace(".", ",") + "k" : n}</span>` : ""}</button>`;
   }).join("");
 }
 
 async function actualizarConteoLetras() {
   const categoria = document.getElementById("filtro-categoria").value;
-  let q = supabase.from("vista_catalogo_publico").select("id, nombre").eq("tenant_slug", TENANT_SLUG);
-  if (categoria) q = q.eq("categoria", categoria);
-  if (catalogoSoloConFotos) q = q.eq("tiene_fotos", true);
-  q = q.order("nombre").range(0, 4999);
-  const { data, error } = await q;
-  idsPorLetra = {}; conteoPorLetra = {};
-  LETRAS_ALFABETO.forEach((l) => { idsPorLetra[l] = []; conteoPorLetra[l] = 0; });
-  if (error) {
-    console.error("No se pudo cargar el índice alfabético del catálogo", error);
+  conteoPorLetra = {};
+  LETRAS_ALFABETO.forEach((l) => { conteoPorLetra[l] = 0; });
+  const { data, error } = await supabase.rpc("catalogo_conteo_letras", { p_tenant: TENANT_SLUG, p_categoria: categoria || null, p_solo_fotos: !!catalogoSoloConFotos });
+  if (!error) {
+    (data || []).forEach((r) => { conteoPorLetra[conteoPorLetra[r.letra] != null ? r.letra : "#"] += r.total; });
   } else {
-    (data || []).forEach((p) => {
-      const l = primeraLetraNombre(p.nombre);
-      const clave = idsPorLetra[l] ? l : "#";
-      idsPorLetra[clave].push(p.id);
-      conteoPorLetra[clave] = (conteoPorLetra[clave] || 0) + 1;
-    });
+    // Respaldo: se leen los nombres por bloques de 1000 (el máximo que entrega la base por consulta).
+    for (let desde = 0; desde < 50000; desde += 1000) {
+      let q = supabase.from("vista_catalogo_publico").select("nombre").eq("tenant_slug", TENANT_SLUG);
+      if (categoria) q = q.eq("categoria", categoria);
+      if (catalogoSoloConFotos) q = q.eq("tiene_fotos", true);
+      const r = await q.order("id").range(desde, desde + 999);
+      if (r.error) { console.error("No se pudo cargar el índice alfabético del catálogo", r.error); break; }
+      (r.data || []).forEach((p) => { const l = primeraLetraNombre(p.nombre); conteoPorLetra[conteoPorLetra[l] != null ? l : "#"]++; });
+      if ((r.data || []).length < 1000) break;
+    }
   }
   construirBarraLetras();
+}
+
+// Filtro por la primera letra del nombre (acepta acentos y espacios al inicio).
+const VARIANTES_LETRA = { A: "aáàäâã", E: "eéèëê", I: "iíìïî", O: "oóòöôõ", U: "uúùüû", N: "nñ" };
+function filtrarPorLetra(q, letra) {
+  if (letra === "#") return q.not("nombre", "imatch", "^\\s*[a-zñáàäâãéèëêíìïîóòöôõúùüû]");
+  return q.filter("nombre", "imatch", `^\\s*[${VARIANTES_LETRA[letra] || letra.toLowerCase()}]`);
 }
 
 /* NUEVO: cerrar una letra ahora vuelve a mostrar el catálogo completo, en vez de dejar la grilla vacía. */
@@ -787,34 +793,12 @@ function cerrarLetra() {
   cargarProductos(true);
 }
 
-async function abrirLetra(letra) {
-  if (cargandoProductosLetra) return;
+function abrirLetra(letra) {
   letraAbierta = letra;
   construirBarraLetras();
-  const grid = document.getElementById("grid-productos");
-  const estadoCarga = document.getElementById("estado-carga");
-  const estadoVacio = document.getElementById("estado-vacio");
-  grid.innerHTML = "";
-  grid.style.display = "grid";
-  estadoVacio.style.display = "none";
-  document.getElementById("paginacion").style.display = "none";
-  document.getElementById("contador-resultados").textContent = "";
-
-  const ids = idsPorLetra[letra] || [];
-  if (ids.length === 0) { estadoVacio.style.display = "block"; return; }
-
-  const idsLimitados = ids.slice(0, 300);
-  cargandoProductosLetra = true;
-  estadoCarga.textContent = "Cargando productos…";
-  estadoCarga.style.display = "block";
-  const { data, error } = await supabase.from("vista_catalogo_publico").select("*").eq("tenant_slug", TENANT_SLUG).in("id", idsLimitados).order("nombre");
-  cargandoProductosLetra = false;
-  if (letraAbierta !== letra) return;
-  estadoCarga.style.display = "none";
-  if (error) { estadoCarga.textContent = "No se pudieron cargar los productos: " + error.message; estadoCarga.style.display = "block"; return; }
-  grid.innerHTML = (data || []).map(tarjetaHtml).join("");
-  const n = (data || []).length;
-  document.getElementById("contador-resultados").textContent = n < ids.length ? `Mostrando ${n} de ${ids.length} productos con "${letra}"` : `${n} producto${n === 1 ? "" : "s"} con "${letra}"`;
+  cargarProductos(true);
+  const barra = document.getElementById("barra-letras");
+  if (barra.getBoundingClientRect().top < 0) barra.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 /* ───────────────────────────── Detalle de producto ───────────────────────────── */
@@ -900,8 +884,10 @@ document.addEventListener("keydown", (e) => {
 window.toggleLetra = function (letra) { letraAbierta === letra ? cerrarLetra() : abrirLetra(letra); };
 
 /* ───────────────────────────── Carga del catálogo (búsqueda / categoría / vista general) ───────────────────────────── */
+let cargaVigente = 0;
 window.cargarProductos = async function (reiniciar) {
-  if (cargando) return;
+  if (cargando && !reiniciar) return;
+  const miCarga = ++cargaVigente;
   cargando = true;
   if (reiniciar) { paginaActual = 0; document.getElementById("grid-productos").innerHTML = ""; }
   const estadoCarga = document.getElementById("estado-carga");
@@ -919,10 +905,12 @@ window.cargarProductos = async function (reiniciar) {
   if (busqueda) q = q.or(`nombre.ilike.%${busqueda}%,sku.ilike.%${busqueda}%`);
   if (categoria) q = q.eq("categoria", categoria);
   if (catalogoSoloConFotos) q = q.eq("tiene_fotos", true);
+  if (letraAbierta && !busqueda) q = filtrarPorLetra(q, letraAbierta);
 
   const desde = TAMANO_PAGINA * paginaActual;
   const hasta = desde + TAMANO_PAGINA - 1;
   const { data, count, error } = await q.range(desde, hasta);
+  if (miCarga !== cargaVigente) return;
   estadoCarga.style.display = "none";
   cargando = false;
   if (error) { estadoCarga.textContent = "No se pudo cargar el catálogo: " + error.message; estadoCarga.style.display = "block"; return; }
@@ -930,7 +918,7 @@ window.cargarProductos = async function (reiniciar) {
   const grid = document.getElementById("grid-productos");
   grid.insertAdjacentHTML("beforeend", (data || []).map(tarjetaHtml).join(""));
   const mostrados = grid.children.length;
-  document.getElementById("contador-resultados").textContent = totalResultados > 0 ? `Mostrando ${mostrados} de ${totalResultados} productos` : "";
+  document.getElementById("contador-resultados").textContent = totalResultados > 0 ? `Mostrando ${mostrados} de ${totalResultados} productos` + (letraAbierta && !busqueda ? ` con "${letraAbierta}"` : "") : "";
   if (mostrados === 0) estadoVacio.style.display = "block";
   const paginacion = document.getElementById("paginacion");
   if (mostrados < totalResultados) {
