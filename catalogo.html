@@ -17,6 +17,14 @@
    ============================================================ */
 :root { --ink: #0F1B17; --surface: #16241F; --surface-2: #1D2E27; --line: #2C3F37; --paper: #EDE8DE; --muted: #8FA69B; --gold: #C9A227; --teal: #3FA796; --rust: #C1553B; }
 * { box-sizing: border-box; }
+.ico { width: 1.1em; height: 1.1em; flex: none; vertical-align: -0.18em; }
+.ico-solo { width: 20px; height: 20px; flex: none; display: block; }
+button .ico, a .ico, .aviso-chip .ico, .instructivo-col-titulo .ico, .tp-bajo-precio .ico, .tp-aviso-hint .ico, .aviso-restock-titulo .ico { margin-right: 2px; }
+.btn-scroll { display: flex; align-items: center; justify-content: center; }
+.md-cerrar .ico-solo, .cf-quitar .ico-solo { width: 22px; height: 22px; }
+.cf-quitar .ico-solo { width: 18px; height: 18px; }
+.instructivo-col-titulo, .tp-bajo-precio, .tp-aviso-hint, .aviso-restock-titulo { display: flex; align-items: center; gap: 6px; }
+.btn-instructivo { display: inline-flex; align-items: center; gap: 7px; }
 html, body { margin: 0; padding: 0; }
 body { background: var(--ink); color: var(--paper); font-family: "IBM Plex Sans", Arial, sans-serif; }
 a { color: inherit; }
@@ -213,7 +221,7 @@ footer#pie-pagina { text-align: center; font-size: 11.5px; color: var(--muted); 
     </div>
   </div>
   <div class="header-acciones">
-    <button class="btn-carrito-header" onclick="abrirCarrito()" aria-label="Ver carrito de interés" title="Carrito de interés">🛒<span class="carrito-badge" id="carrito-badge" style="display:none;">0</span></button>
+    <button class="btn-carrito-header" onclick="abrirCarrito()" aria-label="Ver carrito de interés" title="Carrito de interés"><svg class="ico-solo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg><span class="carrito-badge" id="carrito-badge" style="display:none;">0</span></button>
     <button class="compartir" onclick="compartirCatalogo()">Compartir catálogo</button>
   </div>
 </header>
@@ -223,8 +231,8 @@ footer#pie-pagina { text-align: center; font-size: 11.5px; color: var(--muted); 
   <p class="sub">Escribe lo que buscas arriba, o simplemente mira todo el catálogo. Precios en efectivo ($) o pagando en bolívares — el precio en Bs se actualiza con la tasa del día.</p>
 
   <div class="cinta-avisos">
-    <div class="aviso-chip minimo">🛒 Compra mínima: <b>$100</b></div>
-    <div class="aviso-chip">🚚 Delivery disponible — <b>coordinamos por WhatsApp</b></div>
+    <div class="aviso-chip minimo"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg> Compra mínima: <b>$100</b></div>
+    <div class="aviso-chip"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></svg> Delivery disponible — <b>coordinamos por WhatsApp</b></div>
   </div>
 
   <div class="tira-testimonios" id="tira-testimonios" style="display:none">
@@ -246,23 +254,23 @@ footer#pie-pagina { text-align: center; font-size: 11.5px; color: var(--muted); 
 
   <div class="instructivo-wrap">
     <button type="button" class="btn-instructivo" id="btn-instructivo" onclick="toggleInstructivo()" aria-expanded="false" aria-controls="instructivo-panel">
-      ❓ ¿Cómo comprar aquí? <span class="chevron">▾</span>
+      <svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg> ¿Cómo comprar aquí? <span class="chevron"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></span>
     </button>
     <div id="instructivo-panel">
       <div class="instructivo-col">
-        <div class="instructivo-col-titulo">💻 Desde la computadora</div>
+        <div class="instructivo-col-titulo"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8M12 17v4"/></svg> Desde la computadora</div>
         <ol>
           <li>Escribe el nombre o código en «Buscar», o filtra por categoría.</li>
           <li>Haz clic en un producto para ver fotos, precio y detalles.</li>
-          <li>Agrega al 🛒 carrito de interés o pide directo por 💬 WhatsApp.</li>
+          <li>Agrega al carrito de interés o pide directo por WhatsApp.</li>
         </ol>
       </div>
       <div class="instructivo-col">
-        <div class="instructivo-col-titulo">📱 Desde el teléfono</div>
+        <div class="instructivo-col-titulo"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="20" x="5" y="2" rx="2"/><path d="M12 18h.01"/></svg> Desde el teléfono</div>
         <ol>
           <li>Toca el buscador arriba para escribir lo que necesitas.</li>
           <li>Toca cualquier producto para ver más fotos y los detalles.</li>
-          <li>Usa el botón verde 💬 (abajo a la derecha) para pedir por WhatsApp.</li>
+          <li>Usa el botón verde de WhatsApp (abajo a la derecha) para pedir por WhatsApp.</li>
         </ol>
       </div>
     </div>
@@ -285,7 +293,7 @@ footer#pie-pagina { text-align: center; font-size: 11.5px; color: var(--muted); 
     <div class="md-imagen" id="md-imagen"></div>
     <div class="md-miniaturas" id="md-miniaturas"></div>
     <div class="md-cuerpo">
-      <button class="md-cerrar" onclick="cerrarDetalle()" aria-label="Cerrar">×</button>
+      <button class="md-cerrar" onclick="cerrarDetalle()" aria-label="Cerrar"><svg class="ico-solo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
       <div class="md-categoria" id="md-categoria"></div>
       <div class="md-nombre" id="md-nombre"></div>
       <div class="md-sku" id="md-sku"></div>
@@ -303,15 +311,15 @@ footer#pie-pagina { text-align: center; font-size: 11.5px; color: var(--muted); 
 <div class="modal-fondo" id="modal-carrito-fondo">
   <div class="modal-detalle modal-carrito">
     <div class="md-cuerpo">
-      <button class="md-cerrar" onclick="cerrarCarrito()" aria-label="Cerrar">×</button>
+      <button class="md-cerrar" onclick="cerrarCarrito()" aria-label="Cerrar"><svg class="ico-solo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
       <div class="md-nombre" style="font-size:19px">Tu carrito de interés</div>
       <div class="hint">Agrega los productos que te interesan y envíalos todos juntos en un solo mensaje de WhatsApp. Recuerda: la compra mínima es de $100 y ofrecemos delivery.</div>
-      <div class="estado-vacio" id="carrito-vacio" style="display:none;padding:26px 0;font-size:13px">Todavía no agregaste productos. Haz clic en "🛒 Agregar al carrito" en cualquier producto.</div>
+      <div class="estado-vacio" id="carrito-vacio" style="display:none;padding:26px 0;font-size:13px">Todavía no agregaste productos. Toca «Agregar al carrito» en cualquier producto.</div>
       <div id="carrito-lista" style="margin-top:14px"></div>
       <div id="carrito-minimo"></div>
       <div id="carrito-total" style="margin-top:6px;padding-top:14px;border-top:1px dashed var(--line);font-size:15px;font-weight:600;display:none"></div>
       <div id="carrito-acciones" style="display:flex;gap:10px;margin-top:18px;flex-wrap:wrap">
-        <a class="btn-whatsapp grande" id="btn-enviar-carrito" style="flex:1;min-width:200px" href="#" target="_blank" rel="noopener" onclick="registrarLeadCarrito()">💬 Enviar carrito por WhatsApp</a>
+        <a class="btn-whatsapp grande" id="btn-enviar-carrito" style="flex:1;min-width:200px" href="#" target="_blank" rel="noopener" onclick="registrarLeadCarrito()"><svg class="ico" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.5 14.4c-.3-.1-1.6-.8-1.9-.9-.2-.1-.4-.1-.6.1-.2.2-.6.9-.8 1-.1.2-.3.2-.5.1-1.4-.7-2.3-1.2-3.3-2.8-.2-.3 0-.5.1-.6.1-.1.3-.4.5-.6.1-.2.2-.4.1-.6-.1-.2-.7-1.7-.9-2.2-.2-.5-.4-.4-.6-.4h-.5c-.2 0-.5.1-.7.4-.2.2-.9.9-.9 2.1s.9 2.5 1 2.6c.1.2 1.8 2.8 4.4 3.8 2.1.8 2.5.6 2.9.6.4 0 1.3-.5 1.5-1 .2-.5.2-.9.1-1z"/><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2z" fill="none" stroke="currentColor" stroke-width="1.6"/></svg> Enviar carrito por WhatsApp</a>
         <button type="button" style="padding:12px 16px;font-size:12.5px;background:var(--surface-2);color:var(--paper);border:1px solid var(--line);cursor:pointer" onclick="vaciarCarrito()">Vaciar carrito</button>
       </div>
     </div>
@@ -321,8 +329,8 @@ footer#pie-pagina { text-align: center; font-size: 11.5px; color: var(--muted); 
 <footer id="pie-pagina">Nicom Tech Solutions — catálogo actualizado en tiempo real. Los precios no incluyen envío. Compra mínima $100 · Delivery disponible.</footer>
 
 <div class="btns-scroll">
-  <button class="btn-scroll" id="btn-ir-inicio" title="Ir al inicio de la página" aria-label="Ir al inicio">↑</button>
-  <button class="btn-scroll" id="btn-ir-fin" title="Ir al final de la página" aria-label="Ir al final">↓</button>
+  <button class="btn-scroll" id="btn-ir-inicio" title="Ir al inicio de la página" aria-label="Ir al inicio"><svg class="ico-solo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg></button>
+  <button class="btn-scroll" id="btn-ir-fin" title="Ir al final de la página" aria-label="Ir al final"><svg class="ico-solo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
 </div>
 
 <a class="wa-flotante" id="wa-flotante" href="#" target="_blank" rel="noopener" style="display:none">
@@ -379,7 +387,7 @@ let catalogoSoloConFotos = true;
    de WhatsApp. Cámbialos aquí si el mínimo de compra o el delivery cambian. */
 const COMPRA_MINIMA_USD = 100;
 const DELIVERY_DISPONIBLE = true;
-const NOTA_DELIVERY = "🚚 Delivery disponible — coordinamos la entrega por WhatsApp según tu zona.";
+const NOTA_DELIVERY = "Delivery disponible — coordinamos la entrega por WhatsApp según tu zona.";
 
 const LETRAS_ALFABETO = ["A","B","C","D","E","F","G","H","I","J","K","L","M","N","O","P","Q","R","S","T","U","V","W","X","Y","Z","#"];
 let letraAbierta = null;
@@ -436,6 +444,7 @@ async function cargarTestimonios() {
   }
 }
 
+const ICO = {carrito: `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="21" r="1"/><circle cx="19" cy="21" r="1"/><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"/></svg>`,camion: `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></svg>`,bolsa: `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>`,ayuda: `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>`,monitor: `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8M12 17v4"/></svg>`,telefono: `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="20" x="5" y="2" rx="2"/><path d="M12 18h.01"/></svg>`,enlace: `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>`,campana: `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>`,baja: `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 17l-8.5-8.5-5 5L2 7"/><path d="M16 17h6v-6"/></svg>`,check: `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>`,cerrar: `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>`,arriba: `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg>`,abajo: `<svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg>`, whatsapp: `<svg class="ico" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17.5 14.4c-.3-.1-1.6-.8-1.9-.9-.2-.1-.4-.1-.6.1-.2.2-.6.9-.8 1-.1.2-.3.2-.5.1-1.4-.7-2.3-1.2-3.3-2.8-.2-.3 0-.5.1-.6.1-.1.3-.4.5-.6.1-.2.2-.4.1-.6-.1-.2-.7-1.7-.9-2.2-.2-.5-.4-.4-.6-.4h-.5c-.2 0-.5.1-.7.4-.2.2-.9.9-.9 2.1s.9 2.5 1 2.6c.1.2 1.8 2.8 4.4 3.8 2.1.8 2.5.6 2.9.6.4 0 1.3-.5 1.5-1 .2-.5.2-.9.1-1z"/><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2z" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>`, cerrarSolo: `<svg class="ico-solo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18M6 6l12 12"/></svg>`};
 const iconoCaja = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:var(--muted);">
     <path d="M21 8l-9-5-9 5 9 5 9-5z"></path>
     <path d="M3 8v8l9 5 9-5V8"></path>
@@ -475,7 +484,7 @@ async function cargarConfigCatalogo() {
           const tira = document.createElement("div");
           tira.className = "aviso-chip";
           tira.style.cssText = "margin:0 0 14px;display:inline-block";
-          tira.innerHTML = "💬 Te atiende <b></b> por WhatsApp";
+          tira.innerHTML = ICO.whatsapp + " Te atiende <b></b> por WhatsApp";
           tira.querySelector("b").textContent = VENDEDOR_NOMBRE || "tu asesor";
           const h1 = document.querySelector("main h1");
           if (h1) h1.insertAdjacentElement("beforebegin", tira);
@@ -555,7 +564,7 @@ function filaCarritoHtml(item) {
           <span>${item.cantidad}</span>
           <button onclick="cambiarCantidadCarrito('${item.id}', 1)" aria-label="Sumar cantidad">+</button>
         </div>
-        <button class="cf-quitar" onclick="quitarDelCarrito('${item.id}')" aria-label="Quitar del carrito">×</button>
+        <button class="cf-quitar" onclick="quitarDelCarrito('${item.id}')" aria-label="Quitar del carrito">${ICO.cerrarSolo}</button>
       </div>
     `;
 }
@@ -568,7 +577,7 @@ function bloqueMinimoHtml(total) {
   return `
     <div class="aviso-minimo ${cumplido ? "ok" : ""}">
       <div class="aviso-minimo-fila">
-        <span>${cumplido ? "✓ Alcanzaste la compra mínima" : `Compra mínima: ${fmtUsd(COMPRA_MINIMA_USD)}`}</span>
+        <span>${cumplido ? ICO.check + " Alcanzaste la compra mínima" : `Compra mínima: ${fmtUsd(COMPRA_MINIMA_USD)}`}</span>
         <span>${cumplido ? fmtUsd(total) : `Te faltan ${fmtUsd(falta)}`}</span>
       </div>
       <div class="aviso-minimo-barra"><div class="aviso-minimo-relleno" style="width:${pct}%"></div></div>
@@ -611,7 +620,7 @@ function renderizarCarrito() {
     });
     msg += `\n\nTotal estimado: ${fmtUsd(total)}`;
     if (total < COMPRA_MINIMA_USD) {
-      msg += `\n\n⚠️ Nota: la compra mínima es de ${fmtUsd(COMPRA_MINIMA_USD)}. Me faltan ${fmtUsd(COMPRA_MINIMA_USD - total)}, ¿puedes ayudarme a completar el pedido?`;
+      msg += `\n\nNota: la compra mínima es de ${fmtUsd(COMPRA_MINIMA_USD)}. Me faltan ${fmtUsd(COMPRA_MINIMA_USD - total)}, ¿puedes ayudarme a completar el pedido?`;
     }
     if (DELIVERY_DISPONIBLE) msg += `\n\n${NOTA_DELIVERY}`;
     btnEnviar.href = `https://wa.me/${WHATSAPP_NUMERO}?text=${encodeURIComponent(msg)}`;
@@ -631,7 +640,7 @@ function actualizarInterfazCarrito() {
     const id = btn.dataset.id;
     const activo = !!carrito[id];
     btn.classList.toggle("activo", activo);
-    btn.textContent = activo ? "✓ En tu carrito" : "🛒 Agregar al carrito";
+    btn.innerHTML = activo ? ICO.check + " En tu carrito" : ICO.carrito + " Agregar al carrito";
   });
   if (document.getElementById("modal-carrito-fondo").classList.contains("visible")) renderizarCarrito();
 }
@@ -719,16 +728,16 @@ function tarjetaHtml(p) {
           ${p.categoria ? `<div class="tp-categoria">${escapeHtml(p.categoria)}</div>` : ""}
           <div class="tp-nombre desc-clamp" title="${escapeHtml(nombre)}">${escapeHtml(nombre)}</div>
           ${p.sku ? `<div class="tp-sku">${escapeHtml(p.sku)}</div>` : ""}
-          ${p.bajo_de_precio ? `<div class="tp-bajo-precio">🔥 Bajó de precio <span class="tp-precio-antes">${fmtUsd(p.precio_anterior_usd)}</span></div>` : ""}
+          ${p.bajo_de_precio ? `<div class="tp-bajo-precio">${ICO.baja} Bajó de precio <span class="tp-precio-antes">${fmtUsd(p.precio_anterior_usd)}</span></div>` : ""}
           <div class="tp-precios">
             <div class="tp-precio-usd">${fmtUsd(p.precio_efectivo_usd)} <span style="font-size:10px; color:var(--muted); font-weight:400;">efectivo</span></div>
             <div class="tp-precio-bs">${fmtBs(p.precio_bs)} pagando en bolívares</div>
           </div>
           ${p.stock != null ? `<div class="tp-stock ${agotado ? "agotado" : "disponible"}">${agotado ? "Agotado" : "Disponible"}</div>` : ""}
-          ${agotado ? '<div class="tp-aviso-hint">🔔 Toca para dejar tu WhatsApp y avisarte</div>' : ""}
-          <button class="btn-carrito ${carrito[p.id] ? "activo" : ""}" data-id="${p.id}" onclick="event.stopPropagation(); toggleCarrito('${p.id}')">${carrito[p.id] ? "✓ En tu carrito" : "🛒 Agregar al carrito"}</button>
-          ${WHATSAPP_NUMERO && !agotado ? `<a class="btn-whatsapp" href="${linkWhatsApp(p)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">💬 Pedir por WhatsApp</a>` : ""}
-          <button type="button" class="btn-link-producto" onclick="event.stopPropagation(); copiarLinkProducto('${p.id}')">🔗 Copiar link de este producto</button>
+          ${agotado ? '<div class="tp-aviso-hint">' + ICO.campana + ' Toca para dejar tu WhatsApp y avisarte</div>' : ""}
+          <button class="btn-carrito ${carrito[p.id] ? "activo" : ""}" data-id="${p.id}" onclick="event.stopPropagation(); toggleCarrito('${p.id}')">${carrito[p.id] ? ICO.check + " En tu carrito" : ICO.carrito + " Agregar al carrito"}</button>
+          ${WHATSAPP_NUMERO && !agotado ? `<a class="btn-whatsapp" href="${linkWhatsApp(p)}" target="_blank" rel="noopener" onclick="event.stopPropagation()">${ICO.whatsapp} Pedir por WhatsApp</a>` : ""}
+          <button type="button" class="btn-link-producto" onclick="event.stopPropagation(); copiarLinkProducto('${p.id}')">${ICO.enlace} Copiar link de este producto</button>
         </div>
       </div>
     `;
@@ -739,7 +748,7 @@ let detalleProductoIdActual = null;
 function bloqueAvisoRestockHtml() {
   return `
       <div class="bloque-aviso-restock" id="bloque-aviso-restock">
-        <div class="aviso-restock-titulo">🔔 Avísame cuando llegue</div>
+        <div class="aviso-restock-titulo">${ICO.campana} Avísame cuando llegue</div>
         <div class="form-aviso-restock">
           <input type="tel" id="input-aviso-telefono" placeholder="Tu WhatsApp (ej: 0424...)" inputmode="tel">
           <button type="button" onclick="enviarAvisoRestock()">Avisarme</button>
@@ -815,12 +824,12 @@ window.abrirDetalle = function (id) {
   document.getElementById("md-nombre").textContent = nombre;
   document.getElementById("md-sku").textContent = p.sku || "";
   document.getElementById("md-precios").innerHTML = `
-      ${p.bajo_de_precio ? `<div class="tp-bajo-precio">🔥 Bajó de precio <span class="tp-precio-antes">${fmtUsd(p.precio_anterior_usd)}</span></div>` : ""}
+      ${p.bajo_de_precio ? `<div class="tp-bajo-precio">${ICO.baja} Bajó de precio <span class="tp-precio-antes">${fmtUsd(p.precio_anterior_usd)}</span></div>` : ""}
       <div class="tp-precio-usd">${fmtUsd(p.precio_efectivo_usd)} <span style="font-size:10px; color:var(--muted); font-weight:400;">efectivo</span></div>
       <div class="tp-precio-bs">${fmtBs(p.precio_bs)} pagando en bolívares</div>
       ${p.stock != null ? `<div class="tp-stock ${agotado ? "agotado" : "disponible"}" style="margin-top:8px;">${agotado ? "Agotado" : "Disponible"}</div>` : ""}
-      <button class="btn-carrito grande ${carrito[p.id] ? "activo" : ""}" data-id="${p.id}" onclick="toggleCarrito('${p.id}')">${carrito[p.id] ? "✓ En tu carrito" : "🛒 Agregar al carrito"}</button>
-      ${WHATSAPP_NUMERO && !agotado ? `<a class="btn-whatsapp grande" href="${linkWhatsApp(p)}" target="_blank" rel="noopener">💬 Pedir este producto por WhatsApp</a>` : ""}
+      <button class="btn-carrito grande ${carrito[p.id] ? "activo" : ""}" data-id="${p.id}" onclick="toggleCarrito('${p.id}')">${carrito[p.id] ? ICO.check + " En tu carrito" : ICO.carrito + " Agregar al carrito"}</button>
+      ${WHATSAPP_NUMERO && !agotado ? `<a class="btn-whatsapp grande" href="${linkWhatsApp(p)}" target="_blank" rel="noopener">${ICO.whatsapp} Pedir este producto por WhatsApp</a>` : ""}
       ${agotado ? bloqueAvisoRestockHtml() : ""}
     `;
   const soloIA = descripcionSoloIA(p.descripcion);
@@ -863,7 +872,7 @@ window.enviarAvisoRestock = async function () {
     });
     if (error || !data || data.ok !== true) throw new Error((data && data.error) || (error && error.message) || "Error desconocido");
     const bloque = document.getElementById("bloque-aviso-restock");
-    if (bloque) bloque.innerHTML = '<div class="msg-aviso-restock ok">✓ Listo, te avisaremos por WhatsApp cuando vuelva a haber stock.</div>';
+    if (bloque) bloque.innerHTML = '<div class="msg-aviso-restock ok">' + ICO.check + ' Listo, te avisaremos por WhatsApp cuando vuelva a haber stock.</div>';
   } catch (e) {
     console.error("No se pudo registrar el aviso de restock", e);
     msg.textContent = "No se pudo guardar — intenta de nuevo en un momento.";
