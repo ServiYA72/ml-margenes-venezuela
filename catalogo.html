@@ -137,6 +137,9 @@ input:focus, select:focus { outline: 0px; border-color: var(--gold); }
 .btn-carrito.grande { padding: 12px 16px; font-size: 13.5px; margin-top: 10px; }
 .btn-link-producto { width: 100%; background: none; border: none; color: var(--muted); font-size: 11px; padding: 6px 0 0; cursor: pointer; text-decoration: underline; }
 
+.sin-res-cats { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-top: 10px; }
+.sin-res-cats button { background: var(--surface-2); border: 1px solid var(--line); color: var(--paper); padding: 6px 12px; font-size: 12.5px; cursor: pointer; }
+.sin-res-cats button:hover { border-color: var(--gold); color: var(--gold); }
 .estado-carga, .estado-vacio { text-align: center; color: var(--muted); font-size: 13px; padding: 40px 0; }
 .paginacion { display: flex; justify-content: center; margin-top: 24px; }
 .cargar-mas { background: var(--surface); border: 1px solid var(--line); color: var(--paper); padding: 11px 24px; font-size: 13px; font-weight: 600; cursor: pointer; }
@@ -257,7 +260,7 @@ footer#pie-pagina { text-align: center; font-size: 11.5px; color: var(--muted); 
   <div class="barra-filtros">
     <div class="campo">
       <label for="buscador">Buscar</label>
-      <input type="text" id="buscador" placeholder="Escribe el nombre o código del producto…" oninput="onCambioFiltro()" autocomplete="off">
+      <input type="text" id="buscador" placeholder="¿Qué buscas? Ej: tarjeta de video, laptop, monitor 27, audífonos…" oninput="onCambioFiltro()" autocomplete="off">
     </div>
     <div class="campo categoria">
       <label for="filtro-categoria">Categoría</label>
@@ -924,15 +927,31 @@ window.cargarProductos = async function (reiniciar) {
 
   const busqueda = document.getElementById("buscador").value.trim().replace(/[,()]/g, " ").trim();
   const categoria = document.getElementById("filtro-categoria").value;
-  let q = supabase.from("vista_catalogo_publico").select("*", { count: "exact" }).eq("tenant_slug", TENANT_SLUG).order("nombre");
-  if (busqueda) q = q.or(`nombre.ilike.%${busqueda}%,sku.ilike.%${busqueda}%`);
-  if (categoria) q = q.eq("categoria", categoria);
-  if (catalogoSoloConFotos) q = q.eq("tiene_fotos", true);
-  if (letraAbierta && !busqueda) q = filtrarPorLetra(q, letraAbierta);
-
   const desde = TAMANO_PAGINA * paginaActual;
   const hasta = desde + TAMANO_PAGINA - 1;
-  const { data, count, error } = await q.range(desde, hasta);
+  let data, count, error;
+  if (letraAbierta && !busqueda) {
+    // Acceso rápido por letra: aquí sí va en orden alfabético.
+    let q = supabase.from("vista_catalogo_publico").select("*", { count: "exact" }).eq("tenant_slug", TENANT_SLUG).order("nombre");
+    if (categoria) q = q.eq("categoria", categoria);
+    if (catalogoSoloConFotos) q = q.eq("tiene_fotos", true);
+    ({ data, count, error } = await filtrarPorLetra(q, letraAbierta).range(desde, hasta));
+  } else {
+    // Búsqueda inteligente: palabras en cualquier orden, sin acentos ni plurales, sinónimos y errores de tipeo,
+    // ordenada por relevancia (y, sin búsqueda, primero lo que tiene stock y foto).
+    const r = await supabase.rpc("catalogo_buscar", { p_slug: TENANT_SLUG, p_q: busqueda, p_categoria: categoria || null, p_solo_fotos: !!catalogoSoloConFotos, p_limite: TAMANO_PAGINA, p_desde: desde });
+    error = r.error;
+    const filas = r.data || [];
+    count = filas.length ? Number(filas[0].total) : (desde > 0 ? totalResultados : 0);
+    if (!error && filas.length) {
+      const ids = filas.map((f) => f.id);
+      const v = await supabase.from("vista_catalogo_publico").select("*").eq("tenant_slug", TENANT_SLUG).in("id", ids);
+      error = v.error;
+      const porId = {};
+      (v.data || []).forEach((p) => { porId[p.id] = p; });
+      data = ids.map((id) => porId[id]).filter(Boolean);
+    } else data = [];
+  }
   if (miCarga !== cargaVigente) return;
   estadoCarga.style.display = "none";
   cargando = false;
@@ -942,7 +961,8 @@ window.cargarProductos = async function (reiniciar) {
   grid.insertAdjacentHTML("beforeend", (data || []).map(tarjetaHtml).join(""));
   const mostrados = grid.children.length;
   document.getElementById("contador-resultados").textContent = totalResultados > 0 ? `Mostrando ${mostrados} de ${totalResultados} productos` + (letraAbierta && !busqueda ? ` con "${letraAbierta}"` : "") : "";
-  if (mostrados === 0) estadoVacio.style.display = "block";
+  if (mostrados === 0) { pintarSinResultados(busqueda); estadoVacio.style.display = "block"; }
+  if (busqueda && desde === 0) programarRegistroBusqueda(busqueda, totalResultados);
   const paginacion = document.getElementById("paginacion");
   if (mostrados < totalResultados) {
     paginacion.style.display = "flex";
@@ -954,6 +974,27 @@ window.cargarProductos = async function (reiniciar) {
 };
 
 let timerBusqueda = null;
+
+/* Sin resultados: ofrecer categorías y preguntar por WhatsApp, para no perder al cliente. */
+function pintarSinResultados(busqueda) {
+  const el = document.getElementById("estado-vacio");
+  if (!busqueda) { el.textContent = "No se encontraron productos con ese criterio."; return; }
+  const cats = [...document.getElementById("filtro-categoria").options].map((o) => o.value).filter(Boolean).slice(0, 8);
+  const wa = WHATSAPP_NUMERO ? `https://wa.me/${WHATSAPP_NUMERO}?text=${encodeURIComponent(`Hola, estoy buscando «${busqueda}» y no lo encontré en el catálogo. ¿Lo tienen o algo parecido?`)}` : "";
+  el.innerHTML = `<div style="font-size:15px;color:var(--paper);margin-bottom:6px">No encontramos «${escapeHtml(busqueda)}» en el catálogo.</div>
+    <div>Revisa cómo está escrito, prueba con menos palabras o mira por categoría:</div>
+    <div class="sin-res-cats">${cats.map((c) => `<button type="button" onclick="verCategoria('${escapeHtml(c).replace(/'/g, "&#39;")}')">${escapeHtml(c)}</button>`).join("")}</div>
+    ${wa ? `<a class="btn-whatsapp grande" style="display:inline-flex;max-width:420px;margin:14px auto 0" href="${wa}" target="_blank" rel="noopener">${ICO.whatsapp} Pregúntanos por «${escapeHtml(busqueda)}»</a>` : ""}`;
+}
+window.verCategoria = function (c) { document.getElementById("buscador").value = ""; document.getElementById("filtro-categoria").value = c; aplicarFiltros(); };
+
+/* Se anota lo que la gente busca y no encuentra (solo cuando dejó de escribir), para verlo en el Dashboard. */
+let timerRegistro = null;
+function programarRegistroBusqueda(texto, total) {
+  clearTimeout(timerRegistro);
+  if (total > 0 || texto.length < 3) return;
+  timerRegistro = setTimeout(() => { supabase.rpc("catalogo_registrar_busqueda", { p_slug: TENANT_SLUG, p_texto: texto, p_resultados: total }).then(() => {}, () => {}); }, 1800);
+}
 
 /* CAMBIO CLAVE: antes, sin una búsqueda activa, la página solo armaba la barra de letras y dejaba
    la grilla vacía hasta que alguien tocara una letra — por eso parecía que "solo había productos
