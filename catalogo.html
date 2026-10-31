@@ -3,19 +3,19 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title id="titulo-pagina">Nicom Tech Solutions — Catálogo de Productos</title>
-<meta name="description" id="meta-descripcion" content="Catálogo de productos de Nicom Tech Solutions, con precios actualizados en efectivo ($) y en bolívares.">
-<meta property="og:title" id="meta-og-titulo" content="Nicom Tech Solutions — Catálogo de Productos">
+<title id="titulo-pagina">Nicom System C.A. — Catálogo de Productos</title>
+<meta name="description" id="meta-descripcion" content="Catálogo de productos de Nicom System C.A., con precios actualizados en efectivo ($) y en bolívares.">
+<meta property="og:title" id="meta-og-titulo" content="Nicom System C.A. — Catálogo de Productos">
 <meta property="og:description" content="Precios actualizados en efectivo ($) y en bolívares.">
 <meta property="og:type" content="website">
-<meta property="og:site_name" content="Nicom Tech Solutions">
+<meta property="og:site_name" content="Nicom System C.A.">
 <meta property="og:url" content="https://catalogo.nicomsystem.com/catalogo.html">
 <meta property="og:image" id="meta-og-imagen" content="https://catalogo.nicomsystem.com/og-catalogo.jpg">
 <meta property="og:image:secure_url" content="https://catalogo.nicomsystem.com/og-catalogo.jpg">
 <meta property="og:image:type" content="image/jpeg">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="Nicom Tech Solutions — Catálogo de productos">
+<meta property="og:image:alt" content="Nicom System C.A. — Catálogo de productos">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://catalogo.nicomsystem.com/og-catalogo.jpg">
 <link rel="icon" id="favicon" href="https://serviya72.github.io/ml-margenes-venezuela/logo-nicom.png">
@@ -61,13 +61,20 @@ h1 { font-family: Fraunces, serif; font-weight: 500; font-size: 28px; margin: 0 
 .sub { color: var(--muted); font-size: 14px; margin: 0 0 18px; line-height: 1.6; }
 
 /* ---------- NUEVO: cinta de aviso (delivery + compra mínima) ---------- */
+.banner-pos { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; background: var(--surface); border: 1px solid var(--gold); padding: 12px 16px; margin-bottom: 14px; color: var(--paper); text-decoration: none; font-size: 13.5px; line-height: 1.4; }
+.banner-pos:hover { background: var(--surface-2); }
+.banner-pos .bp-ico { font-size: 20px; }
+.banner-pos .bp-txt { flex: 1 1 220px; }
+.banner-pos .bp-txt b { color: var(--gold); }
+.banner-pos .bp-cta { color: var(--teal); font-weight: 600; white-space: nowrap; }
+@media (max-width: 640px) { main { padding: 18px 16px 50px; } h1 { font-size: 24px; } .cinta-avisos { gap: 8px; margin-bottom: 14px; } .aviso-chip { padding: 8px 10px; font-size: 12px; } }
 .cinta-avisos { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 20px; }
 .aviso-chip { display: flex; align-items: center; gap: 8px; background: var(--surface); border: 1px solid var(--line); border-left: 3px solid var(--teal); padding: 10px 14px; font-size: 12.5px; color: var(--paper); line-height: 1.4; }
 .aviso-chip.minimo { border-left-color: var(--gold); }
 .aviso-chip b { color: var(--gold); font-family: "IBM Plex Mono", monospace; }
 .aviso-chip.minimo b { color: var(--teal); }
 
-.tira-testimonios { margin-bottom: 24px; }
+.tira-testimonios { margin: 34px 0 10px; }
 .tira-testimonios-titulo { font-size: 11.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 10px; }
 .tira-testimonios-lista { display: flex; gap: 14px; overflow-x: auto; padding-bottom: 4px; }
 .testimonio-card { flex: 0 0 auto; width: 240px; background: var(--surface); border: 1px solid var(--line); padding: 14px; font-size: 12.5px; line-height: 1.5; }
@@ -231,10 +238,10 @@ footer#pie-pagina { text-align: center; font-size: 11.5px; color: var(--muted); 
 <body>
 <header>
   <div class="brand-mark" id="brand-mark">
-    <img src="https://serviya72.github.io/ml-margenes-venezuela/logo-nicom.png" alt="Nicom Tech Solutions" class="brand-logo" id="brand-logo">
+    <img src="https://serviya72.github.io/ml-margenes-venezuela/logo-nicom.png" alt="Nicom System C.A." class="brand-logo" id="brand-logo">
     <div>
       <div class="brand-titulo">Catálogo de Productos</div>
-      <div class="brand-sub" id="brand-sub">Nicom Tech Solutions</div>
+      <div class="brand-sub" id="brand-sub">Nicom System C.A.</div>
     </div>
   </div>
   <div class="header-acciones">
@@ -245,17 +252,15 @@ footer#pie-pagina { text-align: center; font-size: 11.5px; color: var(--muted); 
 
 <main>
   <h1>Nuestros productos</h1>
-  <p class="sub">Escribe lo que buscas arriba, o simplemente mira todo el catálogo. Precios en efectivo ($) o pagando en bolívares — el precio en Bs se actualiza con la tasa del día.</p>
+  <p class="sub">Precios en dólares ($) y en bolívares, con la tasa del día.</p>
+
+  <a class="banner-pos" id="banner-pos" href="#" target="_blank" rel="noopener" style="display:none"><span class="bp-ico">🧾</span><span class="bp-txt"><b>Sistemas POS y administrativo</b> · Nicom Punto desde $15/mes</span><span class="bp-cta">Pide tu demo →</span></a>
 
   <div class="cinta-avisos">
     <div class="aviso-chip minimo"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg> Compra mínima: <b>$100</b></div>
     <div class="aviso-chip"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"/><path d="M15 18H9"/><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.62l-3.48-4.35A1 1 0 0 0 17.52 8H14"/><circle cx="17" cy="18" r="2"/><circle cx="7" cy="18" r="2"/></svg> Delivery disponible — <b>coordinamos por WhatsApp</b></div>
   </div>
 
-  <div class="tira-testimonios" id="tira-testimonios" style="display:none">
-    <div class="tira-testimonios-titulo">Lo que dicen nuestros clientes</div>
-    <div class="tira-testimonios-lista" id="tira-testimonios-lista"></div>
-  </div>
 
   <div class="barra-filtros">
     <div class="campo">
@@ -303,6 +308,11 @@ footer#pie-pagina { text-align: center; font-size: 11.5px; color: var(--muted); 
   <div class="paginacion" id="paginacion" style="display:none">
     <button class="cargar-mas" id="btn-cargar-mas" onclick="cargarProductos(false)">Ver más productos</button>
   </div>
+
+  <div class="tira-testimonios" id="tira-testimonios" style="display:none">
+    <div class="tira-testimonios-titulo">Lo que dicen nuestros clientes</div>
+    <div class="tira-testimonios-lista" id="tira-testimonios-lista"></div>
+  </div>
 </main>
 
 <div class="modal-fondo" id="modal-fondo">
@@ -343,7 +353,7 @@ footer#pie-pagina { text-align: center; font-size: 11.5px; color: var(--muted); 
   </div>
 </div>
 
-<footer id="pie-pagina">Nicom Tech Solutions — catálogo actualizado en tiempo real. Los precios no incluyen envío. Compra mínima $100 · Delivery disponible.</footer>
+<footer id="pie-pagina">Nicom System C.A. — catálogo actualizado en tiempo real. Los precios no incluyen envío. Compra mínima $100 · Delivery disponible.</footer>
 
 <div class="btns-scroll">
   <button class="btn-scroll" id="btn-ir-inicio" title="Ir al inicio de la página" aria-label="Ir al inicio"><svg class="ico-solo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m18 15-6-6-6 6"/></svg></button>
@@ -547,6 +557,16 @@ function aplicarMarcaNegocio() {
   }
   const pie = document.getElementById("pie-pagina");
   if (pie) pie.textContent = NOMBRE_COMERCIAL + " — catálogo actualizado en tiempo real. Los precios no incluyen envío. Compra mínima " + fmtUsd(COMPRA_MINIMA_USD) + (DELIVERY_DISPONIBLE ? " · Delivery disponible." : ".");
+
+  const bannerPos = document.getElementById("banner-pos");
+  if (bannerPos) {
+    if (WHATSAPP_NUMERO) {
+      bannerPos.href = `https://wa.me/${WHATSAPP_NUMERO}?text=${encodeURIComponent("Hola, quiero una demo de Nicom Punto (sistema POS).")}`;
+      bannerPos.style.display = "flex";
+    } else {
+      bannerPos.style.display = "none";
+    }
+  }
 
   const waFlotante = document.getElementById("wa-flotante");
   if (waFlotante) {
