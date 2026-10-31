@@ -548,8 +548,7 @@ function aplicarMarcaNegocio() {
     logoEl.src = LOGO_URL;
     logoEl.alt = NOMBRE_COMERCIAL;
     logoEl.style.display = "";
-    const metaOgImagen = document.getElementById("meta-og-imagen");
-    if (metaOgImagen) metaOgImagen.setAttribute("content", LOGO_URL);
+    /* La imagen de vista previa (og:image) se queda fija con og-catalogo.jpg; no se reemplaza por el logo. */
     const favicon = document.getElementById("favicon");
     if (favicon) favicon.setAttribute("href", LOGO_URL);
   } else {
