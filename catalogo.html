@@ -427,8 +427,21 @@ function primeraLetraNombre(nombre) {
 
 const MARCADOR_SUGERENCIA_IA = "\n\n--- Sugerencia de la IA (edítala o bórrala como quieras) ---\n";
 function descripcionSoloIA(descripcion) {
-  const partes = (descripcion || "").split(MARCADOR_SUGERENCIA_IA);
-  return partes.length > 1 ? partes[1].trim() : "";
+  // La descripción de la IA va DESPUÉS del texto de Mercado Libre (ATENCIÓN, garantía, ubicación, condiciones, horario, pagos, despacho).
+  let t = String(descripcion == null ? "" : descripcion).trim();
+  if (!t) return "";
+  const partes = t.split(MARCADOR_SUGERENCIA_IA);
+  if (partes.length > 1) t = partes[partes.length - 1].trim();   // con marcador: lo que va después de él
+  const ml = /(PRECIO PUBLICADO|HORARIO DE TRABAJO|SOMOS OFICINA|OFRECEMOS GARANT|M[ÉE]TODOS DE (PAGO|DESPACHO)|\*{4,} ?ATENCI)/i;
+  if (ml.test(t)) {                                              // sin marcador: lo que va después de la última línea de asteriscos
+    const re = /\*{5,}/g;
+    let m, fin = -1;
+    while ((m = re.exec(t))) fin = m.index + m[0].length;
+    if (fin < 0) return "";
+    t = t.slice(fin).trim();
+    if (ml.test(t) || /^(RETIRO PERSONAL|DELIVERY|MERCADO ENV)/i.test(t) || t === t.toUpperCase()) return "";   // la IA aún no generó descripción
+  }
+  return t;
 }
 
 function linkWhatsApp(producto) {
@@ -875,6 +888,8 @@ window.abrirDetalle = function (id) {
   descEl.classList.remove("abierta");
   descEl.classList.toggle("larga", soloIA.length > 160);
   descEl.style.display = soloIA ? "" : "none";
+  const ayudaEl = descEl.nextElementSibling;   // "Pasa el mouse… para ver la descripción completa": solo si hay descripción larga
+  if (ayudaEl && ayudaEl.classList.contains("md-descripcion-ayuda")) ayudaEl.style.display = soloIA.length > 160 ? "" : "none";
   const caracteristicas = (p.especificaciones && typeof p.especificaciones === "object" && p.especificaciones.caracteristicas) || {};
   const entradas = Object.entries(caracteristicas).filter(([, v]) => v != null && String(v).trim() !== "");
   const bloque = document.getElementById("md-caracteristicas-bloque");
