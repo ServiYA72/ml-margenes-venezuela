@@ -432,7 +432,7 @@ function descripcionSoloIA(descripcion) {
   if (!t) return "";
   const partes = t.split(MARCADOR_SUGERENCIA_IA);
   if (partes.length > 1) t = partes[partes.length - 1].trim();   // con marcador: lo que va después de él
-  const ml = /(PRECIO PUBLICADO|HORARIO DE TRABAJO|SOMOS OFICINA|OFRECEMOS GARANT|M[ÉE]TODOS DE (PAGO|DESPACHO)|\*{4,} ?ATENCI)/i;
+  const ml = /(PRECIO PUBLICADO|HORARIO DE TRABAJO|SOMOS OFICINA|OFRECEMOS GARANT|M[ÉE]TODOS DE (PAGO|DESPACHO)|\*{4,} ?ATENCI)/;
   if (ml.test(t)) {                                              // sin marcador: lo que va después de la última línea de asteriscos
     const re = /\*{5,}/g;
     let m, fin = -1;
