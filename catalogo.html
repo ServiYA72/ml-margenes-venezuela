@@ -441,7 +441,8 @@ function descripcionSoloIA(descripcion) {
     t = t.slice(fin).trim();
     if (ml.test(t) || /^(RETIRO PERSONAL|DELIVERY|MERCADO ENV)/i.test(t) || t === t.toUpperCase()) return "";   // la IA aún no generó descripción
   }
-  return t;
+  // Quita restos del editor del Dashboard pegados dentro del texto (ej. "a trav(tala o bórrala como quieras) ---)és")
+  return t.replace(/\(?\s*edítala o bórrala como quieras\)\s*---/gi, "").replace(/tala o bórrala como quieras\)\s*---/gi, "").replace(/-{3}\s*Sugerencia de la IA\s*-{0,3}/gi, "").replace(/[ \t]{2,}/g, " ").trim();
 }
 
 function linkWhatsApp(producto) {
