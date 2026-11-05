@@ -1,4 +1,4 @@
-import{createClient}from"https://esm.sh/@supabase/supabase-js@2";
+import{createClient}from"./supabase-js.mjs";
 const sb=createClient("https://tkhzuopapvclmcgxyood.supabase.co","sb_publishable_KQB6B6uLIPr-xKdNDc8iEw_7tcWM5gS",{auth:{autoRefreshToken:false,persistSession:true}});
 (async()=>{try{
  const{data:{session}}=await sb.auth.getSession();if(!session)return;

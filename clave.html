@@ -25,7 +25,7 @@ button{font-family:inherit;cursor:pointer}.ver{background:var(--surface-2);borde
 <label for="n2">Repite la contraseña nueva</label><input id="n2" type="password" autocomplete="new-password">
 <button class="guardar" id="g" type="submit">Guardar contraseña</button><div id="msg"></div></form></div></main>
 <script type="module">
-import{createClient}from"https://esm.sh/@supabase/supabase-js@2";
+import{createClient}from"./supabase-js.mjs";
 const supabase=createClient("https://tkhzuopapvclmcgxyood.supabase.co","sb_publishable_KQB6B6uLIPr-xKdNDc8iEw_7tcWM5gS");
 const $=i=>document.getElementById(i),msg=$("msg");
 const{data:{session}}=await supabase.auth.getSession();
