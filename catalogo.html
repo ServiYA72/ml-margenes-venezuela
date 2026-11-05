@@ -252,7 +252,7 @@ footer#pie-pagina { text-align: center; font-size: 11.5px; color: var(--muted); 
 
 <main>
   <h1>Nuestros productos</h1>
-  <p class="sub">Los precios son $ ref y se pagan en bolívares a la tasa BCV del día. Pagando en divisas o efectivo (Zelle, Binance, efectivo) tienes descuento. Precios sin IVA (el IVA va en factura aparte).</p>
+  <p class="sub">Los precios son $ ref y se pagan en bolívares a la tasa BCV del día. Precios sin IVA (el IVA va en factura aparte).</p>
 
   <a class="banner-pos" id="banner-pos" href="#" target="_blank" rel="noopener" style="display:none"><span class="bp-ico">🧾</span><span class="bp-txt"><b>Sistemas POS y administrativo</b> · Nicom Punto desde $15/mes</span><span class="bp-cta">Pide tu demo →</span></a>
 
@@ -466,6 +466,7 @@ const fmtUsd = (v) => "$" + Number(v || 0).toFixed(2);
 
 /* ===== Precio claro: se muestra el "$ ref" que se paga en Bs a tasa BCV; con divisas/efectivo hay descuento ===== */
 const T = { bcv: 0, bin: 0, fecha: "", fail: false };
+const DESC_DIVISAS = false; /* DESC_DIVISAS=false: NO mostrar al cliente el descuento por pagar en divisas (apagado hasta validar con abogado/contador). Poner true para encenderlo. */
 const refDe = (n) => (T.bcv && T.bin ? Math.ceil(Number(n) * T.bin / T.bcv * 100 - 1e-9) / 100 : 0);   // $ ref (centavo hacia arriba)
 const bsRef = (r) => (T.bcv ? Math.round(r * T.bcv * 100) / 100 : 0);                                  // Bs a pagar = $ ref x tasa BCV (cuadra exacto)
 const pctDe = (d, r) => (r > 0 ? Math.round((1 - d / r) * 100) : 0);
@@ -476,13 +477,13 @@ function textoBs(n, modo, r) {
   if (!T.bcv || !T.bin) return "";
   r = r != null ? r : refDe(d);
   const b = bsRef(r), a = pctDe(d, r);
-  if (modo === "card") return "Divisas o efectivo: <strong>" + fmtUsd(d) + "</strong>" + (a > 0 ? " (−" + a + "%)" : "") + "<br>En Bs (tasa BCV): " + fmtBs(b);
-  return "<strong>En bolívares</strong> (Pago Móvil o transferencia): " + fmtUsd(r) + " × tasa BCV " + fmtBs(T.bcv) + " = <strong>" + fmtBs(b) + "</strong> + IVA.<br><strong>Pagando en divisas o efectivo</strong> (Zelle, Binance, efectivo): <strong>" + fmtUsd(d) + "</strong> + IVA" + (a > 0 ? " — ahorras " + fmtUsd(r - d) + " (" + a + "%)" : "") + ".";
+  if (modo === "card") return (DESC_DIVISAS ? "Divisas o efectivo: <strong>" + fmtUsd(d) + "</strong>" + (a > 0 ? " (−" + a + "%)" : "") + "<br>" : "") + "En Bs (tasa BCV): " + fmtBs(b);
+  return "<strong>En bolívares</strong> (Pago Móvil o transferencia): " + fmtUsd(r) + " × tasa BCV " + fmtBs(T.bcv) + " = <strong>" + fmtBs(b) + "</strong> + IVA." + (DESC_DIVISAS ? "<br><strong>Pagando en divisas o efectivo</strong> (Zelle, Binance, efectivo): <strong>" + fmtUsd(d) + "</strong> + IVA" + (a > 0 ? " — ahorras " + fmtUsd(r - d) + " (" + a + "%)" : "") + "." : "");
 }
 function textoPlano(d, r, etq) {
   etq = etq || "Total";
   return T.bcv
-    ? etq + " ($ ref a tasa BCV): " + fmtUsd(r) + " (sin IVA)\nEn bolívares (tasa BCV " + fmtBs(T.bcv) + " del " + T.fecha + "): " + fmtBs(bsRef(r)) + "\nPagando en divisas o efectivo: " + fmtUsd(d) + " (ahorras " + fmtUsd(r - d) + ", " + pctDe(d, r) + "%)"
+    ? etq + " ($ ref a tasa BCV): " + fmtUsd(r) + " (sin IVA)\nEn bolívares (tasa BCV " + fmtBs(T.bcv) + " del " + T.fecha + "): " + fmtBs(bsRef(r)) + (DESC_DIVISAS ? "\nPagando en divisas o efectivo: " + fmtUsd(d) + " (ahorras " + fmtUsd(r - d) + ", " + pctDe(d, r) + "%)" : "")
     : etq + " pagando en divisas o efectivo: " + fmtUsd(d) + " (sin IVA)";
 }
 function pintarBs() {

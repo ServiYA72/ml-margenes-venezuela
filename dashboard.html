@@ -3,6 +3,7 @@ var LEAD_ESTADOS=[["nuevo","Nuevo"],["en_gestion","En gestión"],["disponibilida
 function leadEstadoSelect(e){return'<select onchange="cambiarEstadoLead(\''+e.id+'\',this.value)" style="padding:6px 8px;font-size:12px;background:var(--surface);color:var(--paper);border:1px solid var(--line);">'+LEAD_ESTADOS.map(function(x){return'<option value="'+x[0]+'"'+((e.estado||"nuevo")===x[0]?" selected":"")+">"+x[1]+"</option>"}).join("")+"</select>"}
 function escAttr(s){return String(s==null?"":s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;")}
 function leadEnvioTexto(e){var dir=[e.dest_direccion,e.dest_parroquia,e.dest_municipio,e.dest_estado].filter(Boolean).join(", ");return{dir:dir,modalidad:e.courier_modalidad==="oficina"?"Retira en oficina"+(e.courier_oficina?": "+e.courier_oficina:""):(e.courier_modalidad==="domicilio"?"Entrega a domicilio":"")}}
+var DESC_DIVISAS=false; /* DESC_DIVISAS=false: NO mostrar al cliente el descuento por pagar en divisas (apagado hasta validar con abogado/contador). Poner true para encenderlo. */
 function leadMontoTxt(e){
  var d=Number(e.total_usd)||0;if(!d)return"";
  var m=e.metodo_pago||"",esBs=/m[oó]vil|transfer/i.test(m),ok=tasaBCV&&tasaBinance,
@@ -14,8 +15,8 @@ function leadMontoTxt(e){
   lUsd="Pagando en "+(m&&!esBs?m:"divisas o efectivo")+": $"+d.toFixed(2)+" + IVA"+(pct>0?" (ahorras $"+(ref-d).toFixed(2)+", "+pct+"%)":"");
  if(!ok)return"\n\nTotal pagando en divisas o efectivo: $"+d.toFixed(2)+" + IVA";
  if(esBs)return"\n\n"+lRef+"\n"+lBs;
- if(m)return"\n\n"+lRef+"\n"+lUsd;
- return"\n\n"+lRef+"\n"+lBs+"\n"+lUsd}
+ if(m)return"\n\n"+lRef+(DESC_DIVISAS?"\n"+lUsd:"");
+ return"\n\n"+lRef+"\n"+lBs+(DESC_DIVISAS?"\n"+lUsd:"")}
 function leadMensaje(e){
  var nom=e.cliente_nombre?String(e.cliente_nombre).trim().split(" ")[0]:"",hola="Hola"+(nom?" "+nom:"")+", ",
   its=Array.isArray(e.items)?e.items.map(function(x){return"• "+(x.cantidad||1)+" x "+String(x.nombre||"").slice(0,80)}).join("\n"):"",
