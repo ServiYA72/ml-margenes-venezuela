@@ -254,7 +254,7 @@ footer#pie-pagina { text-align: center; font-size: 11.5px; color: var(--muted); 
   <h1>Nuestros productos</h1>
   <p class="sub">Los precios son $ ref y se pagan en bolívares a la tasa BCV del día. Precios sin IVA (el IVA va en factura aparte).</p>
 
-  <a class="banner-pos" id="banner-pos" href="#" target="_blank" rel="noopener" style="display:none"><span class="bp-ico">🧾</span><span class="bp-txt"><b>Sistemas POS y administrativo</b> · Nicom Punto desde $15/mes</span><span class="bp-cta">Pide tu demo →</span></a>
+  <a class="banner-pos" id="banner-pos" href="#" target="_blank" rel="noopener" style="display:none"><span class="bp-ico">🧾</span><span class="bp-txt"><b>Sistemas POS y administrativo</b> · Nicom Punto desde $15/mes</span><span class="bp-cta">Míralo y pruébalo gratis →</span></a>
 
   <div class="cinta-avisos">
     <div class="aviso-chip minimo"><svg class="ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg> Compra mínima: <b>$100</b></div>
@@ -618,12 +618,8 @@ function aplicarMarcaNegocio() {
 
   const bannerPos = document.getElementById("banner-pos");
   if (bannerPos) {
-    if (WHATSAPP_NUMERO) {
-      bannerPos.href = `https://wa.me/${WHATSAPP_NUMERO}?text=${encodeURIComponent("Hola, quiero una demo de Nicom Punto (sistema POS).")}`;
-      bannerPos.style.display = "flex";
-    } else {
-      bannerPos.style.display = "none";
-    }
+    bannerPos.href = "https://nicomsystem.com/nicom-punto.html";
+    bannerPos.style.display = "flex";
   }
 
   const waFlotante = document.getElementById("wa-flotante");
