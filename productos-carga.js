@@ -10,7 +10,7 @@
    Uso: const r = await NicomProductos.cargarTodos(supabase, "id, nombre, ...", { orden: [{col:"nombre",asc:true}], reintentar: cargarProductos });
         r.filas = productos cargados · r.total = total real en la base (o null) · r.completo = true si se cargó todo */
 (function () {
-  var PAGINA_IDS = 1000, GRUPO = 100, PARALELO = 6, REINTENTOS = 3, ID_AVISO = "aviso-carga-productos";
+  var PAGINA_IDS = 1000, GRUPO = 100, PARALELO = 10, REINTENTOS = 3, ID_AVISO = "aviso-carga-productos";
 
   function esperar(ms) { return new Promise(function (ok) { setTimeout(ok, ms); }); }
 
@@ -69,7 +69,7 @@
     document.body.appendChild(a);
   }
 
-  async function cargarTodos(supabase, columnas, opciones) {
+  async function cargarDeRed(supabase, columnas, opciones) {
     opciones = opciones || {};
     var orden = opciones.orden || [{ col: "created_at", asc: false }, { col: "id", asc: true }];
     if (!orden.some(function (o) { return o.col === "id"; })) orden = orden.concat([{ col: "id", asc: true }]);
@@ -84,17 +84,31 @@
     var fallo = null, filas = [];
 
     // Paso 1: lista liviana (solo "id") en el orden pedido. Es rápida porque no trae los datos pesados.
+    // Si se conoce el total, todas las páginas de ids se piden a la vez (antes iban una tras otra).
     var llaves = [];
-    for (var pag = 0; ; pag++) {
-      try {
-        var d = await conReintento(function () {
-          var q = supabase.from("productos").select("id");
-          orden.forEach(function (o) { q = q.order(o.col, { ascending: o.asc }); });
-          return q.range(pag * PAGINA_IDS, pag * PAGINA_IDS + PAGINA_IDS - 1);
-        });
-        llaves = llaves.concat(d.map(function (x) { return x.id; }));
-        if (d.length < PAGINA_IDS) break;
-      } catch (e) { fallo = e; break; }
+    function paginaIds(pag) {
+      return conReintento(function () {
+        var q = supabase.from("productos").select("id");
+        orden.forEach(function (o) { q = q.order(o.col, { ascending: o.asc }); });
+        return q.range(pag * PAGINA_IDS, pag * PAGINA_IDS + PAGINA_IDS - 1);
+      });
+    }
+    if (total != null && total > 0) {
+      var paginas = [];
+      for (var pg = 0; pg * PAGINA_IDS < total; pg++) paginas.push(pg);
+      var resIds = await enParalelo(paginas.map(function (n) { return function () { return paginaIds(n); }; }));
+      for (var k = 0; k < resIds.length; k++) {
+        if (!resIds[k].ok) { fallo = fallo || resIds[k].err; continue; }
+        llaves = llaves.concat(resIds[k].data.map(function (x) { return x.id; }));
+      }
+    } else {
+      for (var pag = 0; ; pag++) {
+        try {
+          var d = await paginaIds(pag);
+          llaves = llaves.concat(d.map(function (x) { return x.id; }));
+          if (d.length < PAGINA_IDS) break;
+        } catch (e) { fallo = e; break; }
+      }
     }
 
     // Paso 2: los datos completos por grupos de ids (cada grupo cuesta lo mismo, sin importar qué tan al fondo esté).
@@ -116,5 +130,88 @@
     return { filas: filas, total: total, completo: completo };
   }
 
-  window.NicomProductos = { cargarTodos: cargarTodos };
+
+  // ---- Copia en el navegador (opcional) ----
+  // Si la pantalla lo pide (opciones.cache = { clave, alEmpezar, alActualizar }), se muestra al instante lo guardado la vez anterior
+  // y en segundo plano se trae la versión real de la base; cuando llega, se guarda y se avisa con alActualizar(resultado).
+  // Los datos reales siempre mandan: la copia solo adelanta lo que se ve mientras tanto. Va atada al usuario (clave) y se borra al cerrar sesión.
+  var BD = "nicom-cache-productos", ALM = "datos", REG = "productos", vigilando = false;
+
+  function abrirBD() {
+    return new Promise(function (ok) {
+      try {
+        var r = indexedDB.open(BD, 1);
+        r.onupgradeneeded = function () { r.result.createObjectStore(ALM); };
+        r.onsuccess = function () { ok(r.result); };
+        r.onerror = r.onblocked = function () { ok(null); };
+      } catch (e) { ok(null); }
+    });
+  }
+  async function leerCache(clave) {
+    var bd = await abrirBD();
+    if (!bd) return null;
+    return new Promise(function (ok) {
+      try {
+        var q = bd.transaction(ALM, "readonly").objectStore(ALM).get(REG);
+        q.onsuccess = function () { var v = q.result; bd.close(); ok(v && v.clave === clave && Array.isArray(v.filas) ? v : null); };
+        q.onerror = function () { bd.close(); ok(null); };
+      } catch (e) { try { bd.close(); } catch (e2) {} ok(null); }
+    });
+  }
+  async function guardarCache(clave, filas) {
+    var bd = await abrirBD();
+    if (!bd) return;
+    return new Promise(function (ok) {
+      try {
+        var tx = bd.transaction(ALM, "readwrite");
+        tx.objectStore(ALM).put({ clave: clave, filas: filas, guardado: Date.now() }, REG);
+        tx.oncomplete = function () { bd.close(); ok(); };
+        tx.onerror = tx.onabort = function () { bd.close(); ok(); };   // si no cabe o falla, simplemente no hay copia
+      } catch (e) { try { bd.close(); } catch (e2) {} ok(); }
+    });
+  }
+  async function limpiarCache() {
+    var bd = await abrirBD();
+    if (!bd) return;
+    return new Promise(function (ok) {
+      try {
+        var tx = bd.transaction(ALM, "readwrite");
+        tx.objectStore(ALM).delete(REG);
+        tx.oncomplete = function () { bd.close(); ok(); };
+        tx.onerror = tx.onabort = function () { bd.close(); ok(); };
+      } catch (e) { try { bd.close(); } catch (e2) {} ok(); }
+    });
+  }
+  function copiar(filas) {
+    try { return typeof structuredClone === "function" ? structuredClone(filas) : JSON.parse(JSON.stringify(filas)); }
+    catch (e) { return null; }
+  }
+  function vigilarSesion(supabase) {
+    if (vigilando) return;
+    vigilando = true;
+    try { supabase.auth.onAuthStateChange(function (ev) { if (ev === "SIGNED_OUT") limpiarCache(); }); } catch (e) {}
+  }
+
+  async function cargarTodos(supabase, columnas, opciones) {
+    var c = opciones && opciones.cache;
+    if (!c || !c.clave) return cargarDeRed(supabase, columnas, opciones);
+    vigilarSesion(supabase);
+    var guardado = await leerCache(c.clave);
+    if (guardado) {
+      if (typeof c.alEmpezar === "function") { try { c.alEmpezar(); } catch (e) {} }
+      cargarDeRed(supabase, columnas, opciones).then(async function (r) {
+        if (r.completo) { var cp = copiar(r.filas); if (cp) await guardarCache(c.clave, cp); }
+        if (typeof c.alActualizar === "function") c.alActualizar(r);
+      }).catch(function (e) {
+        console.error("Error actualizando productos", e);
+        if (typeof c.alActualizar === "function") c.alActualizar(null);
+      });
+      return { filas: guardado.filas, total: guardado.filas.length, completo: true, desdeCache: true };
+    }
+    var r = await cargarDeRed(supabase, columnas, opciones);
+    if (r.completo) { var cp2 = copiar(r.filas); if (cp2) guardarCache(c.clave, cp2); }
+    return r;
+  }
+
+  window.NicomProductos = { cargarTodos: cargarTodos, limpiarCache: limpiarCache };
 })();
