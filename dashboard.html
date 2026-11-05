@@ -10,6 +10,7 @@ function leadInfo(e){
  if(e.cliente_nombre)l.push("<strong>"+escapeHtml(e.cliente_nombre)+"</strong>");
  if(e.cliente_telefono){var d=String(e.cliente_telefono).replace(/\D/g,"");d=d.indexOf("58")===0?d:"58"+d.replace(/^0/,"");l.push('<a href="https://wa.me/'+d+'" target="_blank" rel="noopener" style="color:var(--teal);">'+escapeHtml(e.cliente_telefono)+" (WhatsApp)</a>")}
  if(e.entrega_tipo)l.push((e.entrega_tipo==="courier"?"Envío nacional":"Delivery Caracas")+(e.entrega_zona?": "+escapeHtml(e.entrega_zona):""));
+ if(e.entrega_tipo==="delivery"&&e.entrega_preferencia){var _t=e.entrega_preferencia!=="Nicom",_n={Nicom:"Delivery de Nicom",Yango:"Yango",Yummy:"Yummy",Ridery:"Ridery",Privado:"Motorizado privado"}[e.entrega_preferencia]||e.entrega_preferencia;l.push(_t?'<strong style="color:var(--rust);">Delivery: '+escapeHtml(_n)+(e.acepta_terceros?" (cliente aceptó aviso de responsabilidad)":" (sin aviso aceptado)")+"</strong>":"Delivery: "+escapeHtml(_n))}
  if(e.metodo_pago)l.push("Paga con: "+escapeHtml(e.metodo_pago));
  var h='<div style="margin-top:8px;font-size:13px;line-height:1.6;color:var(--muted);">'+l.join(" · ")+"</div>";
  if(tieneEnvio){
