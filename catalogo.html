@@ -252,7 +252,7 @@ footer#pie-pagina { text-align: center; font-size: 11.5px; color: var(--muted); 
 
 <main>
   <h1>Nuestros productos</h1>
-  <p class="sub">Pagando en divisas o efectivo tienes el mejor precio; en bolívares se paga el precio referencial a la tasa BCV del día. Precios sin IVA (el IVA va en factura aparte).</p>
+  <p class="sub">Los precios son $ ref y se pagan en bolívares a la tasa BCV del día. Pagando en divisas o efectivo (Zelle, Binance, efectivo) tienes descuento. Precios sin IVA (el IVA va en factura aparte).</p>
 
   <a class="banner-pos" id="banner-pos" href="#" target="_blank" rel="noopener" style="display:none"><span class="bp-ico">🧾</span><span class="bp-txt"><b>Sistemas POS y administrativo</b> · Nicom Punto desde $15/mes</span><span class="bp-cta">Pide tu demo →</span></a>
 
@@ -450,8 +450,7 @@ function linkWhatsApp(producto) {
   const precio = fmtUsd(producto.precio_efectivo_usd);
   let msg = `Hola, quiero pedir este producto del catálogo:\n\n${nombre}`;
   if (producto.sku) msg += `\nCódigo: ${producto.sku}`;
-  msg += `\nPrecio pagando en divisas o efectivo: ${precio} (sin IVA)`;
-  if (T.bcv && T.bin) msg += `\n${textoBsPlano(producto.precio_efectivo_usd)}`;
+  msg += "\n" + textoPlano(Number(producto.precio_efectivo_usd) || 0, refDe(producto.precio_efectivo_usd), "Precio");
   if (DELIVERY_DISPONIBLE) msg += `\n\n${NOTA_DELIVERY}`;
   return `https://wa.me/${WHATSAPP_NUMERO}?text=${encodeURIComponent(msg)}`;
 }
@@ -465,39 +464,48 @@ function escapeHtml(valor) {
 const fmtBs = (v) => "Bs " + Number(v || 0).toLocaleString("es-VE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const fmtUsd = (v) => "$" + Number(v || 0).toFixed(2);
 
-/* ===== Precio claro: divisas/efectivo = precio directo; en bolívares = precio referencial x tasa BCV ===== */
-const T = { bcv: 0, bin: 0, fecha: "" };
-const refDe = (n) => (T.bcv && T.bin ? Math.ceil(Number(n) * T.bin / T.bcv * 100 - 1e-9) / 100 : 0);           // precio referencial en $ (centavo hacia arriba)
-const bsDe = (n) => (T.bcv && T.bin ? Math.round(refDe(n) * T.bcv * 100) / 100 : 0);                           // Bs a pagar = referencial x tasa BCV (cuadra exacto)
-const ahorroPct = () => (T.bcv && T.bin && T.bin > T.bcv ? Math.round((1 - T.bcv / T.bin) * 100) : 0);
-const esMetodoBs = (m) => /m[oó]vil|transfer/i.test(m || "");
-function textoBs(n, modo) {
+/* ===== Precio claro: se muestra el "$ ref" que se paga en Bs a tasa BCV; con divisas/efectivo hay descuento ===== */
+const T = { bcv: 0, bin: 0, fecha: "", fail: false };
+const refDe = (n) => (T.bcv && T.bin ? Math.ceil(Number(n) * T.bin / T.bcv * 100 - 1e-9) / 100 : 0);   // $ ref (centavo hacia arriba)
+const bsRef = (r) => (T.bcv ? Math.round(r * T.bcv * 100) / 100 : 0);                                  // Bs a pagar = $ ref x tasa BCV (cuadra exacto)
+const pctDe = (d, r) => (r > 0 ? Math.round((1 - d / r) * 100) : 0);
+function textoBs(n, modo, r) {
+  const d = Number(n) || 0;
+  if (modo === "antes") return (T.bcv || T.fail) ? fmtUsd(T.bcv ? refDe(d) : d) : "";
+  if (modo === "ref") return T.bcv ? fmtUsd(r != null ? r : refDe(d)) : (T.fail ? fmtUsd(d) : "");
   if (!T.bcv || !T.bin) return "";
-  const b = bsDe(n);
-  if (modo === "card") return "En Bs. (tasa BCV): " + fmtBs(b);
-  const a = ahorroPct();
-  return "<strong>Pagando en bolívares</strong> (Pago Móvil o transferencia): precio referencial " + fmtUsd(refDe(n)) + " × tasa BCV " + fmtBs(T.bcv) + " = <strong>" + fmtBs(b) + "</strong> + IVA." + (a > 0 ? " Pagando en divisas o efectivo ahorras " + a + "%." : "");
+  r = r != null ? r : refDe(d);
+  const b = bsRef(r), a = pctDe(d, r);
+  if (modo === "card") return "Divisas o efectivo: <strong>" + fmtUsd(d) + "</strong>" + (a > 0 ? " (−" + a + "%)" : "") + "<br>En Bs (tasa BCV): " + fmtBs(b);
+  return "<strong>En bolívares</strong> (Pago Móvil o transferencia): " + fmtUsd(r) + " × tasa BCV " + fmtBs(T.bcv) + " = <strong>" + fmtBs(b) + "</strong> + IVA.<br><strong>Pagando en divisas o efectivo</strong> (Zelle, Binance, efectivo): <strong>" + fmtUsd(d) + "</strong> + IVA" + (a > 0 ? " — ahorras " + fmtUsd(r - d) + " (" + a + "%)" : "") + ".";
 }
-function textoBsPlano(n) {
-  return T.bcv && T.bin ? "Pagando en bolívares: " + fmtBs(bsDe(n)) + " = precio referencial " + fmtUsd(refDe(n)) + " × tasa BCV " + fmtBs(T.bcv) + " del " + T.fecha + " (sin IVA)" : "";
+function textoPlano(d, r, etq) {
+  etq = etq || "Total";
+  return T.bcv
+    ? etq + " ($ ref a tasa BCV): " + fmtUsd(r) + " (sin IVA)\nEn bolívares (tasa BCV " + fmtBs(T.bcv) + " del " + T.fecha + "): " + fmtBs(bsRef(r)) + "\nPagando en divisas o efectivo: " + fmtUsd(d) + " (ahorras " + fmtUsd(r - d) + ", " + pctDe(d, r) + "%)"
+    : etq + " pagando en divisas o efectivo: " + fmtUsd(d) + " (sin IVA)";
 }
 function pintarBs() {
+  if (!T.bcv && !T.fail) return;
+  const k = T.fecha + "|" + T.bcv + "|" + T.fail;
   document.querySelectorAll("[data-bs]").forEach((e) => {
-    if (!T.bcv || e.getAttribute("data-ok") === T.fecha + "|" + T.bcv) return;
+    if (e.getAttribute("data-ok") === k) return;
     e.innerHTML = textoBs(e.getAttribute("data-bs"), e.getAttribute("data-modo"));
-    e.setAttribute("data-ok", T.fecha + "|" + T.bcv);
+    e.setAttribute("data-ok", k);
   });
 }
 async function cargarTasas() {
   try {
     const { data } = await supabase.from("vista_catalogo_tasas").select("fecha,tasa_bcv,tasa_binance").limit(1);
-    if (!data || !data[0]) return;
+    if (!data || !data[0]) { T.fail = true; pintarBs(); return; }
     T.bcv = parseFloat(data[0].tasa_bcv) || 0; T.bin = parseFloat(data[0].tasa_binance) || 0; T.fecha = String(data[0].fecha || "");
+    if (!T.bcv || !T.bin) { T.bcv = T.bin = 0; T.fail = true; }
     pintarBs();
     try { renderizarCarrito(); } catch (_) {}
-  } catch (_) {}
+  } catch (_) { T.fail = true; pintarBs(); }
 }
 try { new MutationObserver(() => pintarBs()).observe(document.body, { childList: true, subtree: true }); } catch (_) {}
+setTimeout(() => { if (!T.bcv && !T.fail) { T.fail = true; pintarBs(); } }, 6000);
 cargarTasas();
 
 /* ───────────────────────────── Testimonios ───────────────────────────── */
@@ -643,7 +651,7 @@ function filaCarritoHtml(item) {
         <div class="cf-info">
           <div class="cf-nombre">${escapeHtml(item.nombre)}</div>
           ${item.sku ? `<div class="cf-sku">${escapeHtml(item.sku)}</div>` : ""}
-          <div class="cf-precio">${fmtUsd(item.precio_efectivo_usd)} c/u</div>
+          <div class="cf-precio">${T.bcv ? fmtUsd(refDe(item.precio_efectivo_usd)) : fmtUsd(item.precio_efectivo_usd)} c/u</div>
         </div>
         <div class="cf-cantidad">
           <button onclick="cambiarCantidadCarrito('${item.id}', -1)" aria-label="Restar cantidad">−</button>
@@ -693,7 +701,8 @@ function renderizarCarrito() {
   lista.innerHTML = items.map(filaCarritoHtml).join("");
 
   const total = items.reduce((acc, it) => acc + (Number(it.precio_efectivo_usd) || 0) * it.cantidad, 0);
-  totalEl.innerHTML = "Total pagando en divisas o efectivo: " + fmtUsd(total) + (T.bcv ? '<div style="font-size:12px;font-weight:400;color:var(--muted);margin-top:6px;line-height:1.5">' + textoBs(total, "full") + "<br>Sin IVA; el IVA va en factura aparte.</div>" : "");
+  const totRef = T.bcv ? Math.round(items.reduce((acc, it) => acc + refDe((Number(it.precio_efectivo_usd) || 0) * it.cantidad), 0) * 100) / 100 : 0;
+  totalEl.innerHTML = T.bcv ? "Total ($ ref a tasa BCV): " + fmtUsd(totRef) + '<div style="font-size:12px;font-weight:400;color:var(--muted);margin-top:6px;line-height:1.5">' + textoBs(total, "full", totRef) + "<br>Sin IVA; el IVA va en factura aparte.</div>" : "Total pagando en divisas o efectivo: " + fmtUsd(total);
   totalEl.style.display = "block";
   if (minimoEl) minimoEl.innerHTML = bloqueMinimoHtml(total);
 
@@ -702,10 +711,9 @@ function renderizarCarrito() {
     items.forEach((it, i) => {
       msg += `\n${i + 1}. ${it.nombre}`;
       if (it.sku) msg += ` (Código: ${it.sku})`;
-      msg += ` — Cant: ${it.cantidad} — ${fmtUsd(it.precio_efectivo_usd)} c/u`;
+      msg += ` — Cant: ${it.cantidad} — ${T.bcv ? fmtUsd(refDe(it.precio_efectivo_usd)) : fmtUsd(it.precio_efectivo_usd)} c/u`;
     });
-    msg += `\n\nTotal pagando en divisas o efectivo: ${fmtUsd(total)} (sin IVA)`;
-    if (T.bcv && T.bin) msg += `\n${textoBsPlano(total)}`;
+    msg += "\n\n" + textoPlano(total, totRef);
     if (total < COMPRA_MINIMA_USD) {
       msg += `\n\nNota: la compra mínima es de ${fmtUsd(COMPRA_MINIMA_USD)}. Me faltan ${fmtUsd(COMPRA_MINIMA_USD - total)}, ¿puedes ayudarme a completar el pedido?`;
     }
@@ -815,9 +823,9 @@ function tarjetaHtml(p) {
           ${p.categoria ? `<div class="tp-categoria">${escapeHtml(p.categoria)}</div>` : ""}
           <div class="tp-nombre desc-clamp" title="${escapeHtml(nombre)}">${escapeHtml(nombre)}</div>
           ${p.sku ? `<div class="tp-sku">${escapeHtml(p.sku)}</div>` : ""}
-          ${p.bajo_de_precio ? `<div class="tp-bajo-precio">${ICO.baja} Bajó de precio <span class="tp-precio-antes">${fmtUsd(p.precio_anterior_usd)}</span></div>` : ""}
+          ${p.bajo_de_precio ? `<div class="tp-bajo-precio">${ICO.baja} Bajó de precio <span class="tp-precio-antes" data-modo="antes" data-bs="${Number(p.precio_anterior_usd) || 0}"></span></div>` : ""}
           <div class="tp-precios">
-            <div class="tp-precio-usd">${fmtUsd(p.precio_efectivo_usd)} <span style="font-size:10px; color:var(--muted); font-weight:400;">divisas o efectivo + IVA</span></div>
+            <div class="tp-precio-usd"><span data-modo="ref" data-bs="${Number(p.precio_efectivo_usd) || 0}"></span> <span style="font-size:10px; color:var(--muted); font-weight:400;">$ ref a tasa BCV + IVA</span></div>
             <div class="tp-precio-bs" data-modo="card" data-bs="${Number(p.precio_efectivo_usd) || 0}"></div>
           </div>
           ${p.stock != null ? `<div class="tp-stock ${agotado ? "agotado" : "disponible"}">${agotado ? "Agotado" : "Disponible"}</div>` : ""}
@@ -911,8 +919,8 @@ window.abrirDetalle = function (id) {
   document.getElementById("md-nombre").textContent = nombre;
   document.getElementById("md-sku").textContent = p.sku || "";
   document.getElementById("md-precios").innerHTML = `
-      ${p.bajo_de_precio ? `<div class="tp-bajo-precio">${ICO.baja} Bajó de precio <span class="tp-precio-antes">${fmtUsd(p.precio_anterior_usd)}</span></div>` : ""}
-      <div class="tp-precio-usd">${fmtUsd(p.precio_efectivo_usd)} <span style="font-size:10px; color:var(--muted); font-weight:400;">divisas o efectivo (Zelle, Binance, efectivo) + IVA</span></div>
+      ${p.bajo_de_precio ? `<div class="tp-bajo-precio">${ICO.baja} Bajó de precio <span class="tp-precio-antes" data-modo="antes" data-bs="${Number(p.precio_anterior_usd) || 0}"></span></div>` : ""}
+      <div class="tp-precio-usd"><span data-modo="ref" data-bs="${Number(p.precio_efectivo_usd) || 0}"></span> <span style="font-size:10px; color:var(--muted); font-weight:400;">$ ref a tasa BCV + IVA</span></div>
       <div class="tp-precio-bs" data-modo="full" data-bs="${Number(p.precio_efectivo_usd) || 0}"></div>
       ${p.stock != null ? `<div class="tp-stock ${agotado ? "agotado" : "disponible"}" style="margin-top:8px;">${agotado ? "Agotado" : "Disponible"}</div>` : ""}
       <button class="btn-carrito grande ${carrito[p.id] ? "activo" : ""}" data-id="${p.id}" onclick="toggleCarrito('${p.id}')">${carrito[p.id] ? ICO.check + " En tu carrito" : ICO.carrito + " Agregar al carrito"}</button>
